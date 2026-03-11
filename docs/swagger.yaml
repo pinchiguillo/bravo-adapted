@@ -1,0 +1,1760 @@
+openapi: 3.0.3
+info:
+  title: Bravo API
+  version: 1.0.0
+  description: Documentacion OpenAPI del backend Bravo.
+paths:
+  /api/auth/login/:
+    post:
+      operationId: auth_login_create
+      description: Autentica al usuario con email y password y devuelve los tokens
+        JWT de acceso y refresco.
+      summary: Iniciar sesion
+      tags:
+      - auth
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/EmailTokenObtainPair'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/EmailTokenObtainPair'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/EmailTokenObtainPair'
+        required: true
+      security:
+      - jwtAuth: []
+      - {}
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EmailTokenObtainPair'
+          description: ''
+  /api/auth/me/:
+    get:
+      operationId: auth_me_retrieve
+      description: Devuelve los datos del usuario autenticado a partir del token enviado
+        en la peticion.
+      summary: Obtener usuario autenticado
+      tags:
+      - auth
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/User'
+          description: ''
+  /api/auth/register/:
+    post:
+      operationId: auth_register_create
+      description: Crea una nueva cuenta de usuario y devuelve el perfil registrado.
+      summary: Registrar usuario
+      tags:
+      - auth
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Register'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/Register'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/Register'
+        required: true
+      security:
+      - jwtAuth: []
+      - {}
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Register'
+          description: ''
+  /api/auth/token/refresh/:
+    post:
+      operationId: auth_token_refresh_create
+      description: Recibe un refresh token valido y devuelve un nuevo access token
+        JWT.
+      summary: Refrescar token
+      tags:
+      - auth
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TokenRefresh'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/TokenRefresh'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/TokenRefresh'
+        required: true
+      security:
+      - jwtAuth: []
+      - {}
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TokenRefresh'
+          description: ''
+  /api/auth/verify-email/:
+    post:
+      operationId: auth_verify_email_create
+      description: Valida el token de verificacion y marca el email del usuario como
+        verificado.
+      summary: Verificar email
+      tags:
+      - auth
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/VerifyEmail'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/VerifyEmail'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/VerifyEmail'
+        required: true
+      security:
+      - jwtAuth: []
+      - {}
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/VerifyEmail'
+          description: ''
+  /api/jobs/:
+    get:
+      operationId: jobs_list
+      description: Lista los trabajos donde el usuario autenticado participa como
+        cliente o como organizacion.
+      summary: Listar trabajos
+      tags:
+      - jobs
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Job'
+          description: ''
+    post:
+      operationId: jobs_create
+      description: Crea un nuevo trabajo asociado al usuario autenticado.
+      summary: Crear trabajo
+      tags:
+      - jobs
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Job'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/Job'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/Job'
+        required: true
+      security:
+      - jwtAuth: []
+      responses:
+        '201':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Job'
+          description: ''
+  /api/jobs/{uuid}/:
+    get:
+      operationId: jobs_retrieve
+      description: Devuelve el detalle de un trabajo accesible para el usuario autenticado.
+      summary: Obtener trabajo
+      parameters:
+      - in: path
+        name: uuid
+        schema:
+          type: string
+          format: uuid
+        required: true
+      tags:
+      - jobs
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Job'
+          description: ''
+    put:
+      operationId: jobs_update
+      description: Reemplaza completamente un trabajo accesible para el usuario autenticado.
+      summary: Reemplazar trabajo
+      parameters:
+      - in: path
+        name: uuid
+        schema:
+          type: string
+          format: uuid
+        required: true
+      tags:
+      - jobs
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Job'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/Job'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/Job'
+        required: true
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Job'
+          description: ''
+    patch:
+      operationId: jobs_partial_update
+      description: Actualiza parcialmente un trabajo accesible para el usuario autenticado.
+      summary: Actualizar trabajo
+      parameters:
+      - in: path
+        name: uuid
+        schema:
+          type: string
+          format: uuid
+        required: true
+      tags:
+      - jobs
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PatchedJob'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/PatchedJob'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/PatchedJob'
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Job'
+          description: ''
+    delete:
+      operationId: jobs_destroy
+      description: Elimina un trabajo accesible para el usuario autenticado.
+      summary: Eliminar trabajo
+      parameters:
+      - in: path
+        name: uuid
+        schema:
+          type: string
+          format: uuid
+        required: true
+      tags:
+      - jobs
+      security:
+      - jwtAuth: []
+      responses:
+        '204':
+          description: No response body
+  /api/jobs/{uuid}/messages/:
+    get:
+      operationId: jobs_messages_retrieve
+      description: Obtiene los mensajes del chat del trabajo o crea un nuevo mensaje
+        en ese chat.
+      summary: Gestionar mensajes del trabajo
+      parameters:
+      - in: path
+        name: uuid
+        schema:
+          type: string
+          format: uuid
+        required: true
+      tags:
+      - jobs
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Job'
+          description: ''
+    post:
+      operationId: jobs_messages_create
+      description: Obtiene los mensajes del chat del trabajo o crea un nuevo mensaje
+        en ese chat.
+      summary: Gestionar mensajes del trabajo
+      parameters:
+      - in: path
+        name: uuid
+        schema:
+          type: string
+          format: uuid
+        required: true
+      tags:
+      - jobs
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Job'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/Job'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/Job'
+        required: true
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Job'
+          description: ''
+  /api/jobs/{uuid}/messages/{message_id}/attachments/:
+    post:
+      operationId: jobs_messages_attachments_create
+      description: Sube un archivo y lo vincula a un mensaje existente dentro del
+        chat del trabajo.
+      summary: Adjuntar archivo a mensaje
+      parameters:
+      - in: path
+        name: message_id
+        schema:
+          type: string
+          pattern: ^\d+$
+        required: true
+      - in: path
+        name: uuid
+        schema:
+          type: string
+          format: uuid
+        required: true
+      tags:
+      - jobs
+      requestBody:
+        content:
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/Job'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/Job'
+        required: true
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Job'
+          description: ''
+  /api/organization/:
+    get:
+      operationId: organization_list
+      description: Lista todas las organizaciones. Solo disponible para usuarios administradores.
+      summary: Listar organizaciones
+      tags:
+      - organization
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Organization'
+          description: ''
+  /api/organization/{organization_uuid}/services/:
+    get:
+      operationId: organization_services_list
+      description: Lista los servicios de la organizacion indicada en la URL.
+      summary: Listar servicios
+      parameters:
+      - in: path
+        name: organization_uuid
+        schema:
+          type: string
+        description: UUID de la organizacion propietaria del servicio.
+        required: true
+      tags:
+      - organization
+      security:
+      - jwtAuth: []
+      - {}
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Service'
+          description: ''
+    post:
+      operationId: organization_services_create
+      description: Crea un servicio dentro de la organizacion indicada en la URL si
+        pertenece al usuario autenticado.
+      summary: Crear servicio
+      parameters:
+      - in: path
+        name: organization_uuid
+        schema:
+          type: string
+        description: UUID de la organizacion propietaria del servicio.
+        required: true
+      tags:
+      - organization
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Service'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/Service'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/Service'
+        required: true
+      security:
+      - jwtAuth: []
+      responses:
+        '201':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Service'
+          description: ''
+  /api/organization/{organization_uuid}/services/{uuid}/:
+    get:
+      operationId: organization_services_retrieve
+      description: Devuelve el detalle de un servicio perteneciente a la organizacion
+        indicada en la URL.
+      summary: Obtener servicio
+      parameters:
+      - in: path
+        name: organization_uuid
+        schema:
+          type: string
+        description: UUID de la organizacion propietaria del servicio.
+        required: true
+      - in: path
+        name: uuid
+        schema:
+          type: string
+          format: uuid
+        required: true
+      tags:
+      - organization
+      security:
+      - jwtAuth: []
+      - {}
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Service'
+          description: ''
+    put:
+      operationId: organization_services_update
+      description: Reemplaza completamente un servicio de la organizacion indicada
+        en la URL.
+      summary: Reemplazar servicio
+      parameters:
+      - in: path
+        name: organization_uuid
+        schema:
+          type: string
+        description: UUID de la organizacion propietaria del servicio.
+        required: true
+      - in: path
+        name: uuid
+        schema:
+          type: string
+          format: uuid
+        required: true
+      tags:
+      - organization
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Service'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/Service'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/Service'
+        required: true
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Service'
+          description: ''
+    patch:
+      operationId: organization_services_partial_update
+      description: Actualiza parcialmente un servicio de la organizacion indicada
+        en la URL.
+      summary: Actualizar servicio
+      parameters:
+      - in: path
+        name: organization_uuid
+        schema:
+          type: string
+        description: UUID de la organizacion propietaria del servicio.
+        required: true
+      - in: path
+        name: uuid
+        schema:
+          type: string
+          format: uuid
+        required: true
+      tags:
+      - organization
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PatchedService'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/PatchedService'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/PatchedService'
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Service'
+          description: ''
+    delete:
+      operationId: organization_services_destroy
+      description: Elimina un servicio de la organizacion indicada en la URL.
+      summary: Eliminar servicio
+      parameters:
+      - in: path
+        name: organization_uuid
+        schema:
+          type: string
+        description: UUID de la organizacion propietaria del servicio.
+        required: true
+      - in: path
+        name: uuid
+        schema:
+          type: string
+          format: uuid
+        required: true
+      tags:
+      - organization
+      security:
+      - jwtAuth: []
+      responses:
+        '204':
+          description: No response body
+  /api/organization/{uuid}/:
+    get:
+      operationId: organization_retrieve
+      description: Devuelve el detalle publico de una organizacion identificada por
+        su UUID.
+      summary: Obtener organizacion
+      parameters:
+      - in: path
+        name: uuid
+        schema:
+          type: string
+          format: uuid
+        required: true
+      tags:
+      - organization
+      security:
+      - jwtAuth: []
+      - {}
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Organization'
+          description: ''
+    put:
+      operationId: organization_update
+      description: Reemplaza completamente una organizacion. Solo permitido a su propietario
+        autenticado.
+      summary: Reemplazar organizacion
+      parameters:
+      - in: path
+        name: uuid
+        schema:
+          type: string
+          format: uuid
+        required: true
+      tags:
+      - organization
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Organization'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/Organization'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/Organization'
+        required: true
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Organization'
+          description: ''
+    patch:
+      operationId: organization_partial_update
+      description: Actualiza parcialmente una organizacion. Solo permitido a su propietario
+        autenticado.
+      summary: Actualizar organizacion
+      parameters:
+      - in: path
+        name: uuid
+        schema:
+          type: string
+          format: uuid
+        required: true
+      tags:
+      - organization
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PatchedOrganization'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/PatchedOrganization'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/PatchedOrganization'
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Organization'
+          description: ''
+    delete:
+      operationId: organization_destroy
+      description: Elimina una organizacion. Solo permitido a su propietario autenticado.
+      summary: Eliminar organizacion
+      parameters:
+      - in: path
+        name: uuid
+        schema:
+          type: string
+          format: uuid
+        required: true
+      tags:
+      - organization
+      security:
+      - jwtAuth: []
+      responses:
+        '204':
+          description: No response body
+  /api/organization/categories/:
+    get:
+      operationId: organization_categories_list
+      description: Devuelve el catalogo de categorias disponible para usuarios autenticados.
+      summary: Listar categorias
+      tags:
+      - organization
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Category'
+          description: ''
+  /api/organization/categories/{uuid}/:
+    get:
+      operationId: organization_categories_retrieve
+      description: Devuelve el detalle de una categoria identificada por su UUID.
+      summary: Obtener categoria
+      parameters:
+      - in: path
+        name: uuid
+        schema:
+          type: string
+          format: uuid
+        required: true
+      tags:
+      - organization
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Category'
+          description: ''
+  /api/organization/me/:
+    get:
+      operationId: organization_me_retrieve
+      description: Devuelve la organizacion asociada al usuario autenticado.
+      summary: Obtener mi organizacion
+      tags:
+      - organization
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Organization'
+          description: ''
+    patch:
+      operationId: organization_me_partial_update
+      description: Actualiza parcialmente la organizacion asociada al usuario autenticado.
+      summary: Actualizar mi organizacion
+      tags:
+      - organization
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PatchedOrganization'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/PatchedOrganization'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/PatchedOrganization'
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Organization'
+          description: ''
+  /api/organization/service-prices/:
+    get:
+      operationId: organization_service_prices_list
+      description: Lista los precios configurados para servicios de la organizacion
+        del usuario autenticado.
+      summary: Listar precios de servicio
+      tags:
+      - organization
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/ServicePrice'
+          description: ''
+    post:
+      operationId: organization_service_prices_create
+      description: Crea un precio para un servicio de la organizacion del usuario
+        autenticado.
+      summary: Crear precio de servicio
+      tags:
+      - organization
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ServicePrice'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/ServicePrice'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/ServicePrice'
+        required: true
+      security:
+      - jwtAuth: []
+      responses:
+        '201':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ServicePrice'
+          description: ''
+  /api/organization/service-prices/{uuid}/:
+    get:
+      operationId: organization_service_prices_retrieve
+      description: Devuelve el detalle de un precio de servicio accesible por el usuario
+        autenticado.
+      summary: Obtener precio de servicio
+      parameters:
+      - in: path
+        name: uuid
+        schema:
+          type: string
+        description: Identificador del precio de servicio.
+        required: true
+      tags:
+      - organization
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ServicePrice'
+          description: ''
+    put:
+      operationId: organization_service_prices_update
+      description: Reemplaza completamente un precio de servicio de la organizacion
+        del usuario autenticado.
+      summary: Reemplazar precio de servicio
+      parameters:
+      - in: path
+        name: uuid
+        schema:
+          type: string
+        description: Identificador del precio de servicio.
+        required: true
+      tags:
+      - organization
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ServicePrice'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/ServicePrice'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/ServicePrice'
+        required: true
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ServicePrice'
+          description: ''
+    patch:
+      operationId: organization_service_prices_partial_update
+      description: Actualiza parcialmente un precio de servicio de la organizacion
+        del usuario autenticado.
+      summary: Actualizar precio de servicio
+      parameters:
+      - in: path
+        name: uuid
+        schema:
+          type: string
+        description: Identificador del precio de servicio.
+        required: true
+      tags:
+      - organization
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PatchedServicePrice'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/PatchedServicePrice'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/PatchedServicePrice'
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ServicePrice'
+          description: ''
+    delete:
+      operationId: organization_service_prices_destroy
+      description: Elimina un precio de servicio de la organizacion del usuario autenticado.
+      summary: Eliminar precio de servicio
+      parameters:
+      - in: path
+        name: uuid
+        schema:
+          type: string
+        description: Identificador del precio de servicio.
+        required: true
+      tags:
+      - organization
+      security:
+      - jwtAuth: []
+      responses:
+        '204':
+          description: No response body
+  /api/organization/services/{service_uuid}/subservices/:
+    get:
+      operationId: organization_services_subservices_list
+      description: Lista los subservicios del servicio indicado en la URL.
+      summary: Listar subservicios
+      parameters:
+      - in: path
+        name: service_uuid
+        schema:
+          type: string
+        description: UUID del servicio propietario del subservicio.
+        required: true
+      tags:
+      - organization
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Subservice'
+          description: ''
+    post:
+      operationId: organization_services_subservices_create
+      description: Crea un subservicio asociado al servicio indicado en la URL.
+      summary: Crear subservicio
+      parameters:
+      - in: path
+        name: service_uuid
+        schema:
+          type: string
+        description: UUID del servicio propietario del subservicio.
+        required: true
+      tags:
+      - organization
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Subservice'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/Subservice'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/Subservice'
+        required: true
+      security:
+      - jwtAuth: []
+      responses:
+        '201':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Subservice'
+          description: ''
+  /api/organization/services/{service_uuid}/subservices/{uuid}/:
+    get:
+      operationId: organization_services_subservices_retrieve
+      description: Devuelve el detalle de un subservicio perteneciente al servicio
+        indicado en la URL.
+      summary: Obtener subservicio
+      parameters:
+      - in: path
+        name: service_uuid
+        schema:
+          type: string
+        description: UUID del servicio propietario del subservicio.
+        required: true
+      - in: path
+        name: uuid
+        schema:
+          type: string
+          format: uuid
+        required: true
+      tags:
+      - organization
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Subservice'
+          description: ''
+    put:
+      operationId: organization_services_subservices_update
+      description: Reemplaza completamente un subservicio del servicio indicado en
+        la URL.
+      summary: Reemplazar subservicio
+      parameters:
+      - in: path
+        name: service_uuid
+        schema:
+          type: string
+        description: UUID del servicio propietario del subservicio.
+        required: true
+      - in: path
+        name: uuid
+        schema:
+          type: string
+          format: uuid
+        required: true
+      tags:
+      - organization
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Subservice'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/Subservice'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/Subservice'
+        required: true
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Subservice'
+          description: ''
+    patch:
+      operationId: organization_services_subservices_partial_update
+      description: Actualiza parcialmente un subservicio del servicio indicado en
+        la URL.
+      summary: Actualizar subservicio
+      parameters:
+      - in: path
+        name: service_uuid
+        schema:
+          type: string
+        description: UUID del servicio propietario del subservicio.
+        required: true
+      - in: path
+        name: uuid
+        schema:
+          type: string
+          format: uuid
+        required: true
+      tags:
+      - organization
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PatchedSubservice'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/PatchedSubservice'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/PatchedSubservice'
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Subservice'
+          description: ''
+    delete:
+      operationId: organization_services_subservices_destroy
+      description: Elimina un subservicio del servicio indicado en la URL.
+      summary: Eliminar subservicio
+      parameters:
+      - in: path
+        name: service_uuid
+        schema:
+          type: string
+        description: UUID del servicio propietario del subservicio.
+        required: true
+      - in: path
+        name: uuid
+        schema:
+          type: string
+          format: uuid
+        required: true
+      tags:
+      - organization
+      security:
+      - jwtAuth: []
+      responses:
+        '204':
+          description: No response body
+  /api/schema/:
+    get:
+      operationId: schema_retrieve
+      description: |-
+        OpenApi3 schema for this API. Format can be selected via content negotiation.
+
+        - YAML: application/vnd.oai.openapi
+        - JSON: application/vnd.oai.openapi+json
+      parameters:
+      - in: query
+        name: format
+        schema:
+          type: string
+          enum:
+          - json
+          - yaml
+      - in: query
+        name: lang
+        schema:
+          type: string
+          enum:
+          - af
+          - ar
+          - ar-dz
+          - ast
+          - az
+          - be
+          - bg
+          - bn
+          - br
+          - bs
+          - ca
+          - ckb
+          - cs
+          - cy
+          - da
+          - de
+          - dsb
+          - el
+          - en
+          - en-au
+          - en-gb
+          - eo
+          - es
+          - es-ar
+          - es-co
+          - es-mx
+          - es-ni
+          - es-ve
+          - et
+          - eu
+          - fa
+          - fi
+          - fr
+          - fy
+          - ga
+          - gd
+          - gl
+          - he
+          - hi
+          - hr
+          - hsb
+          - hu
+          - hy
+          - ia
+          - id
+          - ig
+          - io
+          - is
+          - it
+          - ja
+          - ka
+          - kab
+          - kk
+          - km
+          - kn
+          - ko
+          - ky
+          - lb
+          - lt
+          - lv
+          - mk
+          - ml
+          - mn
+          - mr
+          - ms
+          - my
+          - nb
+          - ne
+          - nl
+          - nn
+          - os
+          - pa
+          - pl
+          - pt
+          - pt-br
+          - ro
+          - ru
+          - sk
+          - sl
+          - sq
+          - sr
+          - sr-latn
+          - sv
+          - sw
+          - ta
+          - te
+          - tg
+          - th
+          - tk
+          - tr
+          - tt
+          - udm
+          - ug
+          - uk
+          - ur
+          - uz
+          - vi
+          - zh-hans
+          - zh-hant
+      tags:
+      - schema
+      security:
+      - jwtAuth: []
+      - {}
+      responses:
+        '200':
+          content:
+            application/vnd.oai.openapi:
+              schema:
+                type: object
+                additionalProperties: {}
+            application/yaml:
+              schema:
+                type: object
+                additionalProperties: {}
+            application/vnd.oai.openapi+json:
+              schema:
+                type: object
+                additionalProperties: {}
+            application/json:
+              schema:
+                type: object
+                additionalProperties: {}
+          description: ''
+components:
+  schemas:
+    Category:
+      type: object
+      properties:
+        uuid:
+          type: string
+          format: uuid
+          readOnly: true
+        name:
+          type: string
+          maxLength: 120
+      required:
+      - name
+      - uuid
+    EmailTokenObtainPair:
+      type: object
+      properties:
+        email:
+          type: string
+          writeOnly: true
+        password:
+          type: string
+          writeOnly: true
+      required:
+      - email
+      - password
+    Job:
+      type: object
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        uuid:
+          type: string
+          format: uuid
+          readOnly: true
+        user:
+          type: integer
+          readOnly: true
+        organization:
+          type: integer
+        plan_price:
+          type: integer
+        status:
+          $ref: '#/components/schemas/JobStatusEnum'
+        created_at:
+          type: string
+          format: date-time
+          readOnly: true
+        updated_at:
+          type: string
+          format: date-time
+          readOnly: true
+      required:
+      - created_at
+      - id
+      - organization
+      - plan_price
+      - updated_at
+      - user
+      - uuid
+    JobStatusEnum:
+      enum:
+      - pending
+      - active
+      - completed
+      - rejected
+      type: string
+      description: |-
+        * `pending` - Pending
+        * `active` - Active
+        * `completed` - Completed
+        * `rejected` - Rejected
+    Organization:
+      type: object
+      properties:
+        uuid:
+          type: string
+          format: uuid
+          readOnly: true
+        name:
+          type: string
+          maxLength: 255
+        legal_name:
+          type: string
+          maxLength: 255
+        tax_id:
+          type: string
+          maxLength: 64
+        billing_email:
+          type: string
+          format: email
+          maxLength: 254
+        billing_address:
+          type: string
+          maxLength: 255
+        billing_city:
+          type: string
+          maxLength: 120
+        billing_country:
+          type: string
+          maxLength: 2
+        billing_postal_code:
+          type: string
+          maxLength: 20
+        created_at:
+          type: string
+          format: date-time
+          readOnly: true
+        updated_at:
+          type: string
+          format: date-time
+          readOnly: true
+      required:
+      - billing_address
+      - billing_city
+      - billing_country
+      - billing_email
+      - billing_postal_code
+      - created_at
+      - legal_name
+      - name
+      - tax_id
+      - updated_at
+      - uuid
+    PatchedJob:
+      type: object
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        uuid:
+          type: string
+          format: uuid
+          readOnly: true
+        user:
+          type: integer
+          readOnly: true
+        organization:
+          type: integer
+        plan_price:
+          type: integer
+        status:
+          $ref: '#/components/schemas/JobStatusEnum'
+        created_at:
+          type: string
+          format: date-time
+          readOnly: true
+        updated_at:
+          type: string
+          format: date-time
+          readOnly: true
+    PatchedOrganization:
+      type: object
+      properties:
+        uuid:
+          type: string
+          format: uuid
+          readOnly: true
+        name:
+          type: string
+          maxLength: 255
+        legal_name:
+          type: string
+          maxLength: 255
+        tax_id:
+          type: string
+          maxLength: 64
+        billing_email:
+          type: string
+          format: email
+          maxLength: 254
+        billing_address:
+          type: string
+          maxLength: 255
+        billing_city:
+          type: string
+          maxLength: 120
+        billing_country:
+          type: string
+          maxLength: 2
+        billing_postal_code:
+          type: string
+          maxLength: 20
+        created_at:
+          type: string
+          format: date-time
+          readOnly: true
+        updated_at:
+          type: string
+          format: date-time
+          readOnly: true
+    PatchedService:
+      type: object
+      properties:
+        uuid:
+          type: string
+          format: uuid
+          readOnly: true
+        organization:
+          type: string
+          format: uuid
+          readOnly: true
+        name:
+          type: string
+          maxLength: 120
+        description:
+          type: string
+        created_at:
+          type: string
+          format: date-time
+          readOnly: true
+        updated_at:
+          type: string
+          format: date-time
+          readOnly: true
+    PatchedServicePrice:
+      type: object
+      properties:
+        service:
+          type: string
+          format: uuid
+        amount:
+          type: string
+          format: decimal
+          pattern: ^-?\d{0,8}(?:\.\d{0,2})?$
+        currency:
+          type: string
+          default: EUR
+          maxLength: 3
+        effective_from:
+          type: string
+          format: date
+        effective_to:
+          type: string
+          format: date
+          nullable: true
+        created_at:
+          type: string
+          format: date-time
+          readOnly: true
+        updated_at:
+          type: string
+          format: date-time
+          readOnly: true
+    PatchedSubservice:
+      type: object
+      properties:
+        uuid:
+          type: string
+          format: uuid
+          readOnly: true
+        service:
+          type: string
+          format: uuid
+        name:
+          type: string
+          maxLength: 120
+        description:
+          type: string
+        created_at:
+          type: string
+          format: date-time
+          readOnly: true
+        updated_at:
+          type: string
+          format: date-time
+          readOnly: true
+    Register:
+      type: object
+      properties:
+        username:
+          type: string
+          description: Required. 150 characters or fewer. Letters, digits and @/./+/-/_
+            only.
+          pattern: ^[\w.@+-]+$
+          maxLength: 150
+        email:
+          type: string
+          format: email
+          maxLength: 254
+        password:
+          type: string
+          writeOnly: true
+          minLength: 8
+        first_name:
+          type: string
+          maxLength: 150
+        last_name:
+          type: string
+          maxLength: 150
+      required:
+      - email
+      - password
+      - username
+    Service:
+      type: object
+      properties:
+        uuid:
+          type: string
+          format: uuid
+          readOnly: true
+        organization:
+          type: string
+          format: uuid
+          readOnly: true
+        name:
+          type: string
+          maxLength: 120
+        description:
+          type: string
+        created_at:
+          type: string
+          format: date-time
+          readOnly: true
+        updated_at:
+          type: string
+          format: date-time
+          readOnly: true
+      required:
+      - created_at
+      - name
+      - organization
+      - updated_at
+      - uuid
+    ServicePrice:
+      type: object
+      properties:
+        service:
+          type: string
+          format: uuid
+        amount:
+          type: string
+          format: decimal
+          pattern: ^-?\d{0,8}(?:\.\d{0,2})?$
+        currency:
+          type: string
+          default: EUR
+          maxLength: 3
+        effective_from:
+          type: string
+          format: date
+        effective_to:
+          type: string
+          format: date
+          nullable: true
+        created_at:
+          type: string
+          format: date-time
+          readOnly: true
+        updated_at:
+          type: string
+          format: date-time
+          readOnly: true
+      required:
+      - amount
+      - created_at
+      - effective_from
+      - service
+      - updated_at
+    Subservice:
+      type: object
+      properties:
+        uuid:
+          type: string
+          format: uuid
+          readOnly: true
+        service:
+          type: string
+          format: uuid
+        name:
+          type: string
+          maxLength: 120
+        description:
+          type: string
+        created_at:
+          type: string
+          format: date-time
+          readOnly: true
+        updated_at:
+          type: string
+          format: date-time
+          readOnly: true
+      required:
+      - created_at
+      - name
+      - service
+      - updated_at
+      - uuid
+    TokenRefresh:
+      type: object
+      properties:
+        access:
+          type: string
+          readOnly: true
+        refresh:
+          type: string
+          writeOnly: true
+      required:
+      - access
+      - refresh
+    User:
+      type: object
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        uuid:
+          type: string
+          format: uuid
+          readOnly: true
+        username:
+          type: string
+          description: Required. 150 characters or fewer. Letters, digits and @/./+/-/_
+            only.
+          pattern: ^[\w.@+-]+$
+          maxLength: 150
+        email:
+          type: string
+          format: email
+          maxLength: 254
+        email_verified:
+          type: boolean
+        first_name:
+          type: string
+          maxLength: 150
+        last_name:
+          type: string
+          maxLength: 150
+        status:
+          $ref: '#/components/schemas/UserStatusEnum'
+      required:
+      - email
+      - id
+      - username
+      - uuid
+    UserStatusEnum:
+      enum:
+      - active
+      - inactive
+      - suspended
+      type: string
+      description: |-
+        * `active` - Active
+        * `inactive` - Inactive
+        * `suspended` - Suspended
+    VerifyEmail:
+      type: object
+      properties:
+        token:
+          type: string
+      required:
+      - token
+  securitySchemes:
+    jwtAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT

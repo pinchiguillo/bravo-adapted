@@ -1,0 +1,51 @@
+# Secrets and local env
+.env
+.env.*
+!example.env
+
+# Python cache/artifacts
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Virtual environments
+.venv/
+venv/
+env/
+
+# Tool caches
+.ruff_cache/
+.pytest_cache/
+.mypy_cache/
+.tox/
+.nox/
+
+# Coverage and test output
+.coverage
+.coverage.*
+htmlcov/
+coverage.xml
+junit.xml
+
+# Django / app runtime artifacts
+*.log
+*.sqlite3
+db.sqlite3
+media/
+staticfiles/
+job-chat-attachments/
+
+# Build artifacts
+build/
+dist/
+*.egg-info/
+
+# IDE / editor
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS files
+.DS_Store
+Thumbs.db

@@ -1,0 +1,122 @@
+services:
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile.prod
+    env_file:
+      - .env
+    ports:
+      - "8000:8000"
+    environment:
+      APP_MODE: production
+      PORT: ${PORT:-8000}
+      SECRET_KEY: ${SECRET_KEY}
+      DEBUG: "0"
+      ALLOWED_HOSTS: ${ALLOWED_HOSTS}
+      CSRF_TRUSTED_ORIGINS: ${CSRF_TRUSTED_ORIGINS:-}
+      SECURE_SSL_REDIRECT: "1"
+      SECURE_HSTS_SECONDS: ${SECURE_HSTS_SECONDS:-31536000}
+      SECURE_HSTS_INCLUDE_SUBDOMAINS: ${SECURE_HSTS_INCLUDE_SUBDOMAINS:-1}
+      SECURE_HSTS_PRELOAD: ${SECURE_HSTS_PRELOAD:-1}
+      SESSION_COOKIE_SECURE: "1"
+      CSRF_COOKIE_SECURE: "1"
+      SECURE_PROXY_SSL_HEADER: ${SECURE_PROXY_SSL_HEADER:-HTTP_X_FORWARDED_PROTO,https}
+      DATABASE_URL: ${DATABASE_URL}
+      REDIS_URL: ${REDIS_URL}
+      LOCALSTACK_ENDPOINT: ${LOCALSTACK_ENDPOINT:-http://localstack:4566}
+      AWS_S3_ENDPOINT_URL: ${AWS_S3_ENDPOINT_URL:-http://localstack:4566}
+      AWS_SES_ENDPOINT_URL: ${AWS_SES_ENDPOINT_URL:-http://localstack:4566}
+      AWS_DEFAULT_REGION: ${AWS_DEFAULT_REGION}
+      AWS_ACCESS_KEY_ID: ${AWS_ACCESS_KEY_ID}
+      AWS_SECRET_ACCESS_KEY: ${AWS_SECRET_ACCESS_KEY}
+      AWS_STORAGE_BUCKET_NAME: ${AWS_STORAGE_BUCKET_NAME}
+      DEFAULT_FROM_EMAIL: ${DEFAULT_FROM_EMAIL}
+      USE_S3_STORAGE: ${USE_S3_STORAGE:-1}
+      USE_SES_EMAIL: ${USE_SES_EMAIL:-1}
+      EMAIL_BACKEND: ${EMAIL_BACKEND:-}
+      EMAIL_HOST: ${EMAIL_HOST:-localhost}
+      EMAIL_PORT: ${EMAIL_PORT:-25}
+      EMAIL_HOST_USER: ${EMAIL_HOST_USER:-}
+      EMAIL_HOST_PASSWORD: ${EMAIL_HOST_PASSWORD:-}
+      EMAIL_USE_TLS: ${EMAIL_USE_TLS:-0}
+      EMAIL_USE_SSL: ${EMAIL_USE_SSL:-0}
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      localstack:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health/', timeout=5).read()"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 20s
+
+  postgres:
+    image: postgres:16-alpine
+    env_file:
+      - .env
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-auth_db}
+      POSTGRES_USER: ${POSTGRES_USER:-postgres}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d auth_db"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    volumes:
+      - postgres_prod_data:/var/lib/postgresql/data
+
+  redis:
+    image: redis:7-alpine
+    command: ["redis-server", "--save", "", "--appendonly", "no"]
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  localstack:
+    image: localstack/localstack:latest
+    env_file:
+      - .env
+    environment:
+      SERVICES: s3,sqs,sns,ses
+      DEBUG: "0"
+      AWS_DEFAULT_REGION: ${AWS_DEFAULT_REGION}
+      AWS_STORAGE_BUCKET_NAME: ${AWS_STORAGE_BUCKET_NAME}
+      DEFAULT_FROM_EMAIL: ${DEFAULT_FROM_EMAIL}
+    ports:
+      - "4566:4566"
+    volumes:
+      - localstack_prod_data:/var/lib/localstack
+      - ./docker/localstack/init:/etc/localstack/init/ready.d
+      - /var/run/docker.sock:/var/run/docker.sock
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:4566/_localstack/health', timeout=5).read()"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 20s
+
+  cloudflared:
+    image: cloudflare/cloudflared:latest
+    profiles: ["cloudflared"]
+    command: tunnel --no-autoupdate --metrics 0.0.0.0:2000 run --token ${CLOUDFLARED_TUNNEL_TOKEN:-}
+    depends_on:
+      app:
+        condition: service_healthy
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q -O - http://127.0.0.1:2000/ready | grep -qi ok"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 15s
+
+volumes:
+  postgres_prod_data:
+  localstack_prod_data:

@@ -1,0 +1,85 @@
+digraph DatabaseSchema {
+  rankdir=LR;
+  splines=ortho;
+  nodesep=0.8;
+  ranksep=1.0;
+  fontname="Helvetica";
+
+  node [shape=plain, fontname="Helvetica"];
+  edge [fontname="Helvetica", color="#4A5568"];
+
+  custom_auth_customuser [
+    label=<
+      <TABLE BORDER="1" CELLBORDER="1" CELLSPACING="0" CELLPADDING="6">
+        <TR><TD BGCOLOR="#2B6CB0"><FONT COLOR="white"><B>custom_auth_customuser</B></FONT></TD></TR>
+        <TR><TD ALIGN="LEFT">PK id (BigAutoField)</TD></TR>
+        <TR><TD ALIGN="LEFT">uuid (UUID, unique)</TD></TR>
+        <TR><TD ALIGN="LEFT">username (Char, unique)</TD></TR>
+        <TR><TD ALIGN="LEFT">email (Email, unique) [login]</TD></TR>
+        <TR><TD ALIGN="LEFT">phone (Char, nullable)</TD></TR>
+        <TR><TD ALIGN="LEFT">birthdate (Date, nullable)</TD></TR>
+        <TR><TD ALIGN="LEFT">avatar (Image, nullable)</TD></TR>
+        <TR><TD ALIGN="LEFT">status (Char)</TD></TR>
+      </TABLE>
+    >
+  ];
+
+  organization_organization [
+    label=<
+      <TABLE BORDER="1" CELLBORDER="1" CELLSPACING="0" CELLPADDING="6">
+        <TR><TD BGCOLOR="#2F855A"><FONT COLOR="white"><B>organization_organization</B></FONT></TD></TR>
+        <TR><TD ALIGN="LEFT">PK id (BigAutoField)</TD></TR>
+        <TR><TD ALIGN="LEFT">uuid (UUID, unique)</TD></TR>
+        <TR><TD ALIGN="LEFT">name</TD></TR>
+        <TR><TD ALIGN="LEFT">legal_name</TD></TR>
+        <TR><TD ALIGN="LEFT">tax_id</TD></TR>
+        <TR><TD ALIGN="LEFT">billing_email</TD></TR>
+        <TR><TD ALIGN="LEFT">billing_address</TD></TR>
+        <TR><TD ALIGN="LEFT">billing_city</TD></TR>
+        <TR><TD ALIGN="LEFT">billing_country</TD></TR>
+        <TR><TD ALIGN="LEFT">billing_postal_code</TD></TR>
+      </TABLE>
+    >
+  ];
+
+  organization_category [
+    label=<
+      <TABLE BORDER="1" CELLBORDER="1" CELLSPACING="0" CELLPADDING="6">
+        <TR><TD BGCOLOR="#805AD5"><FONT COLOR="white"><B>organization_category</B></FONT></TD></TR>
+        <TR><TD ALIGN="LEFT">PK id (BigAutoField)</TD></TR>
+        <TR><TD ALIGN="LEFT">uuid (UUID, unique)</TD></TR>
+        <TR><TD ALIGN="LEFT">name (unique)</TD></TR>
+      </TABLE>
+    >
+  ];
+
+  organization_organizationrole [
+    label=<
+      <TABLE BORDER="1" CELLBORDER="1" CELLSPACING="0" CELLPADDING="6">
+        <TR><TD BGCOLOR="#D69E2E"><FONT COLOR="white"><B>organization_organizationrole</B></FONT></TD></TR>
+        <TR><TD ALIGN="LEFT">PK id (BigAutoField)</TD></TR>
+        <TR><TD ALIGN="LEFT">FK organization_id</TD></TR>
+        <TR><TD ALIGN="LEFT">name</TD></TR>
+        <TR><TD ALIGN="LEFT">UNIQUE (organization_id, name)</TD></TR>
+      </TABLE>
+    >
+  ];
+
+  organization_organizationmember [
+    label=<
+      <TABLE BORDER="1" CELLBORDER="1" CELLSPACING="0" CELLPADDING="6">
+        <TR><TD BGCOLOR="#C53030"><FONT COLOR="white"><B>organization_organizationmember</B></FONT></TD></TR>
+        <TR><TD ALIGN="LEFT">PK id (BigAutoField)</TD></TR>
+        <TR><TD ALIGN="LEFT">FK organization_id</TD></TR>
+        <TR><TD ALIGN="LEFT">FK user_id</TD></TR>
+        <TR><TD ALIGN="LEFT">FK role_id</TD></TR>
+        <TR><TD ALIGN="LEFT">UNIQUE (organization_id, user_id)</TD></TR>
+      </TABLE>
+    >
+  ];
+
+  organization_organizationrole -> organization_organization [label="organization_id", arrowhead="crow"];
+  organization_organizationmember -> organization_organization [label="organization_id", arrowhead="crow"];
+  organization_organizationmember -> custom_auth_customuser [label="user_id", arrowhead="crow"];
+  organization_organizationmember -> organization_organizationrole [label="role_id", arrowhead="crow"];
+}

@@ -1,0 +1,96 @@
+services:
+  app:
+    build:
+      context: .
+    working_dir: /app
+    env_file:
+      - .env
+    volumes:
+      - .:/app
+    ports:
+      - "8000:8000"
+    environment:
+      APP_MODE: ${APP_MODE:-development}
+      PORT: ${PORT:-8000}
+      SECRET_KEY: ${SECRET_KEY:-change-me}
+      DEBUG: ${DEBUG:-1}
+      ALLOWED_HOSTS: ${ALLOWED_HOSTS:-localhost,127.0.0.1,0.0.0.0}
+      CSRF_TRUSTED_ORIGINS: ${CSRF_TRUSTED_ORIGINS:-}
+      SECURE_SSL_REDIRECT: ${SECURE_SSL_REDIRECT:-0}
+      SECURE_HSTS_SECONDS: ${SECURE_HSTS_SECONDS:-0}
+      SECURE_HSTS_INCLUDE_SUBDOMAINS: ${SECURE_HSTS_INCLUDE_SUBDOMAINS:-0}
+      SECURE_HSTS_PRELOAD: ${SECURE_HSTS_PRELOAD:-0}
+      SESSION_COOKIE_SECURE: ${SESSION_COOKIE_SECURE:-0}
+      CSRF_COOKIE_SECURE: ${CSRF_COOKIE_SECURE:-0}
+      SECURE_PROXY_SSL_HEADER: ${SECURE_PROXY_SSL_HEADER:-}
+      DATABASE_URL: ${DATABASE_URL:-postgresql://postgres:postgres@postgres:5432/auth_db}
+      REDIS_URL: ${REDIS_URL:-redis://redis:6379/0}
+      AWS_DEFAULT_REGION: ${AWS_DEFAULT_REGION:-us-east-1}
+      AWS_ACCESS_KEY_ID: ${AWS_ACCESS_KEY_ID:-test}
+      AWS_SECRET_ACCESS_KEY: ${AWS_SECRET_ACCESS_KEY:-test}
+      LOCALSTACK_ENDPOINT: ${LOCALSTACK_ENDPOINT:-http://localstack:4566}
+      AWS_S3_ENDPOINT_URL: ${AWS_S3_ENDPOINT_URL:-http://localstack:4566}
+      AWS_SES_ENDPOINT_URL: ${AWS_SES_ENDPOINT_URL:-http://localstack:4566}
+      AWS_STORAGE_BUCKET_NAME: ${AWS_STORAGE_BUCKET_NAME:-bravo-media}
+      USE_S3_STORAGE: ${USE_S3_STORAGE:-1}
+      USE_SES_EMAIL: ${USE_SES_EMAIL:-1}
+      DEFAULT_FROM_EMAIL: ${DEFAULT_FROM_EMAIL:-no-reply@bravo.local}
+      EMAIL_BACKEND: ${EMAIL_BACKEND:-}
+      EMAIL_HOST: ${EMAIL_HOST:-localhost}
+      EMAIL_PORT: ${EMAIL_PORT:-25}
+      EMAIL_HOST_USER: ${EMAIL_HOST_USER:-}
+      EMAIL_HOST_PASSWORD: ${EMAIL_HOST_PASSWORD:-}
+      EMAIL_USE_TLS: ${EMAIL_USE_TLS:-0}
+      EMAIL_USE_SSL: ${EMAIL_USE_SSL:-0}
+    depends_on:
+      postgres:
+        condition: service_healthy
+      localstack:
+        condition: service_started
+
+  postgres:
+    image: postgres:16-alpine
+    env_file:
+      - .env
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-auth_db}
+      POSTGRES_USER: ${POSTGRES_USER:-postgres}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d auth_db"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+
+  localstack:
+    image: localstack/localstack:latest
+    env_file:
+      - .env
+    environment:
+      SERVICES: s3,sqs,sns,ses
+      DEBUG: "1"
+      AWS_DEFAULT_REGION: ${AWS_DEFAULT_REGION:-us-east-1}
+      AWS_STORAGE_BUCKET_NAME: ${AWS_STORAGE_BUCKET_NAME:-bravo-media}
+      DEFAULT_FROM_EMAIL: ${DEFAULT_FROM_EMAIL:-no-reply@bravo.local}
+    ports:
+      - "4566:4566"
+    volumes:
+      - localstack_data:/var/lib/localstack
+      - ./docker/localstack/init:/etc/localstack/init/ready.d
+      - /var/run/docker.sock:/var/run/docker.sock
+
+  db-diagram-exporter:
+    build:
+      context: .
+      dockerfile: docker/db-diagram-exporter/Dockerfile
+    environment:
+      OUTPUT_DIR: /output
+      BASENAME: database_schema
+    volumes:
+      - ./docs/db:/output
+
+volumes:
+  postgres_data:
+  localstack_data:
