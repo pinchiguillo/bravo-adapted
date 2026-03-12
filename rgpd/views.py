@@ -66,8 +66,8 @@ class RgpdConsentViewSet(ActionScopedRateThrottleMixin, viewsets.GenericViewSet)
     @action(detail=False, methods=["get"], url_path="me")
     @extend_schema(
         tags=["RGPD"],
-        summary="Obtener mis consentimientos RGPD",
-        description="Devuelve el estado actual de aceptacion de cookies, politicas y terminos del usuario autenticado.",
+        summary="Get my GDPR consents",
+        description="Returns the current acceptance state of cookies, policies, and terms for the authenticated user.",
         responses=RgpdConsentSerializer,
     )
     def me(self, request):
@@ -77,8 +77,8 @@ class RgpdConsentViewSet(ActionScopedRateThrottleMixin, viewsets.GenericViewSet)
     @me.mapping.post
     @extend_schema(
         tags=["RGPD"],
-        summary="Registrar consentimientos RGPD",
-        description="Crea o reemplaza el estado de consentimientos RGPD del usuario autenticado y registra metadatos de trazabilidad.",
+        summary="Register GDPR consents",
+        description="Creates or replaces the GDPR consent state of the authenticated user and records traceability metadata.",
         request=RgpdConsentUpsertSerializer,
         responses=RgpdConsentSerializer,
     )
@@ -88,8 +88,8 @@ class RgpdConsentViewSet(ActionScopedRateThrottleMixin, viewsets.GenericViewSet)
     @me.mapping.patch
     @extend_schema(
         tags=["RGPD"],
-        summary="Actualizar consentimientos RGPD",
-        description="Actualiza parcialmente el estado de consentimientos RGPD del usuario autenticado y refresca los metadatos enviados.",
+        summary="Update GDPR consents",
+        description="Partially updates the GDPR consent state of the authenticated user and refreshes submitted metadata.",
         request=RgpdConsentUpsertSerializer,
         responses=RgpdConsentSerializer,
     )
@@ -100,10 +100,10 @@ class RgpdConsentViewSet(ActionScopedRateThrottleMixin, viewsets.GenericViewSet)
 @extend_schema_view(
     create=extend_schema(
         tags=["RGPD"],
-        summary="Registrar consentimiento RGPD anonimo",
+        summary="Register anonymous GDPR consent",
         description=(
-            "Crea un consentimiento RGPD anonimo con identificador y token de escritura "
-            "generados por el servidor, o actualiza uno existente cuando se aportan ambos."
+            "Creates an anonymous GDPR consent with server-generated identifier and "
+            "write token, or updates an existing one when both are provided."
         ),
         request=RgpdAnonymousConsentUpsertSerializer,
         responses={200: RgpdAnonymousConsentSerializer, 201: RgpdAnonymousConsentSerializer},

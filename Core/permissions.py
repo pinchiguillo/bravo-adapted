@@ -1,3 +1,4 @@
+from django.conf import settings
 from rest_framework import permissions
 
 
@@ -11,6 +12,18 @@ def get_active_account_denial_message(user):
 
 def user_has_active_account(user):
     return get_active_account_denial_message(user) is None
+
+
+def get_email_verification_denial_message(user):
+    if settings.AUTH_BYPASS_EMAIL_VERIFICATION:
+        return None
+    if hasattr(user, "email_verified") and not user.email_verified:
+        return "Email is not verified."
+    return None
+
+
+def user_has_email_verified_or_bypass(user):
+    return get_email_verification_denial_message(user) is None
 
 
 class IsActiveAccount(permissions.IsAuthenticated):

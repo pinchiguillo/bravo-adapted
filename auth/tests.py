@@ -158,6 +158,8 @@ class AuthApiTests(APITestCase):
         self.assertEqual(mail.outbox[0].to, ["new-user@example.com"])
         self.assertIn("verify-email?token=", mail.outbox[0].body)
         self.assertFalse(response.data["email_verified"])
+        self.assertIn("access", response.data)
+        self.assertIn("refresh", response.data)
 
     def test_login_rejects_users_with_unverified_email(self):
         self.user.email_verified = False
@@ -336,6 +338,51 @@ class AuthApiTests(APITestCase):
 
         self.assertEqual(response.status_code, 400)
         self.assertEqual(response.data["token"][0], "Invalid or expired verification token.")
+
+    @override_settings(AUTH_BYPASS_EMAIL_VERIFICATION=True)
+    def test_register_bypass_marks_user_as_verified_and_skips_email(self):
+        response = self.client.post(
+            "/api/auth/register/",
+            {
+                "username": "bypass-user",
+                "email": "bypass-user@example.com",
+                "password": "ChangeMe123!",
+                "first_name": "Bypass",
+                "last_name": "User",
+            },
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, 201)
+        self.assertTrue(response.data["email_verified"])
+        self.assertIn("access", response.data)
+        self.assertIn("refresh", response.data)
+        self.assertEqual(len(mail.outbox), 0)
+
+    @override_settings(AUTH_BYPASS_EMAIL_VERIFICATION=True)
+    def test_login_allows_unverified_user_when_bypass_enabled(self):
+        self.user.email_verified = False
+        self.user.save(update_fields=["email_verified"])
+
+        response = self.client.post(
+            "/api/auth/login/",
+            {"email": self.email, "password": self.password},
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertIn("access", response.data)
+
+    @override_settings(AUTH_BYPASS_EMAIL_VERIFICATION=True)
+    def test_me_allows_unverified_user_when_bypass_enabled(self):
+        self.user.email_verified = False
+        self.user.save(update_fields=["email_verified"])
+
+        self.client.force_authenticate(user=self.user)
+        response = self.client.get("/api/auth/me/")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.data["email"], self.email)
 
 
 class AuthThrottleTests(APITestCase):

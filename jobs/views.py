@@ -15,42 +15,42 @@ from .serializers import JobChatAttachmentSerializer, JobChatMessageSerializer, 
 
 @extend_schema_view(
     list=extend_schema(
-        summary="Listar trabajos",
-        description="Lista los trabajos donde el usuario autenticado participa como cliente o como organizacion.",
+        summary="List jobs",
+        description="Lists the jobs where the authenticated user participates as a client or organization.",
     ),
     create=extend_schema(
-        summary="Crear trabajo",
-        description="Crea un nuevo trabajo asociado al usuario autenticado.",
+        summary="Create job",
+        description="Creates a new job associated with the authenticated user.",
     ),
     retrieve=extend_schema(
-        summary="Obtener trabajo",
-        description="Devuelve el detalle de un trabajo accesible para el usuario autenticado.",
+        summary="Get job",
+        description="Returns the details of a job accessible to the authenticated user.",
     ),
     update=extend_schema(
-        summary="Reemplazar trabajo",
-        description="Reemplaza completamente un trabajo accesible para el usuario autenticado.",
+        summary="Replace job",
+        description="Fully replaces a job accessible to the authenticated user.",
     ),
     partial_update=extend_schema(
-        summary="Actualizar trabajo",
-        description="Actualiza parcialmente un trabajo accesible para el usuario autenticado.",
+        summary="Update job",
+        description="Partially updates a job accessible to the authenticated user.",
     ),
     destroy=extend_schema(
-        summary="Eliminar trabajo",
-        description="Elimina un trabajo accesible para el usuario autenticado.",
+        summary="Delete job",
+        description="Deletes a job accessible to the authenticated user.",
     ),
     messages=extend_schema(
-        summary="Gestionar mensajes del trabajo",
-        description="Obtiene los mensajes del chat del trabajo o crea un nuevo mensaje en ese chat.",
+        summary="Manage job messages",
+        description="Gets job chat messages or creates a new message in that chat.",
     ),
     attachments=extend_schema(
-        summary="Adjuntar archivo a mensaje",
-        description="Sube un archivo y lo vincula a un mensaje existente dentro del chat del trabajo.",
+        summary="Attach file to message",
+        description="Uploads a file and links it to an existing message in the job chat.",
     ),
     download_attachment=extend_schema(
-        summary="Obtener URL temporal de adjunto",
+        summary="Get temporary attachment URL",
         description=(
-            "Devuelve una URL temporal firmada para descargar el adjunto del chat "
-            "si el usuario autorizado sigue teniendo acceso al job."
+            "Returns a temporary signed URL to download the chat attachment "
+            "if the authorized user still has access to the job."
         ),
     ),
 )

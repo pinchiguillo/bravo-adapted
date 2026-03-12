@@ -26,17 +26,17 @@ class ManagementStatusActionsMixin:
         serializer = self.get_serializer(instance)
         return Response(serializer.data, status=status.HTTP_200_OK)
 
-    @extend_schema(summary="Activar recurso gestionado")
+    @extend_schema(summary="Activate managed resource")
     @action(detail=True, methods=["post"], url_path="activate")
     def activate(self, request, *args, **kwargs):
         return self._set_status(request, self.status_serializer_class.ACTIVE)
 
-    @extend_schema(summary="Dar de baja recurso gestionado")
+    @extend_schema(summary="Deactivate managed resource")
     @action(detail=True, methods=["post"], url_path="deactivate")
     def deactivate(self, request, *args, **kwargs):
         return self._set_status(request, self.status_serializer_class.INACTIVE)
 
-    @extend_schema(summary="Suspender recurso gestionado")
+    @extend_schema(summary="Suspend managed resource")
     @action(detail=True, methods=["post"], url_path="suspend")
     def suspend(self, request, *args, **kwargs):
         return self._set_status(request, self.status_serializer_class.SUSPENDED)

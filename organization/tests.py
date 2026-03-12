@@ -130,6 +130,50 @@ class OrganizationApiTests(APITestCase):
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertEqual(len(response.data), 2)
 
+    def test_authenticated_user_can_create_organization(self):
+        self.client.force_authenticate(user=self.user_without_organization)
+
+        response = self.client.post(
+            reverse("organization-list"),
+            {
+                "name": "Gamma",
+                "legal_name": "Gamma SL",
+                "tax_id": "G789",
+                "billing_email": "billing@gamma.com",
+                "billing_address": "Third 3",
+                "billing_city": "Valencia",
+                "billing_country": "ES",
+                "billing_postal_code": "46001",
+            },
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+        created = Organization.objects.get(user=self.user_without_organization)
+        self.assertEqual(response.data["uuid"], str(created.uuid))
+        self.assertEqual(response.data["name"], "Gamma")
+
+    def test_user_with_organization_cannot_create_second_organization(self):
+        self.client.force_authenticate(user=self.owner)
+
+        response = self.client.post(
+            reverse("organization-list"),
+            {
+                "name": "Acme 2",
+                "legal_name": "Acme 2 SL",
+                "tax_id": "A999",
+                "billing_email": "billing2@acme.com",
+                "billing_address": "Main 2",
+                "billing_city": "Madrid",
+                "billing_country": "ES",
+                "billing_postal_code": "28002",
+            },
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertEqual(response.data["detail"], "Authenticated user already has an organization.")
+
     def test_owner_can_update_organization_by_uuid(self):
         self.client.force_authenticate(user=self.owner)
         response = self.client.patch(

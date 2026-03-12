@@ -11,6 +11,8 @@ from rest_framework import serializers
 from rest_framework.exceptions import AuthenticationFailed
 from rest_framework_simplejwt.serializers import TokenObtainPairSerializer
 
+from Core.permissions import get_email_verification_denial_message
+
 VERIFY_EMAIL_SALT = "auth.verify_email"
 VERIFY_EMAIL_MAX_AGE_SECONDS = 60 * 60 * 24
 
@@ -53,7 +55,10 @@ class UserSerializer(serializers.ModelSerializer):
 
 
 class RegisterSerializer(serializers.ModelSerializer):
-    password = serializers.CharField(write_only=True, min_length=8)
+    password = serializers.CharField(
+        write_only=True,
+        min_length=8 if settings.AUTH_ENFORCE_PASSWORD_RESTRICTIONS else None,
+    )
 
     class Meta:
         model = get_user_model()
@@ -66,17 +71,22 @@ class RegisterSerializer(serializers.ModelSerializer):
             first_name=attrs.get("first_name", ""),
             last_name=attrs.get("last_name", ""),
         )
-        try:
-            validate_password(attrs["password"], user=user)
-        except DjangoValidationError as exc:
-            raise serializers.ValidationError({"password": exc.messages})
+        if settings.AUTH_ENFORCE_PASSWORD_RESTRICTIONS:
+            try:
+                validate_password(attrs["password"], user=user)
+            except DjangoValidationError as exc:
+                raise serializers.ValidationError({"password": exc.messages})
         return attrs
 
     def create(self, validated_data):
         user_model = get_user_model()
         with transaction.atomic():
             user = user_model.objects.create_user(**validated_data)
-            send_verification_email(user)
+            if settings.AUTH_BYPASS_EMAIL_VERIFICATION:
+                user.email_verified = True
+                user.save(update_fields=["email_verified"])
+            else:
+                send_verification_email(user)
         return user
 
 
@@ -85,8 +95,9 @@ class EmailTokenObtainPairSerializer(TokenObtainPairSerializer):
 
     def validate(self, attrs):
         data = super().validate(attrs)
-        if not self.user.email_verified:
-            raise AuthenticationFailed("Email is not verified.")
+        email_verification_denial = get_email_verification_denial_message(self.user)
+        if email_verification_denial is not None:
+            raise AuthenticationFailed(email_verification_denial)
         if self.user.status != self.user.Status.ACTIVE:
             raise AuthenticationFailed(
                 self.error_messages["no_active_account"],

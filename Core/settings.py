@@ -152,6 +152,11 @@ AUTH_VERIFY_EMAIL_URL_TEMPLATE = os.getenv(
     "AUTH_VERIFY_EMAIL_URL_TEMPLATE",
     "http://localhost:3000/verify-email?token={token}",
 )
+AUTH_BYPASS_EMAIL_VERIFICATION = env_bool("AUTH_BYPASS_EMAIL_VERIFICATION", default=False)
+AUTH_ENFORCE_PASSWORD_RESTRICTIONS = env_bool(
+    "AUTH_ENFORCE_PASSWORD_RESTRICTIONS",
+    default=True,
+)
 
 if IS_PRODUCTION and USE_S3_STORAGE:
     require_env("AWS_DEFAULT_REGION")
@@ -254,20 +259,24 @@ else:
 # Password validation
 # https://docs.djangoproject.com/en/5.2/ref/settings/#auth-password-validators
 
-AUTH_PASSWORD_VALIDATORS = [
-    {
-        'NAME': 'django.contrib.auth.password_validation.UserAttributeSimilarityValidator',
-    },
-    {
-        'NAME': 'django.contrib.auth.password_validation.MinimumLengthValidator',
-    },
-    {
-        'NAME': 'django.contrib.auth.password_validation.CommonPasswordValidator',
-    },
-    {
-        'NAME': 'django.contrib.auth.password_validation.NumericPasswordValidator',
-    },
-]
+AUTH_PASSWORD_VALIDATORS = (
+    [
+        {
+            'NAME': 'django.contrib.auth.password_validation.UserAttributeSimilarityValidator',
+        },
+        {
+            'NAME': 'django.contrib.auth.password_validation.MinimumLengthValidator',
+        },
+        {
+            'NAME': 'django.contrib.auth.password_validation.CommonPasswordValidator',
+        },
+        {
+            'NAME': 'django.contrib.auth.password_validation.NumericPasswordValidator',
+        },
+    ]
+    if AUTH_ENFORCE_PASSWORD_RESTRICTIONS
+    else []
+)
 
 
 # Internationalization
@@ -359,7 +368,7 @@ SIMPLE_JWT = {
 
 SPECTACULAR_SETTINGS = {
     "TITLE": "Bravo API",
-    "DESCRIPTION": "Documentacion OpenAPI del backend Bravo.",
+    "DESCRIPTION": "OpenAPI documentation for the Bravo backend.",
     "VERSION": "1.0.0",
     "ENUM_NAME_OVERRIDES": {
         "AccountStatusEnum": "auth.models.CustomUser.Status",
@@ -387,10 +396,12 @@ else:
         }
     }
 
-EMAIL_BACKEND = os.getenv(
-    "EMAIL_BACKEND",
-    "Core.email_backends.SesEmailBackend" if USE_SES_EMAIL else "django.core.mail.backends.smtp.EmailBackend",
+default_email_backend = (
+    "Core.email_backends.SesEmailBackend"
+    if USE_SES_EMAIL
+    else "django.core.mail.backends.smtp.EmailBackend"
 )
+EMAIL_BACKEND = os.getenv("EMAIL_BACKEND", default_email_backend).strip() or default_email_backend
 EMAIL_HOST = os.getenv("EMAIL_HOST", "localhost")
 EMAIL_PORT = env_int("EMAIL_PORT", 25)
 EMAIL_HOST_USER = os.getenv("EMAIL_HOST_USER", "")

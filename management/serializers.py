@@ -1,4 +1,5 @@
 from django.contrib.auth import get_user_model
+from django.conf import settings
 from django.contrib.auth.password_validation import validate_password
 from rest_framework import serializers
 
@@ -7,7 +8,11 @@ from organization.models import Organization
 
 
 class ManagementUserSerializer(serializers.ModelSerializer):
-    password = serializers.CharField(write_only=True, required=False, min_length=8)
+    password = serializers.CharField(
+        write_only=True,
+        required=False,
+        min_length=8 if settings.AUTH_ENFORCE_PASSWORD_RESTRICTIONS else None,
+    )
 
     class Meta:
         model = get_user_model()
@@ -41,7 +46,8 @@ class ManagementUserSerializer(serializers.ModelSerializer):
         return attrs
 
     def validate_password(self, value):
-        validate_password(value)
+        if settings.AUTH_ENFORCE_PASSWORD_RESTRICTIONS:
+            validate_password(value)
         return value
 
     def create(self, validated_data):

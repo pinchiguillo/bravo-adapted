@@ -89,8 +89,6 @@ services:
       AWS_DEFAULT_REGION: ${AWS_DEFAULT_REGION}
       AWS_STORAGE_BUCKET_NAME: ${AWS_STORAGE_BUCKET_NAME}
       DEFAULT_FROM_EMAIL: ${DEFAULT_FROM_EMAIL}
-    ports:
-      - "4566:4566"
     volumes:
       - localstack_prod_data:/var/lib/localstack
       - ./docker/localstack/init:/etc/localstack/init/ready.d

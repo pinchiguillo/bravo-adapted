@@ -1,4 +1,4 @@
-from drf_spectacular.utils import OpenApiParameter, extend_schema, extend_schema_view
+from drf_spectacular.utils import OpenApiParameter, OpenApiResponse, extend_schema, extend_schema_view
 from rest_framework import mixins, permissions, status, viewsets
 from rest_framework.decorators import action
 from rest_framework.exceptions import NotFound, PermissionDenied, ValidationError
@@ -23,7 +23,7 @@ service_price_uuid_parameter = OpenApiParameter(
     type=str,
     location=OpenApiParameter.PATH,
     required=True,
-    description="Identificador del precio de servicio.",
+    description="Service price identifier.",
 )
 
 organization_uuid_parameter = OpenApiParameter(
@@ -31,7 +31,7 @@ organization_uuid_parameter = OpenApiParameter(
     type=str,
     location=OpenApiParameter.PATH,
     required=True,
-    description="UUID de la organizacion propietaria del servicio.",
+    description="UUID of the organization that owns the service.",
 )
 
 service_uuid_parameter = OpenApiParameter(
@@ -39,34 +39,46 @@ service_uuid_parameter = OpenApiParameter(
     type=str,
     location=OpenApiParameter.PATH,
     required=True,
-    description="UUID del servicio propietario del subservicio.",
+    description="UUID of the service that owns the subservice.",
 )
 
 
 @extend_schema_view(
+    create=extend_schema(
+        summary="Create organization",
+        description="Creates an organization associated with the authenticated user.",
+        request=OrganizationSerializer,
+        responses={
+            status.HTTP_201_CREATED: OrganizationSerializer,
+            status.HTTP_400_BAD_REQUEST: OpenApiResponse(
+                description="Authenticated user already has an organization."
+            ),
+        },
+    ),
     list=extend_schema(
-        summary="Listar organizaciones",
-        description="Lista todas las organizaciones. Solo disponible para usuarios administradores.",
+        summary="List organizations",
+        description="Lists all organizations. Only available to admin users.",
     ),
     retrieve=extend_schema(
-        summary="Obtener organizacion",
-        description="Devuelve el detalle publico de una organizacion identificada por su UUID.",
+        summary="Get organization",
+        description="Returns the public details of an organization identified by UUID.",
     ),
     update=extend_schema(
-        summary="Reemplazar organizacion",
-        description="Reemplaza completamente una organizacion. Solo permitido a su propietario autenticado.",
+        summary="Replace organization",
+        description="Fully replaces an organization. Only allowed for its authenticated owner.",
     ),
     partial_update=extend_schema(
-        summary="Actualizar organizacion",
-        description="Actualiza parcialmente una organizacion. Solo permitido a su propietario autenticado.",
+        summary="Update organization",
+        description="Partially updates an organization. Only allowed for its authenticated owner.",
     ),
     destroy=extend_schema(
-        summary="Eliminar organizacion",
-        description="Elimina una organizacion. Solo permitido a su propietario autenticado.",
+        summary="Delete organization",
+        description="Deletes an organization. Only allowed for its authenticated owner.",
     ),
 )
 class OrganizationViewSet(
     ActionScopedRateThrottleMixin,
+    mixins.CreateModelMixin,
     mixins.ListModelMixin,
     mixins.RetrieveModelMixin,
     mixins.UpdateModelMixin,
@@ -79,6 +91,7 @@ class OrganizationViewSet(
     throttle_scope_prefix = "organization"
     throttle_scope_action_map = {
         "list": "organization_admin",
+        "create": "organization_write",
         "retrieve": "organization_public_read",
         "me": "organization_authenticated_read",
         "update_me": "organization_write",
@@ -101,9 +114,14 @@ class OrganizationViewSet(
             return OrganizationPublicSerializer
         return super().get_serializer_class()
 
+    def perform_create(self, serializer):
+        if Organization.objects.filter(user=self.request.user).exists():
+            raise ValidationError({"detail": "Authenticated user already has an organization."})
+        serializer.save(user=self.request.user)
+
     @extend_schema(
-        summary="Obtener mi organizacion",
-        description="Devuelve la organizacion asociada al usuario autenticado.",
+        summary="Get my organization",
+        description="Returns the organization associated with the authenticated user.",
     )
     @action(detail=False, methods=["get"], url_path="me")
     def me(self, request):
@@ -115,8 +133,8 @@ class OrganizationViewSet(
 
     @me.mapping.patch
     @extend_schema(
-        summary="Actualizar mi organizacion",
-        description="Actualiza parcialmente la organizacion asociada al usuario autenticado.",
+        summary="Update my organization",
+        description="Partially updates the organization associated with the authenticated user.",
     )
     def update_me(self, request):
         organization = Organization.objects.filter(user=request.user).first()
@@ -130,12 +148,12 @@ class OrganizationViewSet(
 
 @extend_schema_view(
     list=extend_schema(
-        summary="Listar categorias",
-        description="Devuelve el catalogo de categorias disponible para usuarios autenticados.",
+        summary="List categories",
+        description="Returns the categories catalog available to authenticated users.",
     ),
     retrieve=extend_schema(
-        summary="Obtener categoria",
-        description="Devuelve el detalle de una categoria identificada por su UUID.",
+        summary="Get category",
+        description="Returns the details of a category identified by UUID.",
     ),
 )
 class CategoryViewSet(ActionScopedRateThrottleMixin, viewsets.ReadOnlyModelViewSet):
@@ -152,33 +170,33 @@ class CategoryViewSet(ActionScopedRateThrottleMixin, viewsets.ReadOnlyModelViewS
 
 @extend_schema_view(
     list=extend_schema(
-        summary="Listar servicios",
-        description="Lista los servicios de la organizacion indicada en la URL.",
+        summary="List services",
+        description="Lists the services of the organization specified in the URL.",
         parameters=[organization_uuid_parameter],
     ),
     create=extend_schema(
-        summary="Crear servicio",
-        description="Crea un servicio dentro de la organizacion indicada en la URL si pertenece al usuario autenticado.",
+        summary="Create service",
+        description="Creates a service in the organization specified in the URL if it belongs to the authenticated user.",
         parameters=[organization_uuid_parameter],
     ),
     retrieve=extend_schema(
-        summary="Obtener servicio",
-        description="Devuelve el detalle de un servicio perteneciente a la organizacion indicada en la URL.",
+        summary="Get service",
+        description="Returns the details of a service belonging to the organization specified in the URL.",
         parameters=[organization_uuid_parameter],
     ),
     update=extend_schema(
-        summary="Reemplazar servicio",
-        description="Reemplaza completamente un servicio de la organizacion indicada en la URL.",
+        summary="Replace service",
+        description="Fully replaces a service in the organization specified in the URL.",
         parameters=[organization_uuid_parameter],
     ),
     partial_update=extend_schema(
-        summary="Actualizar servicio",
-        description="Actualiza parcialmente un servicio de la organizacion indicada en la URL.",
+        summary="Update service",
+        description="Partially updates a service in the organization specified in the URL.",
         parameters=[organization_uuid_parameter],
     ),
     destroy=extend_schema(
-        summary="Eliminar servicio",
-        description="Elimina un servicio de la organizacion indicada en la URL.",
+        summary="Delete service",
+        description="Deletes a service in the organization specified in the URL.",
         parameters=[organization_uuid_parameter],
     ),
 )
@@ -226,33 +244,33 @@ class ServiceViewSet(ActionScopedRateThrottleMixin, viewsets.ModelViewSet):
 
 @extend_schema_view(
     list=extend_schema(
-        summary="Listar subservicios",
-        description="Lista los subservicios del servicio indicado en la URL.",
+        summary="List subservices",
+        description="Lists the subservices of the service specified in the URL.",
         parameters=[service_uuid_parameter],
     ),
     create=extend_schema(
-        summary="Crear subservicio",
-        description="Crea un subservicio asociado al servicio indicado en la URL.",
+        summary="Create subservice",
+        description="Creates a subservice associated with the service specified in the URL.",
         parameters=[service_uuid_parameter],
     ),
     retrieve=extend_schema(
-        summary="Obtener subservicio",
-        description="Devuelve el detalle de un subservicio perteneciente al servicio indicado en la URL.",
+        summary="Get subservice",
+        description="Returns the details of a subservice belonging to the service specified in the URL.",
         parameters=[service_uuid_parameter],
     ),
     update=extend_schema(
-        summary="Reemplazar subservicio",
-        description="Reemplaza completamente un subservicio del servicio indicado en la URL.",
+        summary="Replace subservice",
+        description="Fully replaces a subservice of the service specified in the URL.",
         parameters=[service_uuid_parameter],
     ),
     partial_update=extend_schema(
-        summary="Actualizar subservicio",
-        description="Actualiza parcialmente un subservicio del servicio indicado en la URL.",
+        summary="Update subservice",
+        description="Partially updates a subservice of the service specified in the URL.",
         parameters=[service_uuid_parameter],
     ),
     destroy=extend_schema(
-        summary="Eliminar subservicio",
-        description="Elimina un subservicio del servicio indicado en la URL.",
+        summary="Delete subservice",
+        description="Deletes a subservice of the service specified in the URL.",
         parameters=[service_uuid_parameter],
     ),
 )
@@ -306,31 +324,31 @@ class SubserviceViewSet(ActionScopedRateThrottleMixin, viewsets.ModelViewSet):
 
 @extend_schema_view(
     list=extend_schema(
-        summary="Listar precios de servicio",
-        description="Lista los precios configurados para servicios de la organizacion del usuario autenticado.",
+        summary="List service prices",
+        description="Lists configured prices for services in the authenticated user's organization.",
     ),
     create=extend_schema(
-        summary="Crear precio de servicio",
-        description="Crea un precio para un servicio de la organizacion del usuario autenticado.",
+        summary="Create service price",
+        description="Creates a price for a service in the authenticated user's organization.",
     ),
     retrieve=extend_schema(
-        summary="Obtener precio de servicio",
-        description="Devuelve el detalle de un precio de servicio accesible por el usuario autenticado.",
+        summary="Get service price",
+        description="Returns the details of a service price accessible by the authenticated user.",
         parameters=[service_price_uuid_parameter],
     ),
     update=extend_schema(
-        summary="Reemplazar precio de servicio",
-        description="Reemplaza completamente un precio de servicio de la organizacion del usuario autenticado.",
+        summary="Replace service price",
+        description="Fully replaces a service price in the authenticated user's organization.",
         parameters=[service_price_uuid_parameter],
     ),
     partial_update=extend_schema(
-        summary="Actualizar precio de servicio",
-        description="Actualiza parcialmente un precio de servicio de la organizacion del usuario autenticado.",
+        summary="Update service price",
+        description="Partially updates a service price in the authenticated user's organization.",
         parameters=[service_price_uuid_parameter],
     ),
     destroy=extend_schema(
-        summary="Eliminar precio de servicio",
-        description="Elimina un precio de servicio de la organizacion del usuario autenticado.",
+        summary="Delete service price",
+        description="Deletes a service price in the authenticated user's organization.",
         parameters=[service_price_uuid_parameter],
     ),
 )

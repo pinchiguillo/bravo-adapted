@@ -549,6 +549,20 @@ class JobsApiTests(APITestCase):
         self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
         self.assertEqual(response.data["detail"], "Email is not verified.")
 
+    @override_settings(AUTH_BYPASS_EMAIL_VERIFICATION=True)
+    def test_unverified_user_can_access_jobs_api_when_bypass_enabled(self):
+        unverified_user = get_user_model().objects.create_user(
+            username="jobs-unverified-bypass",
+            email="jobs-unverified-bypass@example.com",
+            password="testpass123",
+            email_verified=False,
+        )
+
+        self.client.force_authenticate(user=unverified_user)
+        response = self.client.get(reverse("jobs-list"))
+
+        self.assertNotEqual(response.status_code, status.HTTP_403_FORBIDDEN)
+
     def test_download_attachment_requires_job_access(self):
         job = Job.objects.create(
             user=self.client_user,

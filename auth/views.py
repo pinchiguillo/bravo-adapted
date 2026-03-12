@@ -6,8 +6,9 @@ from rest_framework.exceptions import PermissionDenied
 from rest_framework.response import Response
 from rest_framework.throttling import ScopedRateThrottle
 from rest_framework_simplejwt.serializers import TokenRefreshSerializer
+from rest_framework_simplejwt.tokens import RefreshToken
 
-from Core.permissions import IsActiveAccount
+from Core.permissions import IsActiveAccount, get_email_verification_denial_message
 
 from .serializers import (
     EmailTokenObtainPairSerializer,
@@ -45,19 +46,25 @@ class AuthViewSet(viewsets.GenericViewSet):
         return []
 
     @extend_schema(
-        summary="Registrar usuario",
-        description="Crea una nueva cuenta de usuario y devuelve el perfil registrado.",
+        summary="Register user",
+        description="Creates a new user account and returns the registered profile along with JWT tokens.",
     )
     @action(detail=False, methods=["post"], url_path="register")
     def register(self, request):
         serializer = RegisterSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
         user = serializer.save()
-        return Response(UserSerializer(user).data, status=status.HTTP_201_CREATED)
+        refresh = RefreshToken.for_user(user)
+        response_data = {
+            **UserSerializer(user).data,
+            "refresh": str(refresh),
+            "access": str(refresh.access_token),
+        }
+        return Response(response_data, status=status.HTTP_201_CREATED)
 
     @extend_schema(
-        summary="Iniciar sesion",
-        description="Autentica al usuario con email y password y devuelve los tokens JWT de acceso y refresco.",
+        summary="Login",
+        description="Authenticates the user with email and password and returns JWT access and refresh tokens.",
     )
     @action(detail=False, methods=["post"], url_path="login")
     def login(self, request):
@@ -66,8 +73,8 @@ class AuthViewSet(viewsets.GenericViewSet):
         return Response(serializer.validated_data, status=status.HTTP_200_OK)
 
     @extend_schema(
-        summary="Refrescar token",
-        description="Recibe un refresh token valido y devuelve un nuevo access token JWT.",
+        summary="Refresh token",
+        description="Receives a valid refresh token and returns a new JWT access token.",
     )
     @action(detail=False, methods=["post"], url_path="token/refresh")
     def refresh(self, request):
@@ -76,8 +83,8 @@ class AuthViewSet(viewsets.GenericViewSet):
         return Response(serializer.validated_data, status=status.HTTP_200_OK)
 
     @extend_schema(
-        summary="Verificar email",
-        description="Valida el token de verificacion y marca el email del usuario como verificado.",
+        summary="Verify email",
+        description="Validates the verification token and marks the user's email as verified.",
     )
     @action(detail=False, methods=["post"], url_path="verify-email")
     def verify_email(self, request):
@@ -90,13 +97,14 @@ class AuthViewSet(viewsets.GenericViewSet):
         )
 
     @extend_schema(
-        summary="Obtener usuario autenticado",
-        description="Devuelve los datos del usuario autenticado a partir del token enviado en la peticion.",
+        summary="Get authenticated user",
+        description="Returns the authenticated user's data based on the token sent in the request.",
     )
     @action(detail=False, methods=["get"], url_path="me")
     def me(self, request):
         if hasattr(request.user, "Status") and request.user.status != request.user.Status.ACTIVE:
             raise PermissionDenied("User account is not allowed to access this resource.")
-        if hasattr(request.user, "email_verified") and not request.user.email_verified:
-            raise PermissionDenied("Email is not verified.")
+        email_verification_denial = get_email_verification_denial_message(request.user)
+        if email_verification_denial is not None:
+            raise PermissionDenied(email_verification_denial)
         return Response(UserSerializer(request.user).data, status=status.HTTP_200_OK)

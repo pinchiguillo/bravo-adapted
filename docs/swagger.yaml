@@ -2,14 +2,14 @@ openapi: 3.0.3
 info:
   title: Bravo API
   version: 1.0.0
-  description: Documentacion OpenAPI del backend Bravo.
+  description: OpenAPI documentation for the Bravo backend.
 paths:
   /api/auth/login/:
     post:
       operationId: auth_login_create
-      description: Autentica al usuario con email y password y devuelve los tokens
-        JWT de acceso y refresco.
-      summary: Iniciar sesion
+      description: Authenticates the user with email and password and returns JWT
+        access and refresh tokens.
+      summary: Login
       tags:
       - auth
       requestBody:
@@ -37,9 +37,9 @@ paths:
   /api/auth/me/:
     get:
       operationId: auth_me_retrieve
-      description: Devuelve los datos del usuario autenticado a partir del token enviado
-        en la peticion.
-      summary: Obtener usuario autenticado
+      description: Returns the authenticated user's data based on the token sent in
+        the request.
+      summary: Get authenticated user
       tags:
       - auth
       security:
@@ -54,8 +54,9 @@ paths:
   /api/auth/register/:
     post:
       operationId: auth_register_create
-      description: Crea una nueva cuenta de usuario y devuelve el perfil registrado.
-      summary: Registrar usuario
+      description: Creates a new user account and returns the registered profile along
+        with JWT tokens.
+      summary: Register user
       tags:
       - auth
       requestBody:
@@ -83,9 +84,8 @@ paths:
   /api/auth/token/refresh/:
     post:
       operationId: auth_token_refresh_create
-      description: Recibe un refresh token valido y devuelve un nuevo access token
-        JWT.
-      summary: Refrescar token
+      description: Receives a valid refresh token and returns a new JWT access token.
+      summary: Refresh token
       tags:
       - auth
       requestBody:
@@ -113,9 +113,9 @@ paths:
   /api/auth/verify-email/:
     post:
       operationId: auth_verify_email_create
-      description: Valida el token de verificacion y marca el email del usuario como
-        verificado.
-      summary: Verificar email
+      description: Validates the verification token and marks the user's email as
+        verified.
+      summary: Verify email
       tags:
       - auth
       requestBody:
@@ -143,9 +143,9 @@ paths:
   /api/jobs/:
     get:
       operationId: jobs_list
-      description: Lista los trabajos donde el usuario autenticado participa como
-        cliente o como organizacion.
-      summary: Listar trabajos
+      description: Lists the jobs where the authenticated user participates as a client
+        or organization.
+      summary: List jobs
       tags:
       - jobs
       security:
@@ -161,8 +161,8 @@ paths:
           description: ''
     post:
       operationId: jobs_create
-      description: Crea un nuevo trabajo asociado al usuario autenticado.
-      summary: Crear trabajo
+      description: Creates a new job associated with the authenticated user.
+      summary: Create job
       tags:
       - jobs
       requestBody:
@@ -189,8 +189,8 @@ paths:
   /api/jobs/{uuid}/:
     get:
       operationId: jobs_retrieve
-      description: Devuelve el detalle de un trabajo accesible para el usuario autenticado.
-      summary: Obtener trabajo
+      description: Returns the details of a job accessible to the authenticated user.
+      summary: Get job
       parameters:
       - in: path
         name: uuid
@@ -211,8 +211,8 @@ paths:
           description: ''
     put:
       operationId: jobs_update
-      description: Reemplaza completamente un trabajo accesible para el usuario autenticado.
-      summary: Reemplazar trabajo
+      description: Fully replaces a job accessible to the authenticated user.
+      summary: Replace job
       parameters:
       - in: path
         name: uuid
@@ -245,8 +245,8 @@ paths:
           description: ''
     patch:
       operationId: jobs_partial_update
-      description: Actualiza parcialmente un trabajo accesible para el usuario autenticado.
-      summary: Actualizar trabajo
+      description: Partially updates a job accessible to the authenticated user.
+      summary: Update job
       parameters:
       - in: path
         name: uuid
@@ -278,8 +278,8 @@ paths:
           description: ''
     delete:
       operationId: jobs_destroy
-      description: Elimina un trabajo accesible para el usuario autenticado.
-      summary: Eliminar trabajo
+      description: Deletes a job accessible to the authenticated user.
+      summary: Delete job
       parameters:
       - in: path
         name: uuid
@@ -297,9 +297,8 @@ paths:
   /api/jobs/{uuid}/messages/:
     get:
       operationId: jobs_messages_retrieve
-      description: Obtiene los mensajes del chat del trabajo o crea un nuevo mensaje
-        en ese chat.
-      summary: Gestionar mensajes del trabajo
+      description: Gets job chat messages or creates a new message in that chat.
+      summary: Manage job messages
       parameters:
       - in: path
         name: uuid
@@ -320,9 +319,8 @@ paths:
           description: ''
     post:
       operationId: jobs_messages_create
-      description: Obtiene los mensajes del chat del trabajo o crea un nuevo mensaje
-        en ese chat.
-      summary: Gestionar mensajes del trabajo
+      description: Gets job chat messages or creates a new message in that chat.
+      summary: Manage job messages
       parameters:
       - in: path
         name: uuid
@@ -356,9 +354,8 @@ paths:
   /api/jobs/{uuid}/messages/{message_id}/attachments/:
     post:
       operationId: jobs_messages_attachments_create
-      description: Sube un archivo y lo vincula a un mensaje existente dentro del
-        chat del trabajo.
-      summary: Adjuntar archivo a mensaje
+      description: Uploads a file and links it to an existing message in the job chat.
+      summary: Attach file to message
       parameters:
       - in: path
         name: message_id
@@ -392,11 +389,728 @@ paths:
               schema:
                 $ref: '#/components/schemas/Job'
           description: ''
+  /api/jobs/{uuid}/messages/{message_id}/attachments/{attachment_id}/download/:
+    get:
+      operationId: jobs_messages_attachments_download_retrieve
+      description: Returns a temporary signed URL to download the chat attachment
+        if the authorized user still has access to the job.
+      summary: Get temporary attachment URL
+      parameters:
+      - in: path
+        name: attachment_id
+        schema:
+          type: string
+          pattern: ^\d+$
+        required: true
+      - in: path
+        name: message_id
+        schema:
+          type: string
+          pattern: ^\d+$
+        required: true
+      - in: path
+        name: uuid
+        schema:
+          type: string
+          format: uuid
+        required: true
+      tags:
+      - jobs
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Job'
+          description: ''
+  /api/management/jobs/:
+    get:
+      operationId: management_jobs_list
+      tags:
+      - management
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/ManagementJob'
+          description: ''
+    post:
+      operationId: management_jobs_create
+      tags:
+      - management
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ManagementJob'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/ManagementJob'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/ManagementJob'
+        required: true
+      security:
+      - jwtAuth: []
+      responses:
+        '201':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ManagementJob'
+          description: ''
+  /api/management/jobs/{uuid}/:
+    get:
+      operationId: management_jobs_retrieve
+      parameters:
+      - in: path
+        name: uuid
+        schema:
+          type: string
+          format: uuid
+        required: true
+      tags:
+      - management
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ManagementJob'
+          description: ''
+    put:
+      operationId: management_jobs_update
+      parameters:
+      - in: path
+        name: uuid
+        schema:
+          type: string
+          format: uuid
+        required: true
+      tags:
+      - management
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ManagementJob'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/ManagementJob'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/ManagementJob'
+        required: true
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ManagementJob'
+          description: ''
+    patch:
+      operationId: management_jobs_partial_update
+      parameters:
+      - in: path
+        name: uuid
+        schema:
+          type: string
+          format: uuid
+        required: true
+      tags:
+      - management
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PatchedManagementJob'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/PatchedManagementJob'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/PatchedManagementJob'
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ManagementJob'
+          description: ''
+  /api/management/jobs/{uuid}/activate/:
+    post:
+      operationId: management_jobs_activate_create
+      summary: Activate managed resource
+      parameters:
+      - in: path
+        name: uuid
+        schema:
+          type: string
+          format: uuid
+        required: true
+      tags:
+      - management
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ManagementJob'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/ManagementJob'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/ManagementJob'
+        required: true
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ManagementJob'
+          description: ''
+  /api/management/jobs/{uuid}/deactivate/:
+    post:
+      operationId: management_jobs_deactivate_create
+      summary: Deactivate managed resource
+      parameters:
+      - in: path
+        name: uuid
+        schema:
+          type: string
+          format: uuid
+        required: true
+      tags:
+      - management
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ManagementJob'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/ManagementJob'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/ManagementJob'
+        required: true
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ManagementJob'
+          description: ''
+  /api/management/jobs/{uuid}/suspend/:
+    post:
+      operationId: management_jobs_suspend_create
+      summary: Suspend managed resource
+      parameters:
+      - in: path
+        name: uuid
+        schema:
+          type: string
+          format: uuid
+        required: true
+      tags:
+      - management
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ManagementJob'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/ManagementJob'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/ManagementJob'
+        required: true
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ManagementJob'
+          description: ''
+  /api/management/organizations/:
+    get:
+      operationId: management_organizations_list
+      tags:
+      - management
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/ManagementOrganization'
+          description: ''
+    post:
+      operationId: management_organizations_create
+      tags:
+      - management
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ManagementOrganization'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/ManagementOrganization'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/ManagementOrganization'
+        required: true
+      security:
+      - jwtAuth: []
+      responses:
+        '201':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ManagementOrganization'
+          description: ''
+  /api/management/organizations/{uuid}/:
+    get:
+      operationId: management_organizations_retrieve
+      parameters:
+      - in: path
+        name: uuid
+        schema:
+          type: string
+          format: uuid
+        required: true
+      tags:
+      - management
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ManagementOrganization'
+          description: ''
+    put:
+      operationId: management_organizations_update
+      parameters:
+      - in: path
+        name: uuid
+        schema:
+          type: string
+          format: uuid
+        required: true
+      tags:
+      - management
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ManagementOrganization'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/ManagementOrganization'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/ManagementOrganization'
+        required: true
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ManagementOrganization'
+          description: ''
+    patch:
+      operationId: management_organizations_partial_update
+      parameters:
+      - in: path
+        name: uuid
+        schema:
+          type: string
+          format: uuid
+        required: true
+      tags:
+      - management
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PatchedManagementOrganization'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/PatchedManagementOrganization'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/PatchedManagementOrganization'
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ManagementOrganization'
+          description: ''
+  /api/management/organizations/{uuid}/activate/:
+    post:
+      operationId: management_organizations_activate_create
+      summary: Activate managed resource
+      parameters:
+      - in: path
+        name: uuid
+        schema:
+          type: string
+          format: uuid
+        required: true
+      tags:
+      - management
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ManagementOrganization'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/ManagementOrganization'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/ManagementOrganization'
+        required: true
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ManagementOrganization'
+          description: ''
+  /api/management/organizations/{uuid}/deactivate/:
+    post:
+      operationId: management_organizations_deactivate_create
+      summary: Deactivate managed resource
+      parameters:
+      - in: path
+        name: uuid
+        schema:
+          type: string
+          format: uuid
+        required: true
+      tags:
+      - management
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ManagementOrganization'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/ManagementOrganization'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/ManagementOrganization'
+        required: true
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ManagementOrganization'
+          description: ''
+  /api/management/organizations/{uuid}/suspend/:
+    post:
+      operationId: management_organizations_suspend_create
+      summary: Suspend managed resource
+      parameters:
+      - in: path
+        name: uuid
+        schema:
+          type: string
+          format: uuid
+        required: true
+      tags:
+      - management
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ManagementOrganization'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/ManagementOrganization'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/ManagementOrganization'
+        required: true
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ManagementOrganization'
+          description: ''
+  /api/management/users/:
+    get:
+      operationId: management_users_list
+      tags:
+      - management
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/ManagementUser'
+          description: ''
+    post:
+      operationId: management_users_create
+      tags:
+      - management
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ManagementUser'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/ManagementUser'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/ManagementUser'
+        required: true
+      security:
+      - jwtAuth: []
+      responses:
+        '201':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ManagementUser'
+          description: ''
+  /api/management/users/{uuid}/:
+    get:
+      operationId: management_users_retrieve
+      parameters:
+      - in: path
+        name: uuid
+        schema:
+          type: string
+          format: uuid
+        required: true
+      tags:
+      - management
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ManagementUser'
+          description: ''
+    put:
+      operationId: management_users_update
+      parameters:
+      - in: path
+        name: uuid
+        schema:
+          type: string
+          format: uuid
+        required: true
+      tags:
+      - management
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ManagementUser'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/ManagementUser'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/ManagementUser'
+        required: true
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ManagementUser'
+          description: ''
+    patch:
+      operationId: management_users_partial_update
+      parameters:
+      - in: path
+        name: uuid
+        schema:
+          type: string
+          format: uuid
+        required: true
+      tags:
+      - management
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PatchedManagementUser'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/PatchedManagementUser'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/PatchedManagementUser'
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ManagementUser'
+          description: ''
+  /api/management/users/{uuid}/activate/:
+    post:
+      operationId: management_users_activate_create
+      summary: Activate managed resource
+      parameters:
+      - in: path
+        name: uuid
+        schema:
+          type: string
+          format: uuid
+        required: true
+      tags:
+      - management
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ManagementUser'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/ManagementUser'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/ManagementUser'
+        required: true
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ManagementUser'
+          description: ''
+  /api/management/users/{uuid}/deactivate/:
+    post:
+      operationId: management_users_deactivate_create
+      summary: Deactivate managed resource
+      parameters:
+      - in: path
+        name: uuid
+        schema:
+          type: string
+          format: uuid
+        required: true
+      tags:
+      - management
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ManagementUser'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/ManagementUser'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/ManagementUser'
+        required: true
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ManagementUser'
+          description: ''
+  /api/management/users/{uuid}/suspend/:
+    post:
+      operationId: management_users_suspend_create
+      summary: Suspend managed resource
+      parameters:
+      - in: path
+        name: uuid
+        schema:
+          type: string
+          format: uuid
+        required: true
+      tags:
+      - management
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ManagementUser'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/ManagementUser'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/ManagementUser'
+        required: true
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ManagementUser'
+          description: ''
   /api/organization/:
     get:
       operationId: organization_list
-      description: Lista todas las organizaciones. Solo disponible para usuarios administradores.
-      summary: Listar organizaciones
+      description: Lists all organizations. Only available to admin users.
+      summary: List organizations
       tags:
       - organization
       security:
@@ -413,14 +1127,14 @@ paths:
   /api/organization/{organization_uuid}/services/:
     get:
       operationId: organization_services_list
-      description: Lista los servicios de la organizacion indicada en la URL.
-      summary: Listar servicios
+      description: Lists the services of the organization specified in the URL.
+      summary: List services
       parameters:
       - in: path
         name: organization_uuid
         schema:
           type: string
-        description: UUID de la organizacion propietaria del servicio.
+        description: UUID of the organization that owns the service.
         required: true
       tags:
       - organization
@@ -438,15 +1152,15 @@ paths:
           description: ''
     post:
       operationId: organization_services_create
-      description: Crea un servicio dentro de la organizacion indicada en la URL si
-        pertenece al usuario autenticado.
-      summary: Crear servicio
+      description: Creates a service in the organization specified in the URL if it
+        belongs to the authenticated user.
+      summary: Create service
       parameters:
       - in: path
         name: organization_uuid
         schema:
           type: string
-        description: UUID de la organizacion propietaria del servicio.
+        description: UUID of the organization that owns the service.
         required: true
       tags:
       - organization
@@ -474,15 +1188,15 @@ paths:
   /api/organization/{organization_uuid}/services/{uuid}/:
     get:
       operationId: organization_services_retrieve
-      description: Devuelve el detalle de un servicio perteneciente a la organizacion
-        indicada en la URL.
-      summary: Obtener servicio
+      description: Returns the details of a service belonging to the organization
+        specified in the URL.
+      summary: Get service
       parameters:
       - in: path
         name: organization_uuid
         schema:
           type: string
-        description: UUID de la organizacion propietaria del servicio.
+        description: UUID of the organization that owns the service.
         required: true
       - in: path
         name: uuid
@@ -504,15 +1218,14 @@ paths:
           description: ''
     put:
       operationId: organization_services_update
-      description: Reemplaza completamente un servicio de la organizacion indicada
-        en la URL.
-      summary: Reemplazar servicio
+      description: Fully replaces a service in the organization specified in the URL.
+      summary: Replace service
       parameters:
       - in: path
         name: organization_uuid
         schema:
           type: string
-        description: UUID de la organizacion propietaria del servicio.
+        description: UUID of the organization that owns the service.
         required: true
       - in: path
         name: uuid
@@ -545,15 +1258,15 @@ paths:
           description: ''
     patch:
       operationId: organization_services_partial_update
-      description: Actualiza parcialmente un servicio de la organizacion indicada
-        en la URL.
-      summary: Actualizar servicio
+      description: Partially updates a service in the organization specified in the
+        URL.
+      summary: Update service
       parameters:
       - in: path
         name: organization_uuid
         schema:
           type: string
-        description: UUID de la organizacion propietaria del servicio.
+        description: UUID of the organization that owns the service.
         required: true
       - in: path
         name: uuid
@@ -585,14 +1298,14 @@ paths:
           description: ''
     delete:
       operationId: organization_services_destroy
-      description: Elimina un servicio de la organizacion indicada en la URL.
-      summary: Eliminar servicio
+      description: Deletes a service in the organization specified in the URL.
+      summary: Delete service
       parameters:
       - in: path
         name: organization_uuid
         schema:
           type: string
-        description: UUID de la organizacion propietaria del servicio.
+        description: UUID of the organization that owns the service.
         required: true
       - in: path
         name: uuid
@@ -610,9 +1323,8 @@ paths:
   /api/organization/{uuid}/:
     get:
       operationId: organization_retrieve
-      description: Devuelve el detalle publico de una organizacion identificada por
-        su UUID.
-      summary: Obtener organizacion
+      description: Returns the public details of an organization identified by UUID.
+      summary: Get organization
       parameters:
       - in: path
         name: uuid
@@ -630,13 +1342,13 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/Organization'
+                $ref: '#/components/schemas/OrganizationPublic'
           description: ''
     put:
       operationId: organization_update
-      description: Reemplaza completamente una organizacion. Solo permitido a su propietario
-        autenticado.
-      summary: Reemplazar organizacion
+      description: Fully replaces an organization. Only allowed for its authenticated
+        owner.
+      summary: Replace organization
       parameters:
       - in: path
         name: uuid
@@ -669,9 +1381,9 @@ paths:
           description: ''
     patch:
       operationId: organization_partial_update
-      description: Actualiza parcialmente una organizacion. Solo permitido a su propietario
-        autenticado.
-      summary: Actualizar organizacion
+      description: Partially updates an organization. Only allowed for its authenticated
+        owner.
+      summary: Update organization
       parameters:
       - in: path
         name: uuid
@@ -703,8 +1415,8 @@ paths:
           description: ''
     delete:
       operationId: organization_destroy
-      description: Elimina una organizacion. Solo permitido a su propietario autenticado.
-      summary: Eliminar organizacion
+      description: Deletes an organization. Only allowed for its authenticated owner.
+      summary: Delete organization
       parameters:
       - in: path
         name: uuid
@@ -722,8 +1434,8 @@ paths:
   /api/organization/categories/:
     get:
       operationId: organization_categories_list
-      description: Devuelve el catalogo de categorias disponible para usuarios autenticados.
-      summary: Listar categorias
+      description: Returns the categories catalog available to authenticated users.
+      summary: List categories
       tags:
       - organization
       security:
@@ -740,8 +1452,8 @@ paths:
   /api/organization/categories/{uuid}/:
     get:
       operationId: organization_categories_retrieve
-      description: Devuelve el detalle de una categoria identificada por su UUID.
-      summary: Obtener categoria
+      description: Returns the details of a category identified by UUID.
+      summary: Get category
       parameters:
       - in: path
         name: uuid
@@ -763,8 +1475,8 @@ paths:
   /api/organization/me/:
     get:
       operationId: organization_me_retrieve
-      description: Devuelve la organizacion asociada al usuario autenticado.
-      summary: Obtener mi organizacion
+      description: Returns the organization associated with the authenticated user.
+      summary: Get my organization
       tags:
       - organization
       security:
@@ -778,8 +1490,9 @@ paths:
           description: ''
     patch:
       operationId: organization_me_partial_update
-      description: Actualiza parcialmente la organizacion asociada al usuario autenticado.
-      summary: Actualizar mi organizacion
+      description: Partially updates the organization associated with the authenticated
+        user.
+      summary: Update my organization
       tags:
       - organization
       requestBody:
@@ -805,9 +1518,9 @@ paths:
   /api/organization/service-prices/:
     get:
       operationId: organization_service_prices_list
-      description: Lista los precios configurados para servicios de la organizacion
-        del usuario autenticado.
-      summary: Listar precios de servicio
+      description: Lists configured prices for services in the authenticated user's
+        organization.
+      summary: List service prices
       tags:
       - organization
       security:
@@ -823,9 +1536,8 @@ paths:
           description: ''
     post:
       operationId: organization_service_prices_create
-      description: Crea un precio para un servicio de la organizacion del usuario
-        autenticado.
-      summary: Crear precio de servicio
+      description: Creates a price for a service in the authenticated user's organization.
+      summary: Create service price
       tags:
       - organization
       requestBody:
@@ -852,15 +1564,15 @@ paths:
   /api/organization/service-prices/{uuid}/:
     get:
       operationId: organization_service_prices_retrieve
-      description: Devuelve el detalle de un precio de servicio accesible por el usuario
-        autenticado.
-      summary: Obtener precio de servicio
+      description: Returns the details of a service price accessible by the authenticated
+        user.
+      summary: Get service price
       parameters:
       - in: path
         name: uuid
         schema:
           type: string
-        description: Identificador del precio de servicio.
+        description: Service price identifier.
         required: true
       tags:
       - organization
@@ -875,15 +1587,14 @@ paths:
           description: ''
     put:
       operationId: organization_service_prices_update
-      description: Reemplaza completamente un precio de servicio de la organizacion
-        del usuario autenticado.
-      summary: Reemplazar precio de servicio
+      description: Fully replaces a service price in the authenticated user's organization.
+      summary: Replace service price
       parameters:
       - in: path
         name: uuid
         schema:
           type: string
-        description: Identificador del precio de servicio.
+        description: Service price identifier.
         required: true
       tags:
       - organization
@@ -910,15 +1621,14 @@ paths:
           description: ''
     patch:
       operationId: organization_service_prices_partial_update
-      description: Actualiza parcialmente un precio de servicio de la organizacion
-        del usuario autenticado.
-      summary: Actualizar precio de servicio
+      description: Partially updates a service price in the authenticated user's organization.
+      summary: Update service price
       parameters:
       - in: path
         name: uuid
         schema:
           type: string
-        description: Identificador del precio de servicio.
+        description: Service price identifier.
         required: true
       tags:
       - organization
@@ -944,14 +1654,14 @@ paths:
           description: ''
     delete:
       operationId: organization_service_prices_destroy
-      description: Elimina un precio de servicio de la organizacion del usuario autenticado.
-      summary: Eliminar precio de servicio
+      description: Deletes a service price in the authenticated user's organization.
+      summary: Delete service price
       parameters:
       - in: path
         name: uuid
         schema:
           type: string
-        description: Identificador del precio de servicio.
+        description: Service price identifier.
         required: true
       tags:
       - organization
@@ -963,14 +1673,14 @@ paths:
   /api/organization/services/{service_uuid}/subservices/:
     get:
       operationId: organization_services_subservices_list
-      description: Lista los subservicios del servicio indicado en la URL.
-      summary: Listar subservicios
+      description: Lists the subservices of the service specified in the URL.
+      summary: List subservices
       parameters:
       - in: path
         name: service_uuid
         schema:
           type: string
-        description: UUID del servicio propietario del subservicio.
+        description: UUID of the service that owns the subservice.
         required: true
       tags:
       - organization
@@ -987,14 +1697,15 @@ paths:
           description: ''
     post:
       operationId: organization_services_subservices_create
-      description: Crea un subservicio asociado al servicio indicado en la URL.
-      summary: Crear subservicio
+      description: Creates a subservice associated with the service specified in the
+        URL.
+      summary: Create subservice
       parameters:
       - in: path
         name: service_uuid
         schema:
           type: string
-        description: UUID del servicio propietario del subservicio.
+        description: UUID of the service that owns the subservice.
         required: true
       tags:
       - organization
@@ -1022,15 +1733,15 @@ paths:
   /api/organization/services/{service_uuid}/subservices/{uuid}/:
     get:
       operationId: organization_services_subservices_retrieve
-      description: Devuelve el detalle de un subservicio perteneciente al servicio
-        indicado en la URL.
-      summary: Obtener subservicio
+      description: Returns the details of a subservice belonging to the service specified
+        in the URL.
+      summary: Get subservice
       parameters:
       - in: path
         name: service_uuid
         schema:
           type: string
-        description: UUID del servicio propietario del subservicio.
+        description: UUID of the service that owns the subservice.
         required: true
       - in: path
         name: uuid
@@ -1051,15 +1762,14 @@ paths:
           description: ''
     put:
       operationId: organization_services_subservices_update
-      description: Reemplaza completamente un subservicio del servicio indicado en
-        la URL.
-      summary: Reemplazar subservicio
+      description: Fully replaces a subservice of the service specified in the URL.
+      summary: Replace subservice
       parameters:
       - in: path
         name: service_uuid
         schema:
           type: string
-        description: UUID del servicio propietario del subservicio.
+        description: UUID of the service that owns the subservice.
         required: true
       - in: path
         name: uuid
@@ -1092,15 +1802,15 @@ paths:
           description: ''
     patch:
       operationId: organization_services_subservices_partial_update
-      description: Actualiza parcialmente un subservicio del servicio indicado en
-        la URL.
-      summary: Actualizar subservicio
+      description: Partially updates a subservice of the service specified in the
+        URL.
+      summary: Update subservice
       parameters:
       - in: path
         name: service_uuid
         schema:
           type: string
-        description: UUID del servicio propietario del subservicio.
+        description: UUID of the service that owns the subservice.
         required: true
       - in: path
         name: uuid
@@ -1132,14 +1842,14 @@ paths:
           description: ''
     delete:
       operationId: organization_services_subservices_destroy
-      description: Elimina un subservicio del servicio indicado en la URL.
-      summary: Eliminar subservicio
+      description: Deletes a subservice of the service specified in the URL.
+      summary: Delete subservice
       parameters:
       - in: path
         name: service_uuid
         schema:
           type: string
-        description: UUID del servicio propietario del subservicio.
+        description: UUID of the service that owns the subservice.
         required: true
       - in: path
         name: uuid
@@ -1154,6 +1864,109 @@ paths:
       responses:
         '204':
           description: No response body
+  /api/rgpd/anonymous/:
+    post:
+      operationId: rgpd_anonymous_create
+      description: Creates an anonymous GDPR consent with server-generated identifier
+        and write token, or updates an existing one when both are provided.
+      summary: Register anonymous GDPR consent
+      tags:
+      - RGPD
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RgpdAnonymousConsentUpsert'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/RgpdAnonymousConsentUpsert'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/RgpdAnonymousConsentUpsert'
+      security:
+      - jwtAuth: []
+      - {}
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RgpdAnonymousConsent'
+          description: ''
+        '201':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RgpdAnonymousConsent'
+          description: ''
+  /api/rgpd/me/:
+    get:
+      operationId: rgpd_me_retrieve
+      tags:
+      - rgpd
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RgpdConsent'
+          description: ''
+    post:
+      operationId: rgpd_me_create
+      description: Creates or replaces the GDPR consent state of the authenticated
+        user and records traceability metadata.
+      summary: Register GDPR consents
+      tags:
+      - RGPD
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RgpdConsentUpsert'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/RgpdConsentUpsert'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/RgpdConsentUpsert'
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RgpdConsent'
+          description: ''
+    patch:
+      operationId: rgpd_me_partial_update
+      description: Partially updates the GDPR consent state of the authenticated user
+        and refreshes submitted metadata.
+      summary: Update GDPR consents
+      tags:
+      - RGPD
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PatchedRgpdConsentUpsert'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/PatchedRgpdConsentUpsert'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/PatchedRgpdConsentUpsert'
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RgpdConsent'
+          description: ''
   /api/schema/:
     get:
       operationId: schema_retrieve
@@ -1301,6 +2114,16 @@ paths:
           description: ''
 components:
   schemas:
+    AccountStatusEnum:
+      enum:
+      - active
+      - inactive
+      - suspended
+      type: string
+      description: |-
+        * `active` - Active
+        * `inactive` - Inactive
+        * `suspended` - Suspended
     Category:
       type: object
       properties:
@@ -1365,14 +2188,160 @@ components:
       enum:
       - pending
       - active
+      - inactive
+      - suspended
       - completed
       - rejected
       type: string
       description: |-
         * `pending` - Pending
         * `active` - Active
+        * `inactive` - Inactive
+        * `suspended` - Suspended
         * `completed` - Completed
         * `rejected` - Rejected
+    ManagementJob:
+      type: object
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        uuid:
+          type: string
+          format: uuid
+          readOnly: true
+        user:
+          type: string
+          format: uuid
+        organization:
+          type: string
+          format: uuid
+        plan_price:
+          type: integer
+        status:
+          $ref: '#/components/schemas/JobStatusEnum'
+        created_at:
+          type: string
+          format: date-time
+          readOnly: true
+        updated_at:
+          type: string
+          format: date-time
+          readOnly: true
+      required:
+      - created_at
+      - id
+      - organization
+      - plan_price
+      - updated_at
+      - user
+      - uuid
+    ManagementOrganization:
+      type: object
+      properties:
+        uuid:
+          type: string
+          format: uuid
+          readOnly: true
+        user:
+          type: string
+          format: uuid
+        name:
+          type: string
+          maxLength: 255
+        legal_name:
+          type: string
+          maxLength: 255
+        tax_id:
+          type: string
+          maxLength: 64
+        billing_email:
+          type: string
+          format: email
+          maxLength: 254
+        billing_address:
+          type: string
+          maxLength: 255
+        billing_city:
+          type: string
+          maxLength: 120
+        billing_country:
+          type: string
+          maxLength: 2
+        billing_postal_code:
+          type: string
+          maxLength: 20
+        status:
+          $ref: '#/components/schemas/AccountStatusEnum'
+        created_at:
+          type: string
+          format: date-time
+          readOnly: true
+        updated_at:
+          type: string
+          format: date-time
+          readOnly: true
+      required:
+      - billing_address
+      - billing_city
+      - billing_country
+      - billing_email
+      - billing_postal_code
+      - created_at
+      - legal_name
+      - name
+      - tax_id
+      - updated_at
+      - user
+      - uuid
+    ManagementUser:
+      type: object
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        uuid:
+          type: string
+          format: uuid
+          readOnly: true
+        username:
+          type: string
+          description: Required. 150 characters or fewer. Letters, digits and @/./+/-/_
+            only.
+          pattern: ^[\w.@+-]+$
+          maxLength: 150
+        email:
+          type: string
+          format: email
+          maxLength: 254
+        password:
+          type: string
+          writeOnly: true
+          minLength: 8
+        first_name:
+          type: string
+          maxLength: 150
+        last_name:
+          type: string
+          maxLength: 150
+        email_verified:
+          type: boolean
+        status:
+          $ref: '#/components/schemas/AccountStatusEnum'
+        is_staff:
+          type: boolean
+          title: Staff status
+          description: Designates whether the user can log into this admin site.
+        is_active:
+          type: boolean
+          title: Active
+          description: Designates whether this user should be treated as active. Unselect
+            this instead of deleting accounts.
+      required:
+      - email
+      - id
+      - username
+      - uuid
     Organization:
       type: object
       properties:
@@ -1425,6 +2394,19 @@ components:
       - tax_id
       - updated_at
       - uuid
+    OrganizationPublic:
+      type: object
+      properties:
+        uuid:
+          type: string
+          format: uuid
+          readOnly: true
+        name:
+          type: string
+          maxLength: 255
+      required:
+      - name
+      - uuid
     PatchedJob:
       type: object
       properties:
@@ -1452,6 +2434,122 @@ components:
           type: string
           format: date-time
           readOnly: true
+    PatchedManagementJob:
+      type: object
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        uuid:
+          type: string
+          format: uuid
+          readOnly: true
+        user:
+          type: string
+          format: uuid
+        organization:
+          type: string
+          format: uuid
+        plan_price:
+          type: integer
+        status:
+          $ref: '#/components/schemas/JobStatusEnum'
+        created_at:
+          type: string
+          format: date-time
+          readOnly: true
+        updated_at:
+          type: string
+          format: date-time
+          readOnly: true
+    PatchedManagementOrganization:
+      type: object
+      properties:
+        uuid:
+          type: string
+          format: uuid
+          readOnly: true
+        user:
+          type: string
+          format: uuid
+        name:
+          type: string
+          maxLength: 255
+        legal_name:
+          type: string
+          maxLength: 255
+        tax_id:
+          type: string
+          maxLength: 64
+        billing_email:
+          type: string
+          format: email
+          maxLength: 254
+        billing_address:
+          type: string
+          maxLength: 255
+        billing_city:
+          type: string
+          maxLength: 120
+        billing_country:
+          type: string
+          maxLength: 2
+        billing_postal_code:
+          type: string
+          maxLength: 20
+        status:
+          $ref: '#/components/schemas/AccountStatusEnum'
+        created_at:
+          type: string
+          format: date-time
+          readOnly: true
+        updated_at:
+          type: string
+          format: date-time
+          readOnly: true
+    PatchedManagementUser:
+      type: object
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        uuid:
+          type: string
+          format: uuid
+          readOnly: true
+        username:
+          type: string
+          description: Required. 150 characters or fewer. Letters, digits and @/./+/-/_
+            only.
+          pattern: ^[\w.@+-]+$
+          maxLength: 150
+        email:
+          type: string
+          format: email
+          maxLength: 254
+        password:
+          type: string
+          writeOnly: true
+          minLength: 8
+        first_name:
+          type: string
+          maxLength: 150
+        last_name:
+          type: string
+          maxLength: 150
+        email_verified:
+          type: boolean
+        status:
+          $ref: '#/components/schemas/AccountStatusEnum'
+        is_staff:
+          type: boolean
+          title: Staff status
+          description: Designates whether the user can log into this admin site.
+        is_active:
+          type: boolean
+          title: Active
+          description: Designates whether this user should be treated as active. Unselect
+            this instead of deleting accounts.
     PatchedOrganization:
       type: object
       properties:
@@ -1492,6 +2590,27 @@ components:
           type: string
           format: date-time
           readOnly: true
+    PatchedRgpdConsentUpsert:
+      type: object
+      properties:
+        cookies_accepted:
+          type: boolean
+        cookies_version:
+          type: string
+          maxLength: 64
+        privacy_policy_accepted:
+          type: boolean
+        privacy_policy_version:
+          type: string
+          maxLength: 64
+        terms_and_conditions_accepted:
+          type: boolean
+        terms_and_conditions_version:
+          type: string
+          maxLength: 64
+        source:
+          type: string
+          maxLength: 64
     PatchedService:
       type: object
       properties:
@@ -1519,6 +2638,10 @@ components:
     PatchedServicePrice:
       type: object
       properties:
+        uuid:
+          type: string
+          format: uuid
+          readOnly: true
         service:
           type: string
           format: uuid
@@ -1595,6 +2718,158 @@ components:
       - email
       - password
       - username
+    RgpdAnonymousConsent:
+      type: object
+      properties:
+        identifier:
+          type: string
+          maxLength: 128
+        cookies_accepted:
+          type: boolean
+        cookies_accepted_at:
+          type: string
+          format: date-time
+          readOnly: true
+          nullable: true
+        cookies_version:
+          type: string
+          maxLength: 64
+        privacy_policy_accepted:
+          type: boolean
+        privacy_policy_accepted_at:
+          type: string
+          format: date-time
+          readOnly: true
+          nullable: true
+        privacy_policy_version:
+          type: string
+          maxLength: 64
+        terms_and_conditions_accepted:
+          type: boolean
+        terms_and_conditions_accepted_at:
+          type: string
+          format: date-time
+          readOnly: true
+          nullable: true
+        terms_and_conditions_version:
+          type: string
+          maxLength: 64
+        source:
+          type: string
+          maxLength: 64
+        created_at:
+          type: string
+          format: date-time
+          readOnly: true
+        updated_at:
+          type: string
+          format: date-time
+          readOnly: true
+      required:
+      - cookies_accepted_at
+      - created_at
+      - identifier
+      - privacy_policy_accepted_at
+      - terms_and_conditions_accepted_at
+      - updated_at
+    RgpdAnonymousConsentUpsert:
+      type: object
+      properties:
+        identifier:
+          type: string
+          maxLength: 128
+        write_token:
+          type: string
+          maxLength: 128
+        cookies_accepted:
+          type: boolean
+        cookies_version:
+          type: string
+          maxLength: 64
+        privacy_policy_accepted:
+          type: boolean
+        privacy_policy_version:
+          type: string
+          maxLength: 64
+        terms_and_conditions_accepted:
+          type: boolean
+        terms_and_conditions_version:
+          type: string
+          maxLength: 64
+        source:
+          type: string
+          maxLength: 64
+    RgpdConsent:
+      type: object
+      properties:
+        cookies_accepted:
+          type: boolean
+        cookies_accepted_at:
+          type: string
+          format: date-time
+          readOnly: true
+          nullable: true
+        cookies_version:
+          type: string
+          maxLength: 64
+        privacy_policy_accepted:
+          type: boolean
+        privacy_policy_accepted_at:
+          type: string
+          format: date-time
+          readOnly: true
+          nullable: true
+        privacy_policy_version:
+          type: string
+          maxLength: 64
+        terms_and_conditions_accepted:
+          type: boolean
+        terms_and_conditions_accepted_at:
+          type: string
+          format: date-time
+          readOnly: true
+          nullable: true
+        terms_and_conditions_version:
+          type: string
+          maxLength: 64
+        source:
+          type: string
+          maxLength: 64
+        created_at:
+          type: string
+          format: date-time
+          readOnly: true
+        updated_at:
+          type: string
+          format: date-time
+          readOnly: true
+      required:
+      - cookies_accepted_at
+      - created_at
+      - privacy_policy_accepted_at
+      - terms_and_conditions_accepted_at
+      - updated_at
+    RgpdConsentUpsert:
+      type: object
+      properties:
+        cookies_accepted:
+          type: boolean
+        cookies_version:
+          type: string
+          maxLength: 64
+        privacy_policy_accepted:
+          type: boolean
+        privacy_policy_version:
+          type: string
+          maxLength: 64
+        terms_and_conditions_accepted:
+          type: boolean
+        terms_and_conditions_version:
+          type: string
+          maxLength: 64
+        source:
+          type: string
+          maxLength: 64
     Service:
       type: object
       properties:
@@ -1628,6 +2903,10 @@ components:
     ServicePrice:
       type: object
       properties:
+        uuid:
+          type: string
+          format: uuid
+          readOnly: true
         service:
           type: string
           format: uuid
@@ -1660,6 +2939,7 @@ components:
       - effective_from
       - service
       - updated_at
+      - uuid
     Subservice:
       type: object
       properties:
@@ -1697,7 +2977,6 @@ components:
           readOnly: true
         refresh:
           type: string
-          writeOnly: true
       required:
       - access
       - refresh
@@ -1730,22 +3009,12 @@ components:
           type: string
           maxLength: 150
         status:
-          $ref: '#/components/schemas/UserStatusEnum'
+          $ref: '#/components/schemas/AccountStatusEnum'
       required:
       - email
       - id
       - username
       - uuid
-    UserStatusEnum:
-      enum:
-      - active
-      - inactive
-      - suspended
-      type: string
-      description: |-
-        * `active` - Active
-        * `inactive` - Inactive
-        * `suspended` - Suspended
     VerifyEmail:
       type: object
       properties:
