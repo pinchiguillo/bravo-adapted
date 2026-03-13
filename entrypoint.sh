@@ -7,6 +7,7 @@ fi
 
 APP_MODE="${APP_MODE:-development}"
 PORT="${PORT:-8000}"
+export DJANGO_SETTINGS_MODULE="${DJANGO_SETTINGS_MODULE:-Core.settings}"
 
 python manage.py migrate
 
