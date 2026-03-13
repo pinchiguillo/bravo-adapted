@@ -35,6 +35,10 @@ class SubserviceAdmin(admin.ModelAdmin):
 
 @admin.register(ServicePrice)
 class ServicePriceAdmin(admin.ModelAdmin):
-    list_display = ("service", "amount", "currency", "effective_from", "effective_to")
+    list_display = ("subservice", "amount", "currency", "effective_from", "effective_to")
     list_filter = ("currency",)
-    search_fields = ("service__name", "service__organization__name")
+    search_fields = (
+        "subservice__name",
+        "subservice__service__name",
+        "subservice__service__organization__name",
+    )

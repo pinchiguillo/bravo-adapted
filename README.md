@@ -26,21 +26,23 @@ Backend de Bravo basado en Django, Django REST Framework y Channels. El proyecto
 
 Servicios definidos en `compose.yml`:
 
+- `nginx`: proxy inverso de entrada
 - `app`: backend Django
 - `postgres`: base de datos principal
 - `localstack`: emulacion local de S3/SES
 - `db-diagram-exporter`: exportacion del esquema de base de datos
 
-El backend queda expuesto en `http://localhost:8000`.
+El backend queda expuesto unicamente en `http://localhost:24356`.
+Las peticiones `http://localhost:24356/s3/...` se enrutan a `localstack`.
 
 ## Endpoints principales
 
-Base URL REST: `http://localhost:8000/api/`
+Base URL REST: `http://localhost:24356/api/`
 
 Rutas registradas:
 
 - `api/auth/`
-- `api/organization/`
+- `api/organizations/`
 - `api/jobs/`
 - `api/management/`
 - `api/rgpd/`
@@ -56,13 +58,15 @@ Infraestructura general:
 
 Rutas ASGI expuestas:
 
-- `ws/jobs/<job_uuid>/chat/`
+- `ws/chats/<chat_uuid>/`
 - `ws/organization/search/`
 
 Notas:
 
-- El chat de jobs usa autenticacion JWT en WebSocket mediante el middleware del proyecto.
+- Los sockets usan autenticacion JWT por cabecera `Authorization: Bearer <access_token>`.
 - La busqueda de organizaciones tiene cobertura de tests especifica en la app `organization`.
+- El contrato del socket de busqueda de organizaciones esta documentado en `docs/ws-organization-search.md`.
+- El esquema OpenAPI de `drf-spectacular` documenta solo endpoints HTTP, no contratos WebSocket.
 
 ## Comandos utiles
 
@@ -100,6 +104,8 @@ docker compose -f compose.yml exec -T app env \
 - `docs/arquitectura.md`
 - `docs/entorno-desarrollo.md`
 - `docs/operacion.md`
+- `docs/ws-auth-token-strategy.md`
+- `docs/ws-organization-search.md`
 - `docs/swagger.yaml`
 - `docs/swagger.html`
-- `http://localhost:8000/api/docs/` para navegar el Swagger UI en local
+- `http://localhost:24356/api/docs/` para navegar el Swagger UI en local

@@ -1,10 +1,11 @@
-from django.contrib.auth import get_user_model
 from django.conf import settings
+from django.contrib.auth import get_user_model
 from django.contrib.auth.password_validation import validate_password
 from rest_framework import serializers
 
 from jobs.models import Job
 from organization.models import Organization
+from organization.serializers import OrganizationRatingMixin
 
 
 class ManagementUserSerializer(serializers.ModelSerializer):
@@ -64,7 +65,7 @@ class ManagementUserSerializer(serializers.ModelSerializer):
         return instance
 
 
-class ManagementOrganizationSerializer(serializers.ModelSerializer):
+class ManagementOrganizationSerializer(OrganizationRatingMixin, serializers.ModelSerializer):
     user = serializers.SlugRelatedField(queryset=get_user_model().objects.all(), slug_field="uuid")
 
     class Meta:
@@ -80,11 +81,18 @@ class ManagementOrganizationSerializer(serializers.ModelSerializer):
             "billing_city",
             "billing_country",
             "billing_postal_code",
+            "verification_level",
+            "rating",
             "status",
             "created_at",
             "updated_at",
         )
-        read_only_fields = ("uuid", "created_at", "updated_at")
+        read_only_fields = ("uuid", "rating", "created_at", "updated_at")
+
+    def validate_user(self, value):
+        if self.instance is None and Organization.objects.filter(user=value).exists():
+            raise serializers.ValidationError("Selected user already has an organization.")
+        return value
 
 
 class ManagementJobSerializer(serializers.ModelSerializer):
@@ -100,6 +108,7 @@ class ManagementJobSerializer(serializers.ModelSerializer):
             "organization",
             "plan_price",
             "status",
+            "organization_rating",
             "created_at",
             "updated_at",
         )
@@ -109,8 +118,15 @@ class ManagementJobSerializer(serializers.ModelSerializer):
         organization = attrs.get("organization", getattr(self.instance, "organization", None))
         plan_price = attrs.get("plan_price", getattr(self.instance, "plan_price", None))
         if organization is not None and plan_price is not None:
-            if plan_price.service.organization_id != organization.id:
+            if plan_price.subservice.service.organization_id != organization.id:
                 raise serializers.ValidationError(
                     {"plan_price": "Plan price does not belong to the selected organization."}
+                )
+
+        if "organization_rating" in attrs:
+            job_status = attrs.get("status", getattr(self.instance, "status", None))
+            if job_status != Job.Status.COMPLETED:
+                raise serializers.ValidationError(
+                    {"organization_rating": "Organization rating can only be set for completed jobs."}
                 )
         return attrs

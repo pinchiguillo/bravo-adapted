@@ -12,23 +12,27 @@ from django.core.files.uploadedfile import SimpleUploadedFile
 from django.test import SimpleTestCase, TransactionTestCase, override_settings
 from django.urls import reverse
 from rest_framework import status
+from rest_framework.exceptions import ValidationError
+from rest_framework.request import Request
 from rest_framework.test import APIRequestFactory, APITestCase
 from rest_framework.throttling import SimpleRateThrottle
 from rest_framework_simplejwt.exceptions import InvalidToken
 from rest_framework_simplejwt.tokens import RefreshToken
 
-from organization.models import Organization, Service, ServicePrice
+from job_chat.models import JobChatAttachment, JobChatMessage
+from job_chat.routing import websocket_urlpatterns
+from job_chat.views import JobChatViewSet
+from job_chat.ws_auth import JWTAuthMiddleware, JWTAuthMiddlewareStack
+from organization.models import Organization, Service, ServicePrice, Subservice
 
-from .models import Job, JobChatAttachment, JobChatMessage
-from .routing import websocket_urlpatterns
+from .models import Job
 from .views import JobViewSet
-from .ws_auth import JWTAuthMiddleware, JWTAuthMiddlewareStack
 
 
 class JobAttachmentDownloadUrlTests(SimpleTestCase):
     def setUp(self):
         self.factory = APIRequestFactory()
-        self.job = object()
+        self.chat = object()
 
     @override_settings(JOB_CHAT_ATTACHMENT_URL_TTL_SECONDS=120)
     def test_returns_presigned_url_with_ttl_when_storage_supports_expire(self):
@@ -41,15 +45,15 @@ class JobAttachmentDownloadUrlTests(SimpleTestCase):
             ),
         )
 
-        request = self.factory.get("/api/jobs/job/messages/1/attachments/2/download/")
-        view = JobViewSet()
+        request = self.factory.get("/api/jobs/chats/chat/messages/1/attachments/2/download/")
+        view = JobChatViewSet()
         view.request = request
-        view.get_object = lambda: self.job
+        view.get_object = lambda: self.chat
 
-        with patch("jobs.views.JobChatAttachment.objects.select_related") as select_related_mock:
+        with patch("job_chat.views.JobChatAttachment.objects.select_related") as select_related_mock:
             queryset = select_related_mock.return_value
             queryset.filter.return_value.first.return_value = attachment
-            response = view.download_attachment(request, uuid="job", message_id="1", attachment_id="2")
+            response = view.download_attachment(request, uuid="chat", message_id="1", attachment_id="2")
 
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertEqual(response.data["download_url"], "https://files.example.com/presigned")
@@ -69,20 +73,104 @@ class JobAttachmentDownloadUrlTests(SimpleTestCase):
             ),
         )
 
-        request = self.factory.get("/api/jobs/job/messages/1/attachments/2/download/")
-        view = JobViewSet()
+        request = self.factory.get("/api/jobs/chats/chat/messages/1/attachments/2/download/")
+        view = JobChatViewSet()
         view.request = request
-        view.get_object = lambda: self.job
+        view.get_object = lambda: self.chat
 
-        with patch("jobs.views.JobChatAttachment.objects.select_related") as select_related_mock:
+        with patch("job_chat.views.JobChatAttachment.objects.select_related") as select_related_mock:
             queryset = select_related_mock.return_value
             queryset.filter.return_value.first.return_value = attachment
-            response = view.download_attachment(request, uuid="job", message_id="1", attachment_id="2")
+            response = view.download_attachment(request, uuid="chat", message_id="1", attachment_id="2")
 
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertTrue(response.data["download_url"].startswith("http://testserver/media/"))
         self.assertEqual(response.data["expires_in"], 120)
         self.assertEqual(response.data["filename"], "proof.txt")
+
+
+class JobMessagesPaginationTests(SimpleTestCase):
+    def setUp(self):
+        self.factory = APIRequestFactory()
+
+    def test_messages_get_is_paginated(self):
+        request = Request(self.factory.get("/api/jobs/chats/chat/messages/", {"page_size": 1}))
+        view = JobChatViewSet()
+        view.request = request
+        view.action = "messages"
+        view.get_object = lambda: SimpleNamespace()
+
+        with patch("job_chat.views.JobChatMessage.objects.select_related") as select_related_mock:
+            queryset = select_related_mock.return_value
+            queryset.prefetch_related.return_value.filter.return_value.order_by.return_value = [
+                SimpleNamespace(id=1),
+                SimpleNamespace(id=2),
+            ]
+            with patch("job_chat.views.JobChatMessageSerializer") as serializer_mock:
+                serializer_mock.return_value.data = [{"id": 1}]
+
+                response = view.messages(request, uuid="chat")
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.data["count"], 2)
+        self.assertEqual(response.data["results"], [{"id": 1}])
+        self.assertIsNotNone(response.data["next"])
+
+
+class JobListSearchViewTests(SimpleTestCase):
+    def setUp(self):
+        self.factory = APIRequestFactory()
+
+    def test_list_requires_search_query(self):
+        request = SimpleNamespace(query_params={}, user=SimpleNamespace(is_staff=True))
+        view = JobViewSet()
+        view.request = request
+        view.action = "list"
+
+        with self.assertRaises(ValidationError) as exc:
+            view.get_queryset()
+
+        self.assertEqual(exc.exception.detail["search"], "This query parameter is required.")
+
+    def test_list_rejects_short_search_query(self):
+        request = SimpleNamespace(query_params={"search": "Ac"}, user=SimpleNamespace(is_staff=True))
+        view = JobViewSet()
+        view.request = request
+        view.action = "list"
+
+        with self.assertRaises(ValidationError) as exc:
+            view.get_queryset()
+
+        self.assertEqual(
+            exc.exception.detail["search"],
+            "Ensure this query parameter has at least 3 characters.",
+        )
+
+    def test_list_applies_search_filter_to_queryset(self):
+        class FakeQuerySet:
+            def __init__(self):
+                self.filter_calls = []
+
+            def filter(self, *args, **kwargs):
+                self.filter_calls.append((args, kwargs))
+                return self
+
+            def distinct(self):
+                return self
+
+        queryset = FakeQuerySet()
+        request = SimpleNamespace(query_params={"search": "Acm"}, user=SimpleNamespace(is_staff=True))
+        view = JobViewSet()
+        view.request = request
+        view.action = "list"
+        view.queryset = queryset
+
+        result = view.get_queryset()
+
+        self.assertIs(result, queryset)
+        self.assertEqual(len(queryset.filter_calls), 1)
+        search_filter = queryset.filter_calls[0][0][0]
+        self.assertIn(("organization__name__icontains", "Acm"), search_filter.children)
 
 
 @override_settings(
@@ -128,8 +216,13 @@ class JobsApiTests(APITestCase):
             billing_postal_code="28001",
         )
         self.service = Service.objects.create(organization=self.organization, name="Plan", description="")
-        self.service_price = ServicePrice.objects.create(
+        self.subservice = Subservice.objects.create(
             service=self.service,
+            name="Plan Variant",
+            description="",
+        )
+        self.service_price = ServicePrice.objects.create(
+            subservice=self.subservice,
             amount="99.99",
             currency="EUR",
             effective_from=date(2026, 1, 1),
@@ -150,8 +243,13 @@ class JobsApiTests(APITestCase):
             name="Second Plan",
             description="",
         )
-        self.second_service_price = ServicePrice.objects.create(
+        self.second_subservice = Subservice.objects.create(
             service=self.second_service,
+            name="Second Variant",
+            description="",
+        )
+        self.second_service_price = ServicePrice.objects.create(
+            subservice=self.second_subservice,
             amount="49.99",
             currency="EUR",
             effective_from=date(2026, 1, 1),
@@ -173,6 +271,22 @@ class JobsApiTests(APITestCase):
         self.assertEqual(response.status_code, status.HTTP_201_CREATED)
         job = Job.objects.get(id=response.data["id"])
         self.assertTrue(hasattr(job, "chat"))
+        self.assertIsNotNone(job.chat.uuid)
+
+    def test_job_chat_detail_returns_chat_for_member(self):
+        job = Job.objects.create(
+            user=self.client_user,
+            organization=self.organization,
+            plan_price=self.service_price,
+            status=Job.Status.PENDING,
+        )
+
+        self.client.force_authenticate(user=self.client_user)
+        response = self.client.get(reverse("job-chats-detail", kwargs={"uuid": job.chat.uuid}))
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.data["uuid"], str(job.chat.uuid))
+        self.assertEqual(response.data["job"], job.id)
 
     def test_create_job_rejects_non_pending_status(self):
         self.client.force_authenticate(user=self.client_user)
@@ -233,6 +347,48 @@ class JobsApiTests(APITestCase):
         job.refresh_from_db()
         self.assertEqual(job.organization_id, self.organization.id)
         self.assertEqual(job.plan_price_id, self.service_price.id)
+
+    def test_job_member_can_rate_completed_job(self):
+        job = Job.objects.create(
+            user=self.client_user,
+            organization=self.organization,
+            plan_price=self.service_price,
+            status=Job.Status.COMPLETED,
+        )
+
+        self.client.force_authenticate(user=self.client_user)
+        response = self.client.patch(
+            reverse("jobs-detail", kwargs={"uuid": job.uuid}),
+            {"organization_rating": "4.50"},
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        job.refresh_from_db()
+        self.assertEqual(str(job.organization_rating), "4.50")
+
+    def test_job_member_cannot_rate_non_completed_job(self):
+        job = Job.objects.create(
+            user=self.client_user,
+            organization=self.organization,
+            plan_price=self.service_price,
+            status=Job.Status.PENDING,
+        )
+
+        self.client.force_authenticate(user=self.client_user)
+        response = self.client.patch(
+            reverse("jobs-detail", kwargs={"uuid": job.uuid}),
+            {"organization_rating": "4.50"},
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertEqual(
+            response.data["organization_rating"][0],
+            "Organization rating can only be set for completed jobs.",
+        )
+        job.refresh_from_db()
+        self.assertIsNone(job.organization_rating)
 
     def test_non_member_cannot_partial_update_job(self):
         outsider = get_user_model().objects.create_user(
@@ -302,7 +458,7 @@ class JobsApiTests(APITestCase):
         )
 
         self.client.force_authenticate(user=outsider)
-        response = self.client.get(reverse("jobs-messages", kwargs={"uuid": job.uuid}))
+        response = self.client.get(reverse("job-chats-messages", kwargs={"uuid": job.chat.uuid}))
 
         self.assertEqual(response.status_code, status.HTTP_404_NOT_FOUND)
 
@@ -331,8 +487,13 @@ class JobsApiTests(APITestCase):
             billing_postal_code="41001",
         )
         outsider_service = Service.objects.create(organization=outsider_org, name="Out Plan", description="")
-        outsider_price = ServicePrice.objects.create(
+        outsider_subservice = Subservice.objects.create(
             service=outsider_service,
+            name="Out Variant",
+            description="",
+        )
+        outsider_price = ServicePrice.objects.create(
+            subservice=outsider_subservice,
             amount="10.00",
             currency="EUR",
             effective_from=date(2026, 1, 1),
@@ -345,12 +506,51 @@ class JobsApiTests(APITestCase):
         )
 
         self.client.force_authenticate(user=self.client_user)
-        response = self.client.get(reverse("jobs-list"))
+        response = self.client.get(reverse("jobs-list"), {"search": "Acm"})
 
         self.assertEqual(response.status_code, status.HTTP_200_OK)
-        returned_job_ids = {item["id"] for item in response.data}
+        returned_job_ids = {item["id"] for item in response.data["results"]}
         self.assertIn(owner_job.id, returned_job_ids)
         self.assertNotIn(outsider_job.id, returned_job_ids)
+
+    def test_job_list_requires_search_query(self):
+        self.client.force_authenticate(user=self.client_user)
+
+        response = self.client.get(reverse("jobs-list"))
+
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertEqual(response.data["search"], "This query parameter is required.")
+
+    def test_job_list_rejects_short_search_query(self):
+        self.client.force_authenticate(user=self.client_user)
+
+        response = self.client.get(reverse("jobs-list"), {"search": "Ac"})
+
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertEqual(response.data["search"], "Ensure this query parameter has at least 3 characters.")
+
+    def test_job_list_filters_results_by_search_query(self):
+        matching_job = Job.objects.create(
+            user=self.client_user,
+            organization=self.organization,
+            plan_price=self.service_price,
+            status=Job.Status.PENDING,
+        )
+        other_job = Job.objects.create(
+            user=self.client_user,
+            organization=self.second_organization,
+            plan_price=self.second_service_price,
+            status=Job.Status.PENDING,
+        )
+
+        self.client.force_authenticate(user=self.client_user)
+        response = self.client.get(reverse("jobs-list"), {"search": "Acm"})
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.data["count"], 1)
+        returned_job_ids = {item["id"] for item in response.data["results"]}
+        self.assertEqual(returned_job_ids, {matching_job.id})
+        self.assertNotIn(other_job.id, returned_job_ids)
 
     def test_create_job_rejects_plan_price_from_another_organization(self):
         self.client.force_authenticate(user=self.client_user)
@@ -376,7 +576,7 @@ class JobsApiTests(APITestCase):
         )
         self.client.force_authenticate(user=self.client_user)
         response = self.client.post(
-            reverse("jobs-messages", kwargs={"uuid": job.uuid}),
+            reverse("job-chats-messages", kwargs={"uuid": job.chat.uuid}),
             {"content": "   "},
             format="json",
         )
@@ -401,7 +601,7 @@ class JobsApiTests(APITestCase):
 
         self.client.force_authenticate(user=outsider)
         response = self.client.post(
-            reverse("jobs-attachments", kwargs={"uuid": job.uuid, "message_id": message.id}),
+            reverse("job-chats-attachments", kwargs={"uuid": job.chat.uuid, "message_id": message.id}),
             {"file": SimpleUploadedFile("proof.txt", b"payload", content_type="text/plain")},
             format="multipart",
         )
@@ -418,7 +618,7 @@ class JobsApiTests(APITestCase):
         )
         self.client.force_authenticate(user=self.client_user)
         response = self.client.post(
-            reverse("jobs-attachments", kwargs={"uuid": job.uuid, "message_id": 999999}),
+            reverse("job-chats-attachments", kwargs={"uuid": job.chat.uuid, "message_id": 999999}),
             {"file": SimpleUploadedFile("proof.txt", b"payload", content_type="text/plain")},
             format="multipart",
         )
@@ -435,7 +635,7 @@ class JobsApiTests(APITestCase):
         message = JobChatMessage.objects.create(chat=job.chat, sender=self.client_user, content="hello")
         self.client.force_authenticate(user=self.client_user)
         response = self.client.post(
-            reverse("jobs-attachments", kwargs={"uuid": job.uuid, "message_id": message.id}),
+            reverse("job-chats-attachments", kwargs={"uuid": job.chat.uuid, "message_id": message.id}),
             {"file": SimpleUploadedFile("proof.txt", b"payload", content_type="text/plain")},
             format="multipart",
         )
@@ -457,7 +657,7 @@ class JobsApiTests(APITestCase):
 
         self.client.force_authenticate(user=self.organization_owner)
         response = self.client.post(
-            reverse("jobs-attachments", kwargs={"uuid": job.uuid, "message_id": message.id}),
+            reverse("job-chats-attachments", kwargs={"uuid": job.chat.uuid, "message_id": message.id}),
             {"file": SimpleUploadedFile("proof.txt", b"payload", content_type="text/plain")},
             format="multipart",
         )
@@ -480,12 +680,12 @@ class JobsApiTests(APITestCase):
         self.client.force_authenticate(user=self.client_user)
 
         invalid_type_response = self.client.post(
-            reverse("jobs-attachments", kwargs={"uuid": job.uuid, "message_id": message.id}),
+            reverse("job-chats-attachments", kwargs={"uuid": job.chat.uuid, "message_id": message.id}),
             {"file": SimpleUploadedFile("proof.pdf", b"abcd", content_type="application/pdf")},
             format="multipart",
         )
         oversize_response = self.client.post(
-            reverse("jobs-attachments", kwargs={"uuid": job.uuid, "message_id": message.id}),
+            reverse("job-chats-attachments", kwargs={"uuid": job.chat.uuid, "message_id": message.id}),
             {"file": SimpleUploadedFile("proof.txt", b"abcde", content_type="text/plain")},
             format="multipart",
         )
@@ -507,7 +707,7 @@ class JobsApiTests(APITestCase):
         self.client.force_authenticate(user=self.client_user)
 
         response = self.client.post(
-            reverse("jobs-attachments", kwargs={"uuid": job.uuid, "message_id": message.id}),
+            reverse("job-chats-attachments", kwargs={"uuid": job.chat.uuid, "message_id": message.id}),
             {"file": SimpleUploadedFile("proof.pdf", b"plain text payload", content_type="application/pdf")},
             format="multipart",
         )
@@ -544,7 +744,7 @@ class JobsApiTests(APITestCase):
         )
 
         self.client.force_authenticate(user=unverified_user)
-        response = self.client.get(reverse("jobs-list"))
+        response = self.client.get(reverse("jobs-list"), {"search": "Acm"})
 
         self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
         self.assertEqual(response.data["detail"], "Email is not verified.")
@@ -559,7 +759,7 @@ class JobsApiTests(APITestCase):
         )
 
         self.client.force_authenticate(user=unverified_user)
-        response = self.client.get(reverse("jobs-list"))
+        response = self.client.get(reverse("jobs-list"), {"search": "Acm"})
 
         self.assertNotEqual(response.status_code, status.HTTP_403_FORBIDDEN)
 
@@ -586,8 +786,8 @@ class JobsApiTests(APITestCase):
         self.client.force_authenticate(user=outsider)
         response = self.client.get(
             reverse(
-                "jobs-download-attachment",
-                kwargs={"uuid": job.uuid, "message_id": message.id, "attachment_id": attachment.id},
+                "job-chats-download-attachment",
+                kwargs={"uuid": job.chat.uuid, "message_id": message.id, "attachment_id": attachment.id},
             )
         )
 
@@ -610,8 +810,8 @@ class JobsApiTests(APITestCase):
         self.client.force_authenticate(user=self.client_user)
         response = self.client.get(
             reverse(
-                "jobs-download-attachment",
-                kwargs={"uuid": job.uuid, "message_id": message.id, "attachment_id": attachment.id},
+                "job-chats-download-attachment",
+                kwargs={"uuid": job.chat.uuid, "message_id": message.id, "attachment_id": attachment.id},
             )
         )
 
@@ -645,8 +845,8 @@ class JobsApiTests(APITestCase):
         ) as url_mock:
             response = self.client.get(
                 reverse(
-                    "jobs-download-attachment",
-                    kwargs={"uuid": job.uuid, "message_id": message.id, "attachment_id": attachment.id},
+                    "job-chats-download-attachment",
+                    kwargs={"uuid": job.chat.uuid, "message_id": message.id, "attachment_id": attachment.id},
                 )
             )
 
@@ -682,8 +882,8 @@ class JobsApiTests(APITestCase):
         ) as url_mock:
             response = self.client.get(
                 reverse(
-                    "jobs-download-attachment",
-                    kwargs={"uuid": job.uuid, "message_id": message.id, "attachment_id": attachment.id},
+                    "job-chats-download-attachment",
+                    kwargs={"uuid": job.chat.uuid, "message_id": message.id, "attachment_id": attachment.id},
                 )
             )
 
@@ -707,8 +907,8 @@ class JobsApiTests(APITestCase):
                 }
 
         with patch.object(JobViewSet, "throttle_classes", [JobsReadTestThrottle]):
-            first_response = self.client.get(reverse("jobs-list"))
-            second_response = self.client.get(reverse("jobs-list"))
+            first_response = self.client.get(reverse("jobs-list"), {"search": "Acm"})
+            second_response = self.client.get(reverse("jobs-list"), {"search": "Acm"})
 
         self.assertEqual(first_response.status_code, status.HTTP_200_OK)
         self.assertEqual(second_response.status_code, status.HTTP_429_TOO_MANY_REQUESTS)
@@ -758,14 +958,14 @@ class JobsApiTests(APITestCase):
                     "ident": self.get_ident(request),
                 }
 
-        with patch.object(JobViewSet, "throttle_classes", [JobsMessagesTestThrottle]):
+        with patch.object(JobChatViewSet, "throttle_classes", [JobsMessagesTestThrottle]):
             first_response = self.client.post(
-                reverse("jobs-messages", kwargs={"uuid": job.uuid}),
+                reverse("job-chats-messages", kwargs={"uuid": job.chat.uuid}),
                 {"content": "first"},
                 format="json",
             )
             second_response = self.client.post(
-                reverse("jobs-messages", kwargs={"uuid": job.uuid}),
+                reverse("job-chats-messages", kwargs={"uuid": job.chat.uuid}),
                 {"content": "second"},
                 format="json",
             )
@@ -809,7 +1009,7 @@ class JwtAuthMiddlewareTests(APITestCase):
                 middleware,
                 {
                     "type": "websocket",
-                    "path": "/ws/jobs/",
+                    "path": "/ws/chats/",
                     "headers": [(b"authorization", b"Bearer valid-token")],
                     "query_string": b"",
                 },
@@ -822,13 +1022,13 @@ class JwtAuthMiddlewareTests(APITestCase):
 
         with (
             patch.object(middleware.jwt_auth, "get_validated_token", side_effect=InvalidToken("bad token")),
-            patch("jobs.ws_auth.logger.warning") as warning_mock,
+            patch("job_chat.ws_auth.logger.warning") as warning_mock,
         ):
             resolved_user = self._run_middleware(
                 middleware,
                 {
                     "type": "websocket",
-                    "path": "/ws/jobs/",
+                    "path": "/ws/chats/",
                     "headers": [(b"authorization", b"Bearer secret-token")],
                     "query_string": b"",
                 },
@@ -840,7 +1040,7 @@ class JwtAuthMiddlewareTests(APITestCase):
         warning_extra = warning_mock.call_args.kwargs.get("extra", {})
         self.assertEqual(warning_mock.call_args.args[0], "ws_jwt_auth_failed")
         self.assertEqual(warning_extra.get("reason"), "InvalidToken")
-        self.assertEqual(warning_extra.get("path"), "/ws/jobs/")
+        self.assertEqual(warning_extra.get("path"), "/ws/chats/")
         self.assertEqual(warning_extra.get("token_source"), "authorization_header")
         self.assertNotIn("secret-token", str(warning_mock.call_args))
 
@@ -848,7 +1048,7 @@ class JwtAuthMiddlewareTests(APITestCase):
         middleware = JWTAuthMiddleware(app=None)
         resolved_user = self._run_middleware(
             middleware,
-            {"type": "websocket", "path": "/ws/jobs/", "headers": [], "query_string": b""},
+            {"type": "websocket", "path": "/ws/chats/", "headers": [], "query_string": b""},
         )
 
         self.assertTrue(resolved_user.is_anonymous)
@@ -860,7 +1060,7 @@ class JwtAuthMiddlewareTests(APITestCase):
                 middleware,
                 {
                     "type": "websocket",
-                    "path": "/ws/jobs/",
+                    "path": "/ws/chats/",
                     "headers": [],
                     "query_string": b"token=legacy-token",
                 },
@@ -876,7 +1076,7 @@ class JwtAuthMiddlewareTests(APITestCase):
                 middleware,
                 {
                     "type": "websocket",
-                    "path": "/ws/jobs/",
+                    "path": "/ws/chats/",
                     "headers": [(b"authorization", b"Token malformed")],
                     "query_string": b"",
                 },
@@ -933,8 +1133,13 @@ class JobChatWebSocketTests(TransactionTestCase):
             name="Websocket Plan",
             description="",
         )
-        service_price = ServicePrice.objects.create(
+        subservice = Subservice.objects.create(
             service=service,
+            name="Websocket Variant",
+            description="",
+        )
+        service_price = ServicePrice.objects.create(
+            subservice=subservice,
             amount="99.99",
             currency="EUR",
             effective_from=date(2026, 1, 1),
@@ -951,7 +1156,7 @@ class JobChatWebSocketTests(TransactionTestCase):
         super().tearDown()
 
     def _build_path(self):
-        return f"/ws/jobs/{self.job.uuid}/chat/"
+        return f"/ws/chats/{self.job.chat.uuid}/"
 
     def _build_headers(self, token=None):
         if not token:
@@ -1090,7 +1295,7 @@ class JobChatWebSocketTests(TransactionTestCase):
         connected, payload = async_to_sync(scenario)()
 
         self.assertTrue(connected)
-        self.assertEqual(payload["detail"], "You do not have access to this job.")
+        self.assertEqual(payload["detail"], "You do not have access to this chat.")
         self.assertFalse(JobChatMessage.objects.filter(content="should fail").exists())
 
     @override_settings(JOB_CHAT_WS_RATE_LIMIT=1, JOB_CHAT_WS_RATE_WINDOW=60)

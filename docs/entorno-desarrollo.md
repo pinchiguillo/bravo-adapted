@@ -36,9 +36,10 @@ docker compose -f compose.yml run --rm --no-deps app python manage.py <comando>
 
 ## Servicios y puertos
 
-- `app`: `localhost:8000`
+- `nginx`: `localhost:24356`
 - `postgres`: solo red interna de Docker (`postgres:5432`)
-- `localstack`: `localhost:4566`
+- `app`: solo red interna de Docker (`app:8000`)
+- `localstack`: solo red interna de Docker (`localstack:4566`), expuesto externamente via prefijo `http://localhost:24356/s3/`
 
 ## Variables de entorno relevantes (`app`)
 
@@ -74,7 +75,7 @@ Variables clave:
 - Verificar que `app` arranca sin errores de importación.
 - Verificar que migraciones se aplican (`manage.py migrate`).
 - Verificar conectividad a PostgreSQL (`postgres:5432` desde contenedor `app`).
-- Verificar endpoint de LocalStack (`http://localhost:4566/_localstack/health`).
+- Verificar endpoint de LocalStack a través de `nginx` (`http://localhost:24356/s3/_localstack/health`).
 - Verificar lint:
 
 ```bash
@@ -113,6 +114,8 @@ Permite validar integración, payload y flujos de negocio sin enviar emails exte
 
 ## Notas operativas
 
-- `compose.yml` cubre desarrollo con `app`, `postgres` y `localstack`.
+- `compose.yml` cubre desarrollo con `nginx`, `app`, `postgres` y `localstack`.
+- `nginx` es el único servicio publicado al host y enruta ` /s3/...` hacia `localstack`.
+- El orden de arranque es `postgres` + `localstack`, después `app`, y por último `nginx`; los healthchecks de `app` y `localstack` se ejecutan dentro de sus propios contenedores.
 - `compose.prod.yml` añade `redis` y permite `cloudflared` como profile opcional.
 - La estrategia JWT en WebSocket sigue siendo por querystring por compatibilidad. Ver `backend/docs/ws-auth-token-strategy.md`.

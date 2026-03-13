@@ -1,12 +1,28 @@
 services:
+  nginx:
+    image: nginx:1.27-alpine
+    depends_on:
+      app:
+        condition: service_healthy
+      localstack:
+        condition: service_healthy
+    ports:
+      - "8000:80"
+    volumes:
+      - ./docker/nginx/prod.conf:/etc/nginx/conf.d/default.conf:ro
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q --header='X-Forwarded-Proto: https' -O - http://127.0.0.1/health/ >/dev/null"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 10s
+
   app:
     build:
       context: .
       dockerfile: Dockerfile.prod
     env_file:
       - .env
-    ports:
-      - "8000:8000"
     environment:
       APP_MODE: production
       PORT: ${PORT:-8000}
@@ -48,7 +64,7 @@ services:
       localstack:
         condition: service_healthy
     healthcheck:
-      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health/', timeout=5).read()"]
+      test: ["CMD", "python", "-c", "import urllib.request; req=urllib.request.Request('http://127.0.0.1:8000/health/', headers={'X-Forwarded-Proto': 'https'}); urllib.request.urlopen(req, timeout=5).read()"]
       interval: 10s
       timeout: 5s
       retries: 12
@@ -105,7 +121,7 @@ services:
     profiles: ["cloudflared"]
     command: tunnel --no-autoupdate --metrics 0.0.0.0:2000 run --token ${CLOUDFLARED_TUNNEL_TOKEN:-}
     depends_on:
-      app:
+      nginx:
         condition: service_healthy
     restart: unless-stopped
     healthcheck:

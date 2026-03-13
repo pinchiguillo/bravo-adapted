@@ -90,3 +90,12 @@ class SecuritySettingsTests(SimpleTestCase):
             os.environ.clear()
             os.environ.update(original_env)
             importlib.reload(settings_module)
+
+    def test_rest_framework_default_pagination_is_enabled(self):
+        settings_module = importlib.import_module("Core.settings")
+
+        self.assertEqual(
+            settings_module.REST_FRAMEWORK["DEFAULT_PAGINATION_CLASS"],
+            "Core.pagination.DefaultPageNumberPagination",
+        )
+        self.assertEqual(settings_module.REST_FRAMEWORK["PAGE_SIZE"], 20)

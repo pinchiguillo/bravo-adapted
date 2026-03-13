@@ -80,7 +80,7 @@ class ManagementOrganizationViewSet(
 ):
     permission_classes = [IsActiveAccount, permissions.IsAdminUser]
     serializer_class = ManagementOrganizationSerializer
-    queryset = Organization.objects.select_related("user").order_by("name")
+    queryset = Organization.objects.select_related("user").with_rating().order_by("name")
     lookup_field = "uuid"
     status_serializer_class = Organization.Status
     throttle_scope_prefix = "management"
@@ -112,7 +112,8 @@ class ManagementJobViewSet(
         "organization",
         "organization__user",
         "plan_price",
-        "plan_price__service",
+        "plan_price__subservice",
+        "plan_price__subservice__service",
     ).order_by("-created_at", "-id")
     lookup_field = "uuid"
     status_serializer_class = Job.Status

@@ -1344,41 +1344,6 @@ paths:
               schema:
                 $ref: '#/components/schemas/OrganizationPublic'
           description: ''
-    put:
-      operationId: organization_update
-      description: Fully replaces an organization. Only allowed for its authenticated
-        owner.
-      summary: Replace organization
-      parameters:
-      - in: path
-        name: uuid
-        schema:
-          type: string
-          format: uuid
-        required: true
-      tags:
-      - organization
-      requestBody:
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/Organization'
-          application/x-www-form-urlencoded:
-            schema:
-              $ref: '#/components/schemas/Organization'
-          multipart/form-data:
-            schema:
-              $ref: '#/components/schemas/Organization'
-        required: true
-      security:
-      - jwtAuth: []
-      responses:
-        '200':
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Organization'
-          description: ''
     patch:
       operationId: organization_partial_update
       description: Partially updates an organization. Only allowed for its authenticated
@@ -1518,7 +1483,7 @@ paths:
   /api/organization/service-prices/:
     get:
       operationId: organization_service_prices_list
-      description: Lists configured prices for services in the authenticated user's
+      description: Lists configured prices for subservices in the authenticated user's
         organization.
       summary: List service prices
       tags:
@@ -1536,7 +1501,7 @@ paths:
           description: ''
     post:
       operationId: organization_service_prices_create
-      description: Creates a price for a service in the authenticated user's organization.
+      description: Creates a price for a subservice in the authenticated user's organization.
       summary: Create service price
       tags:
       - organization
@@ -1587,7 +1552,8 @@ paths:
           description: ''
     put:
       operationId: organization_service_prices_update
-      description: Fully replaces a service price in the authenticated user's organization.
+      description: Fully replaces a service price for a subservice in the authenticated
+        user's organization.
       summary: Replace service price
       parameters:
       - in: path
@@ -1621,7 +1587,8 @@ paths:
           description: ''
     patch:
       operationId: organization_service_prices_partial_update
-      description: Partially updates a service price in the authenticated user's organization.
+      description: Partially updates a service price for a subservice in the authenticated
+        user's organization.
       summary: Update service price
       parameters:
       - in: path
@@ -2642,7 +2609,7 @@ components:
           type: string
           format: uuid
           readOnly: true
-        service:
+        subservice:
           type: string
           format: uuid
         amount:
@@ -2675,7 +2642,7 @@ components:
           type: string
           format: uuid
           readOnly: true
-        service:
+        subservice:
           type: string
           format: uuid
         name:
@@ -2937,7 +2904,7 @@ components:
       - amount
       - created_at
       - effective_from
-      - service
+      - subservice
       - updated_at
       - uuid
     Subservice:

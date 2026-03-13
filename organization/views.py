@@ -1,3 +1,6 @@
+import uuid
+
+from django.db.models import Q
 from drf_spectacular.utils import OpenApiParameter, OpenApiResponse, extend_schema, extend_schema_view
 from rest_framework import mixins, permissions, status, viewsets
 from rest_framework.decorators import action
@@ -42,6 +45,47 @@ service_uuid_parameter = OpenApiParameter(
     description="UUID of the service that owns the subservice.",
 )
 
+organization_search_parameter = OpenApiParameter(
+    name="search",
+    type=str,
+    location=OpenApiParameter.QUERY,
+    required=False,
+    description="Search term with at least 3 characters to filter organizations.",
+)
+
+
+class OrganizationSearchMixin:
+    def filter_organizations_by_search(self, queryset):
+        search_query = self.get_search_query()
+        search_filter = (
+            Q(name__icontains=search_query)
+            | Q(legal_name__icontains=search_query)
+            | Q(tax_id__icontains=search_query)
+            | Q(billing_email__icontains=search_query)
+            | Q(user__email__icontains=search_query)
+            | Q(user__username__icontains=search_query)
+        )
+        search_uuid = self.parse_search_uuid(search_query)
+        if search_uuid is not None:
+            search_filter |= Q(uuid=search_uuid)
+        return queryset.filter(search_filter).distinct()
+
+    def get_search_query(self):
+        search_query = str(self.request.query_params.get("search", "")).strip()
+        if not search_query:
+            raise ValidationError({"search": "This query parameter is required."})
+        if len(search_query) < 3:
+            raise ValidationError(
+                {"search": "Ensure this query parameter has at least 3 characters."}
+            )
+        return search_query
+
+    def parse_search_uuid(self, raw_value):
+        try:
+            return uuid.UUID(raw_value)
+        except (TypeError, ValueError, AttributeError):
+            return None
+
 
 @extend_schema_view(
     create=extend_schema(
@@ -55,17 +99,9 @@ service_uuid_parameter = OpenApiParameter(
             ),
         },
     ),
-    list=extend_schema(
-        summary="List organizations",
-        description="Lists all organizations. Only available to admin users.",
-    ),
     retrieve=extend_schema(
         summary="Get organization",
         description="Returns the public details of an organization identified by UUID.",
-    ),
-    update=extend_schema(
-        summary="Replace organization",
-        description="Fully replaces an organization. Only allowed for its authenticated owner.",
     ),
     partial_update=extend_schema(
         summary="Update organization",
@@ -77,20 +113,18 @@ service_uuid_parameter = OpenApiParameter(
     ),
 )
 class OrganizationViewSet(
+    OrganizationSearchMixin,
     ActionScopedRateThrottleMixin,
     mixins.CreateModelMixin,
-    mixins.ListModelMixin,
     mixins.RetrieveModelMixin,
-    mixins.UpdateModelMixin,
     mixins.DestroyModelMixin,
     viewsets.GenericViewSet,
 ):
     serializer_class = OrganizationSerializer
-    queryset = Organization.objects.select_related("user")
+    queryset = Organization.objects.select_related("user").with_rating()
     lookup_field = "uuid"
     throttle_scope_prefix = "organization"
     throttle_scope_action_map = {
-        "list": "organization_admin",
         "create": "organization_write",
         "retrieve": "organization_public_read",
         "me": "organization_authenticated_read",
@@ -101,8 +135,6 @@ class OrganizationViewSet(
     }
 
     def get_permissions(self):
-        if self.action == "list":
-            return [IsActiveAccount(), permissions.IsAdminUser()]
         if self.action == "retrieve":
             return [permissions.AllowAny()]
         if self.action in {"update", "partial_update", "destroy"}:
@@ -119,13 +151,22 @@ class OrganizationViewSet(
             raise ValidationError({"detail": "Authenticated user already has an organization."})
         serializer.save(user=self.request.user)
 
+    def partial_update(self, request, *args, **kwargs):
+        organization = self.get_object()
+        serializer = self.get_serializer(organization, data=request.data, partial=True)
+        serializer.is_valid(raise_exception=True)
+        serializer.save()
+        return Response(serializer.data, status=status.HTTP_200_OK)
+
     @extend_schema(
         summary="Get my organization",
         description="Returns the organization associated with the authenticated user.",
     )
     @action(detail=False, methods=["get"], url_path="me")
     def me(self, request):
-        organization = Organization.objects.filter(user=request.user).first()
+        organization = (
+            Organization.objects.select_related("user").with_rating().filter(user=request.user).first()
+        )
         if organization is None:
             return Response({"detail": "Organization not found."}, status=status.HTTP_404_NOT_FOUND)
         serializer = self.get_serializer(organization)
@@ -137,10 +178,108 @@ class OrganizationViewSet(
         description="Partially updates the organization associated with the authenticated user.",
     )
     def update_me(self, request):
-        organization = Organization.objects.filter(user=request.user).first()
+        organization = (
+            Organization.objects.select_related("user").with_rating().filter(user=request.user).first()
+        )
         if organization is None:
             return Response({"detail": "Organization not found."}, status=status.HTTP_404_NOT_FOUND)
         serializer = self.get_serializer(organization, data=request.data, partial=True)
+        serializer.is_valid(raise_exception=True)
+        serializer.save()
+        return Response(serializer.data, status=status.HTTP_200_OK)
+
+
+class UserOrganizationMixin:
+    def get_user_organization(self):
+        organization = (
+            Organization.objects.select_related("user").with_rating().filter(user=self.request.user).first()
+        )
+        if organization is None:
+            raise NotFound("Organization not found.")
+        return organization
+
+
+@extend_schema_view(
+    list=extend_schema(
+        summary="Search organizations",
+        description="Searches organizations. Only available to admin users.",
+        parameters=[organization_search_parameter],
+    ),
+)
+class OrganizationSearchViewSet(
+    OrganizationSearchMixin,
+    ActionScopedRateThrottleMixin,
+    mixins.ListModelMixin,
+    viewsets.GenericViewSet,
+):
+    permission_classes = [IsActiveAccount, permissions.IsAdminUser]
+    serializer_class = OrganizationSerializer
+    queryset = Organization.objects.select_related("user").with_rating()
+    throttle_scope_prefix = "organization"
+    throttle_scope_action_map = {
+        "list": "organization_admin",
+    }
+
+    def get_queryset(self):
+        return self.filter_organizations_by_search(self.queryset).order_by("name")
+
+
+@extend_schema_view(
+    list=extend_schema(
+        summary="Get authenticated user organization",
+        description="Returns the organization associated with the authenticated user.",
+    ),
+    create=extend_schema(
+        summary="Create authenticated user organization",
+        description="Creates an organization associated with the authenticated user.",
+        request=OrganizationSerializer,
+        responses={
+            status.HTTP_201_CREATED: OrganizationSerializer,
+            status.HTTP_400_BAD_REQUEST: OpenApiResponse(
+                description="Authenticated user already has an organization."
+            ),
+        },
+    ),
+    partial_update=extend_schema(
+        summary="Update authenticated user organization",
+        description="Partially updates the organization associated with the authenticated user.",
+        request=OrganizationSerializer,
+        responses={status.HTTP_200_OK: OrganizationSerializer},
+    ),
+)
+class OrganizationUserViewSet(
+    UserOrganizationMixin,
+    ActionScopedRateThrottleMixin,
+    mixins.CreateModelMixin,
+    mixins.ListModelMixin,
+    mixins.UpdateModelMixin,
+    viewsets.GenericViewSet,
+):
+    serializer_class = OrganizationSerializer
+    permission_classes = [IsActiveAccount]
+    queryset = Organization.objects.select_related("user").with_rating()
+    throttle_scope_prefix = "organization"
+    throttle_scope_action_map = {
+        "list": "organization_authenticated_read",
+        "create": "organization_write",
+        "partial_update": "organization_write",
+    }
+
+    def list(self, request, *args, **kwargs):
+        serializer = self.get_serializer(self.get_user_organization())
+        return Response(serializer.data, status=status.HTTP_200_OK)
+
+    def perform_create(self, serializer):
+        if Organization.objects.filter(user=self.request.user).exists():
+            raise ValidationError({"detail": "Authenticated user already has an organization."})
+        serializer.save(user=self.request.user)
+
+    def partial_update(self, request, *args, **kwargs):
+        serializer = self.get_serializer(
+            self.get_user_organization(),
+            data=request.data,
+            partial=True,
+        )
         serializer.is_valid(raise_exception=True)
         serializer.save()
         return Response(serializer.data, status=status.HTTP_200_OK)
@@ -176,7 +315,10 @@ class CategoryViewSet(ActionScopedRateThrottleMixin, viewsets.ReadOnlyModelViewS
     ),
     create=extend_schema(
         summary="Create service",
-        description="Creates a service in the organization specified in the URL if it belongs to the authenticated user.",
+        description=(
+            "Creates a service in the organization specified in the URL "
+            "if it belongs to the authenticated user."
+        ),
         parameters=[organization_uuid_parameter],
     ),
     retrieve=extend_schema(
@@ -204,6 +346,7 @@ class ServiceViewSet(ActionScopedRateThrottleMixin, viewsets.ModelViewSet):
     serializer_class = ServiceSerializer
     queryset = Service.objects.select_related("organization")
     lookup_field = "uuid"
+    lookup_url_kwarg = "service_uuid"
     throttle_scope_prefix = "organization"
     throttle_scope_action_map = {
         "list": "organization_public_read",
@@ -277,7 +420,9 @@ class ServiceViewSet(ActionScopedRateThrottleMixin, viewsets.ModelViewSet):
 class SubserviceViewSet(ActionScopedRateThrottleMixin, viewsets.ModelViewSet):
     serializer_class = SubserviceSerializer
     permission_classes = [IsActiveAccount]
-    queryset = Subservice.objects.select_related("service", "service__organization")
+    queryset = Subservice.objects.select_related(
+        "service", "service__organization"
+    ).prefetch_related("price_table")
     lookup_field = "uuid"
     throttle_scope_prefix = "organization"
     throttle_scope_action_map = {
@@ -291,14 +436,23 @@ class SubserviceViewSet(ActionScopedRateThrottleMixin, viewsets.ModelViewSet):
 
     def get_queryset(self):
         queryset = self.queryset.filter(service__organization__user=self.request.user)
+        organization_uuid = self.kwargs.get("organization_uuid")
+        if organization_uuid is not None:
+            queryset = queryset.filter(service__organization__uuid=organization_uuid)
         service_uuid = self.kwargs.get("service_uuid")
         if service_uuid is not None:
             queryset = queryset.filter(service__uuid=service_uuid)
         return queryset
 
     def _get_service_from_url(self):
+        organization_uuid = self.kwargs.get("organization_uuid")
         service_uuid = self.kwargs.get("service_uuid")
-        service = Service.objects.select_related("organization").filter(uuid=service_uuid).first()
+        service = Service.objects.select_related("organization").filter(
+            uuid=service_uuid
+        )
+        if organization_uuid is not None:
+            service = service.filter(organization__uuid=organization_uuid)
+        service = service.first()
         if service is None:
             raise NotFound("Service not found.")
         return service
@@ -325,37 +479,41 @@ class SubserviceViewSet(ActionScopedRateThrottleMixin, viewsets.ModelViewSet):
 @extend_schema_view(
     list=extend_schema(
         summary="List service prices",
-        description="Lists configured prices for services in the authenticated user's organization.",
+        description="Lists the service prices that belong to the authenticated organization owner.",
     ),
     create=extend_schema(
         summary="Create service price",
-        description="Creates a price for a service in the authenticated user's organization.",
+        description="Creates a service price for a subservice owned by the authenticated organization.",
     ),
     retrieve=extend_schema(
         summary="Get service price",
-        description="Returns the details of a service price accessible by the authenticated user.",
+        description="Returns a service price owned by the authenticated organization.",
         parameters=[service_price_uuid_parameter],
     ),
     update=extend_schema(
         summary="Replace service price",
-        description="Fully replaces a service price in the authenticated user's organization.",
+        description="Fully replaces a service price owned by the authenticated organization.",
         parameters=[service_price_uuid_parameter],
     ),
     partial_update=extend_schema(
         summary="Update service price",
-        description="Partially updates a service price in the authenticated user's organization.",
+        description="Partially updates a service price owned by the authenticated organization.",
         parameters=[service_price_uuid_parameter],
     ),
     destroy=extend_schema(
         summary="Delete service price",
-        description="Deletes a service price in the authenticated user's organization.",
+        description="Deletes a service price owned by the authenticated organization.",
         parameters=[service_price_uuid_parameter],
     ),
 )
 class ServicePriceViewSet(ActionScopedRateThrottleMixin, viewsets.ModelViewSet):
     serializer_class = ServicePriceSerializer
     permission_classes = [IsActiveAccount]
-    queryset = ServicePrice.objects.select_related("service", "service__organization")
+    queryset = ServicePrice.objects.select_related(
+        "subservice",
+        "subservice__service",
+        "subservice__service__organization",
+    )
     lookup_field = "uuid"
     throttle_scope_prefix = "organization"
     throttle_scope_action_map = {
@@ -368,16 +526,18 @@ class ServicePriceViewSet(ActionScopedRateThrottleMixin, viewsets.ModelViewSet):
     }
 
     def get_queryset(self):
-        return self.queryset.filter(service__organization__user=self.request.user)
+        return self.queryset.filter(subservice__service__organization__user=self.request.user)
+
+    def _get_subservice(self, serializer):
+        subservice = serializer.validated_data.get("subservice", serializer.instance.subservice)
+        if subservice.service.organization.user_id != self.request.user.id:
+            raise PermissionDenied("Subservice does not belong to the authenticated user organization.")
+        return subservice
 
     def perform_create(self, serializer):
-        service = serializer.validated_data["service"]
-        if service.organization.user_id != self.request.user.id:
-            raise PermissionDenied("Service does not belong to the authenticated user organization.")
-        serializer.save()
+        subservice = self._get_subservice(serializer)
+        serializer.save(subservice=subservice)
 
     def perform_update(self, serializer):
-        service = serializer.validated_data.get("service", serializer.instance.service)
-        if service.organization.user_id != self.request.user.id:
-            raise PermissionDenied("Service does not belong to the authenticated user organization.")
-        serializer.save()
+        subservice = self._get_subservice(serializer)
+        serializer.save(subservice=subservice)

@@ -7,14 +7,16 @@ from channels.security.websocket import AllowedHostsOriginValidator
 from channels.testing import WebsocketCommunicator
 from django.contrib.auth import get_user_model
 from django.core.cache import cache
+from django.db import connections, transaction
 from django.test import TransactionTestCase, override_settings
-from django.urls import reverse
+from django.urls import NoReverseMatch, reverse
 from rest_framework import status
-from rest_framework.throttling import SimpleRateThrottle
 from rest_framework.test import APITestCase
+from rest_framework.throttling import SimpleRateThrottle
 from rest_framework_simplejwt.tokens import RefreshToken
 
-from jobs.ws_auth import JWTAuthMiddlewareStack
+from job_chat.ws_auth import JWTAuthMiddlewareStack
+from jobs.models import Job
 
 from .models import Organization, Service, ServicePrice, Subservice
 from .routing import websocket_urlpatterns
@@ -73,10 +75,26 @@ class OrganizationApiTests(APITestCase):
             name="Owner Plan",
             description="Owner service",
         )
+        self.owner_subservice = Subservice.objects.create(
+            service=self.owner_service,
+            name="Owner Subservice",
+            description="Owner subservice",
+        )
+        self.owner_service_price = ServicePrice.objects.create(
+            subservice=self.owner_subservice,
+            amount="49.99",
+            currency="EUR",
+            effective_from=date(2026, 1, 1),
+        )
         self.other_service = Service.objects.create(
             organization=self.other_organization,
             name="Other Plan",
             description="Other service",
+        )
+        self.other_subservice = Subservice.objects.create(
+            service=self.other_service,
+            name="Other Subservice",
+            description="Other subservice",
         )
 
     def test_organization_retrieve_is_public_by_uuid(self):
@@ -90,6 +108,8 @@ class OrganizationApiTests(APITestCase):
             {
                 "uuid": str(self.organization.uuid),
                 "name": self.organization.name,
+                "verification_level": 0,
+                "rating": None,
             },
         )
 
@@ -116,19 +136,95 @@ class OrganizationApiTests(APITestCase):
         self.assertEqual(response.data["legal_name"], self.organization.legal_name)
         self.assertEqual(response.data["tax_id"], self.organization.tax_id)
         self.assertEqual(response.data["billing_email"], self.organization.billing_email)
+        self.assertEqual(response.data["verification_level"], self.organization.verification_level)
+        self.assertIsNone(response.data["rating"])
 
-    def test_organization_list_requires_admin(self):
+    def test_organization_retrieve_includes_verification_level_and_rating_from_completed_jobs(self):
+        self.organization.verification_level = 4
+        self.organization.save(update_fields=["verification_level"])
+        Job.objects.create(
+            user=self.owner,
+            organization=self.organization,
+            plan_price=self.owner_service_price,
+            status=Job.Status.COMPLETED,
+            organization_rating="4.00",
+        )
+        Job.objects.create(
+            user=self.other_owner,
+            organization=self.organization,
+            plan_price=self.owner_service_price,
+            status=Job.Status.COMPLETED,
+            organization_rating="2.00",
+        )
+        Job.objects.create(
+            user=self.other_owner,
+            organization=self.organization,
+            plan_price=self.owner_service_price,
+            status=Job.Status.PENDING,
+            organization_rating="5.00",
+        )
+
+        response = self.client.get(
+            reverse("organization-detail", kwargs={"uuid": self.organization.uuid})
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.data["verification_level"], 4)
+        self.assertEqual(response.data["rating"], "3.00")
+
+    def test_organization_search_requires_admin(self):
         self.client.force_authenticate(user=self.owner)
-        response = self.client.get(reverse("organization-list"))
+        response = self.client.get(reverse("organization-search"), {"search": "Acm"})
 
         self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
 
-    def test_organization_list_is_available_for_admin(self):
+    def test_organization_search_requires_search_query(self):
         self.client.force_authenticate(user=self.admin_user)
-        response = self.client.get(reverse("organization-list"))
+
+        response = self.client.get(reverse("organization-search"))
+
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertEqual(response.data["search"], "This query parameter is required.")
+
+    def test_organization_search_rejects_short_search_query(self):
+        self.client.force_authenticate(user=self.admin_user)
+
+        response = self.client.get(reverse("organization-search"), {"search": "Ac"})
+
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertEqual(response.data["search"], "Ensure this query parameter has at least 3 characters.")
+
+    def test_organization_search_is_available_for_admin(self):
+        self.client.force_authenticate(user=self.admin_user)
+        response = self.client.get(reverse("organization-search"), {"search": "Acm"})
 
         self.assertEqual(response.status_code, status.HTTP_200_OK)
-        self.assertEqual(len(response.data), 2)
+        self.assertEqual(response.data["count"], 1)
+        self.assertEqual(len(response.data["results"]), 1)
+        self.assertEqual(response.data["results"][0]["uuid"], str(self.organization.uuid))
+
+    def test_organization_root_get_is_not_available_as_list(self):
+        self.client.force_authenticate(user=self.admin_user)
+
+        response = self.client.get(reverse("organization-list"))
+
+        self.assertEqual(response.status_code, status.HTTP_405_METHOD_NOT_ALLOWED)
+
+    def test_organization_search_lists_organizations_for_admin(self):
+        self.client.force_authenticate(user=self.admin_user)
+
+        response = self.client.get(reverse("organization-search"), {"search": "example.com"})
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.data["count"], 2)
+        self.assertEqual(
+            {item["uuid"] for item in response.data["results"]},
+            {str(self.organization.uuid), str(self.other_organization.uuid)},
+        )
+
+    def test_organization_admin_endpoint_does_not_exist(self):
+        with self.assertRaises(NoReverseMatch):
+            reverse("organization-admin-list")
 
     def test_authenticated_user_can_create_organization(self):
         self.client.force_authenticate(user=self.user_without_organization)
@@ -152,6 +248,51 @@ class OrganizationApiTests(APITestCase):
         created = Organization.objects.get(user=self.user_without_organization)
         self.assertEqual(response.data["uuid"], str(created.uuid))
         self.assertEqual(response.data["name"], "Gamma")
+
+    def test_user_endpoint_returns_authenticated_user_organization(self):
+        self.client.force_authenticate(user=self.owner)
+
+        response = self.client.get(reverse("organization-user"))
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.data["uuid"], str(self.organization.uuid))
+        self.assertEqual(response.data["legal_name"], self.organization.legal_name)
+
+    def test_user_endpoint_can_create_authenticated_user_organization(self):
+        self.client.force_authenticate(user=self.user_without_organization)
+
+        response = self.client.post(
+            reverse("organization-user"),
+            {
+                "name": "Gamma User",
+                "legal_name": "Gamma User SL",
+                "tax_id": "GU789",
+                "billing_email": "billing@gamma-user.com",
+                "billing_address": "Third 30",
+                "billing_city": "Valencia",
+                "billing_country": "ES",
+                "billing_postal_code": "46001",
+            },
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+        created = Organization.objects.get(user=self.user_without_organization)
+        self.assertEqual(response.data["uuid"], str(created.uuid))
+        self.assertEqual(response.data["name"], "Gamma User")
+
+    def test_user_endpoint_can_update_authenticated_user_organization(self):
+        self.client.force_authenticate(user=self.owner)
+
+        response = self.client.patch(
+            reverse("organization-user"),
+            {"name": "Acme Via User Endpoint"},
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.organization.refresh_from_db()
+        self.assertEqual(self.organization.name, "Acme Via User Endpoint")
 
     def test_user_with_organization_cannot_create_second_organization(self):
         self.client.force_authenticate(user=self.owner)
@@ -185,6 +326,28 @@ class OrganizationApiTests(APITestCase):
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.organization.refresh_from_db()
         self.assertEqual(self.organization.name, "Acme Updated")
+
+    def test_put_is_not_available_for_organization_detail(self):
+        self.client.force_authenticate(user=self.owner)
+
+        response = self.client.put(
+            reverse("organization-detail", kwargs={"uuid": self.organization.uuid}),
+            {
+                "name": "Acme Replaced",
+                "legal_name": "Acme Replace SL",
+                "tax_id": "A999",
+                "billing_email": "replace@acme.com",
+                "billing_address": "Main 99",
+                "billing_city": "Madrid",
+                "billing_country": "ES",
+                "billing_postal_code": "28099",
+            },
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_405_METHOD_NOT_ALLOWED)
+        self.organization.refresh_from_db()
+        self.assertEqual(self.organization.name, "Acme")
 
     def test_suspended_owner_cannot_update_organization_by_uuid(self):
         self.owner.status = self.owner.Status.SUSPENDED
@@ -235,9 +398,26 @@ class OrganizationApiTests(APITestCase):
         )
 
         self.assertEqual(response.status_code, status.HTTP_200_OK)
-        self.assertEqual(len(response.data), 1)
-        returned_uuids = {item["uuid"] for item in response.data}
+        self.assertEqual(response.data["count"], 1)
+        returned_uuids = {item["uuid"] for item in response.data["results"]}
         self.assertEqual(returned_uuids, {str(self.owner_service.uuid)})
+
+    def test_services_list_is_paginated(self):
+        Service.objects.create(
+            organization=self.organization,
+            name="Second Owner Plan",
+            description="Second service",
+        )
+
+        response = self.client.get(
+            reverse("organization-service-list", kwargs={"organization_uuid": self.organization.uuid}),
+            {"page_size": 1},
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.data["count"], 2)
+        self.assertEqual(len(response.data["results"]), 1)
+        self.assertIsNotNone(response.data["next"])
 
     def test_service_retrieve_is_public_by_uuid(self):
         response = self.client.get(
@@ -245,7 +425,7 @@ class OrganizationApiTests(APITestCase):
                 "organization-service-detail",
                 kwargs={
                     "organization_uuid": self.organization.uuid,
-                    "uuid": self.owner_service.uuid,
+                    "service_uuid": self.owner_service.uuid,
                 },
             )
         )
@@ -272,7 +452,7 @@ class OrganizationApiTests(APITestCase):
                 "organization-service-detail",
                 kwargs={
                     "organization_uuid": self.organization.uuid,
-                    "uuid": created_service_uuid,
+                    "service_uuid": created_service_uuid,
                 },
             ),
             {"name": "Renamed Service"},
@@ -286,7 +466,7 @@ class OrganizationApiTests(APITestCase):
                 "organization-service-detail",
                 kwargs={
                     "organization_uuid": self.organization.uuid,
-                    "uuid": created_service_uuid,
+                    "service_uuid": created_service_uuid,
                 },
             )
         )
@@ -300,7 +480,7 @@ class OrganizationApiTests(APITestCase):
                 "organization-service-detail",
                 kwargs={
                     "organization_uuid": self.organization.uuid,
-                    "uuid": self.owner_service.uuid,
+                    "service_uuid": self.owner_service.uuid,
                 },
             ),
             {"name": "Hijacked"},
@@ -318,7 +498,7 @@ class OrganizationApiTests(APITestCase):
                 "organization-service-detail",
                 kwargs={
                     "organization_uuid": self.organization.uuid,
-                    "uuid": self.owner_service.uuid,
+                    "service_uuid": self.owner_service.uuid,
                 },
             )
         )
@@ -339,8 +519,15 @@ class OrganizationApiTests(APITestCase):
 
     def test_create_subservice_fails_for_foreign_service(self):
         self.client.force_authenticate(user=self.owner)
+        initial_count = Subservice.objects.count()
         response = self.client.post(
-            reverse("organization-subservice-list", kwargs={"service_uuid": self.other_service.uuid}),
+            reverse(
+                "organization-subservice-list",
+                kwargs={
+                    "organization_uuid": self.other_organization.uuid,
+                    "service_uuid": self.other_service.uuid,
+                },
+            ),
             {
                 "service": str(self.other_service.uuid),
                 "name": "Illegal subservice",
@@ -350,7 +537,7 @@ class OrganizationApiTests(APITestCase):
         )
 
         self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
-        self.assertEqual(Subservice.objects.count(), 0)
+        self.assertEqual(Subservice.objects.count(), initial_count)
 
     def test_subservice_list_filters_by_service_uuid_in_path(self):
         self.client.force_authenticate(user=self.owner)
@@ -371,82 +558,88 @@ class OrganizationApiTests(APITestCase):
         )
 
         response = self.client.get(
-            reverse("organization-subservice-list", kwargs={"service_uuid": self.owner_service.uuid}),
+            reverse(
+                "organization-subservice-list",
+                kwargs={
+                    "organization_uuid": self.organization.uuid,
+                    "service_uuid": self.owner_service.uuid,
+                },
+            ),
         )
 
         self.assertEqual(response.status_code, status.HTTP_200_OK)
-        self.assertEqual(len(response.data), 1)
-        self.assertEqual(response.data[0]["uuid"], str(matching.uuid))
-        self.assertEqual(str(response.data[0]["service"]), str(self.owner_service.uuid))
+        self.assertEqual(response.data["count"], 2)
+        returned_items = {item["uuid"]: item for item in response.data["results"]}
+        self.assertEqual(set(returned_items), {str(self.owner_subservice.uuid), str(matching.uuid)})
+        self.assertEqual(str(returned_items[str(matching.uuid)]["service"]), str(self.owner_service.uuid))
+        self.assertEqual(
+            returned_items[str(self.owner_subservice.uuid)]["service_prices"],
+            [
+                {
+                    "uuid": str(self.owner_service_price.uuid),
+                    "amount": "49.99",
+                    "currency": "EUR",
+                    "effective_from": "2026-01-01",
+                    "effective_to": None,
+                    "created_at": self.owner_service_price.created_at.isoformat().replace("+00:00", "Z"),
+                    "updated_at": self.owner_service_price.updated_at.isoformat().replace("+00:00", "Z"),
+                }
+            ],
+        )
 
-    def test_create_service_price_fails_for_foreign_service(self):
+    def test_subservice_retrieve_uses_nested_organization_and_service_uuids(self):
         self.client.force_authenticate(user=self.owner)
-        response = self.client.post(
-            reverse("organization-service-price-list"),
-            {
-                "service": str(self.other_service.uuid),
-                "amount": "79.99",
-                "currency": "EUR",
-                "effective_from": date(2026, 2, 1),
-            },
-            format="json",
-        )
-
-        self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
-        self.assertEqual(ServicePrice.objects.count(), 0)
-
-    def test_service_price_crud_for_owner(self):
-        self.client.force_authenticate(user=self.owner)
-
-        create_response = self.client.post(
-            reverse("organization-service-price-list"),
-            {
-                "service": str(self.owner_service.uuid),
-                "amount": "79.99",
-                "currency": "EUR",
-                "effective_from": date(2026, 2, 1),
-            },
-            format="json",
-        )
-
-        self.assertEqual(create_response.status_code, status.HTTP_201_CREATED)
-        created_uuid = create_response.data["uuid"]
-        self.assertEqual(str(create_response.data["service"]), str(self.owner_service.uuid))
-
-        retrieve_response = self.client.get(
-            reverse("organization-service-price-detail", kwargs={"uuid": created_uuid})
-        )
-        self.assertEqual(retrieve_response.status_code, status.HTTP_200_OK)
-        self.assertEqual(retrieve_response.data["uuid"], created_uuid)
-
-        update_response = self.client.patch(
-            reverse("organization-service-price-detail", kwargs={"uuid": created_uuid}),
-            {"amount": "89.99"},
-            format="json",
-        )
-        self.assertEqual(update_response.status_code, status.HTTP_200_OK)
-        self.assertEqual(update_response.data["amount"], "89.99")
-
-        delete_response = self.client.delete(
-            reverse("organization-service-price-detail", kwargs={"uuid": created_uuid})
-        )
-        self.assertEqual(delete_response.status_code, status.HTTP_204_NO_CONTENT)
-        self.assertFalse(ServicePrice.objects.filter(uuid=created_uuid).exists())
-
-    def test_non_owner_cannot_retrieve_foreign_service_price(self):
-        service_price = ServicePrice.objects.create(
-            service=self.owner_service,
-            amount="79.99",
-            currency="EUR",
-            effective_from=date(2026, 2, 1),
-        )
-        self.client.force_authenticate(user=self.other_owner)
 
         response = self.client.get(
-            reverse("organization-service-price-detail", kwargs={"uuid": service_price.uuid})
+            reverse(
+                "organization-subservice-detail",
+                kwargs={
+                    "organization_uuid": self.organization.uuid,
+                    "service_uuid": self.owner_service.uuid,
+                    "uuid": self.owner_subservice.uuid,
+                },
+            ),
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.data["uuid"], str(self.owner_subservice.uuid))
+        self.assertEqual(
+            response.data["service_prices"],
+            [
+                {
+                    "uuid": str(self.owner_service_price.uuid),
+                    "amount": "49.99",
+                    "currency": "EUR",
+                    "effective_from": "2026-01-01",
+                    "effective_to": None,
+                    "created_at": self.owner_service_price.created_at.isoformat().replace("+00:00", "Z"),
+                    "updated_at": self.owner_service_price.updated_at.isoformat().replace("+00:00", "Z"),
+                }
+            ],
+        )
+
+    def test_subservice_nested_path_rejects_mismatched_organization_and_service(self):
+        self.client.force_authenticate(user=self.owner)
+
+        response = self.client.get(
+            reverse(
+                "organization-subservice-detail",
+                kwargs={
+                    "organization_uuid": self.organization.uuid,
+                    "service_uuid": self.other_service.uuid,
+                    "uuid": self.other_subservice.uuid,
+                },
+            ),
         )
 
         self.assertEqual(response.status_code, status.HTTP_404_NOT_FOUND)
+
+    def test_service_price_endpoints_do_not_exist(self):
+        with self.assertRaises(NoReverseMatch):
+            reverse("organization-service-price-list")
+
+        with self.assertRaises(NoReverseMatch):
+            reverse("organization-service-price-detail", kwargs={"uuid": self.owner_service_price.uuid})
 
     def test_organization_public_retrieve_is_throttled(self):
         cache.clear()
@@ -536,6 +729,7 @@ class OrganizationSearchWebSocketTests(TransactionTestCase):
             billing_country="ES",
             billing_postal_code="28001",
         )
+        self.owner_access_token = str(RefreshToken.for_user(self.owner).access_token)
         Organization.objects.create(
             user=self.other_owner,
             name="Beta",
@@ -547,6 +741,12 @@ class OrganizationSearchWebSocketTests(TransactionTestCase):
             billing_country="ES",
             billing_postal_code="08001",
         )
+        transaction.commit()
+
+    def tearDown(self):
+        cache.clear()
+        connections.close_all()
+        super().tearDown()
 
     def test_organization_search_websocket_returns_matching_results(self):
         payload = async_to_sync(self._search_via_websocket)("Acme")
@@ -559,6 +759,8 @@ class OrganizationSearchWebSocketTests(TransactionTestCase):
             {
                 "uuid": str(self.organization.uuid),
                 "name": self.organization.name,
+                "verification_level": 0,
+                "rating": None,
             },
         )
 
@@ -609,20 +811,21 @@ class OrganizationSearchWebSocketTests(TransactionTestCase):
         path = "/ws/organization/search/"
         headers = [(b"origin", origin.encode("utf-8"))]
         if authenticated:
-            token = str(RefreshToken.for_user(self.owner).access_token)
-            headers.append((b"authorization", f"Bearer {token}".encode("utf-8")))
+            headers.append((b"authorization", f"Bearer {self.owner_access_token}".encode("utf-8")))
         communicator = WebsocketCommunicator(self._ws_application(), path, headers=headers)
         connected, close_code = await communicator.connect()
-        if connected:
-            await communicator.disconnect()
-        return connected, close_code
+        try:
+            return connected, close_code
+        finally:
+            if connected:
+                await communicator.disconnect()
+            await communicator.wait()
 
     async def _search_via_websocket(self, query, authenticated=True, origin="http://localhost"):
         path = "/ws/organization/search/"
         headers = [(b"origin", origin.encode("utf-8"))]
         if authenticated:
-            token = str(RefreshToken.for_user(self.owner).access_token)
-            headers.append((b"authorization", f"Bearer {token}".encode("utf-8")))
+            headers.append((b"authorization", f"Bearer {self.owner_access_token}".encode("utf-8")))
         communicator = WebsocketCommunicator(self._ws_application(), path, headers=headers)
         connected, _ = await communicator.connect()
         self.assertTrue(connected)
@@ -632,13 +835,13 @@ class OrganizationSearchWebSocketTests(TransactionTestCase):
             return await communicator.receive_json_from()
         finally:
             await communicator.disconnect()
+            await communicator.wait()
 
     async def _rate_limited_search_via_websocket(self):
         path = "/ws/organization/search/"
-        token = str(RefreshToken.for_user(self.owner).access_token)
         headers = [
             (b"origin", b"http://localhost"),
-            (b"authorization", f"Bearer {token}".encode("utf-8")),
+            (b"authorization", f"Bearer {self.owner_access_token}".encode("utf-8")),
         ]
         communicator = WebsocketCommunicator(self._ws_application(), path, headers=headers)
         connected, _ = await communicator.connect()
@@ -652,3 +855,4 @@ class OrganizationSearchWebSocketTests(TransactionTestCase):
             return first_payload, second_payload
         finally:
             await communicator.disconnect()
+            await communicator.wait()

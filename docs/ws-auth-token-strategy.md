@@ -1,22 +1,23 @@
 # Decision - estrategia de token en WebSocket (JWT)
 
 Fecha: 2026-03-10
+Actualizado: 2026-03-12
 Contexto: autenticacion de sockets en `backend/jobs/ws_auth.py`.
 
 ## Decision
-Se mantiene temporalmente la autenticacion por `token` en querystring para compatibilidad con clientes actuales.
+La autenticacion WebSocket vigente usa el encabezado `Authorization: Bearer <jwt>` durante el handshake.
 
 ## Justificacion
-- El contrato actual ya usa `?token=<jwt>` en el handshake WebSocket.
-- Cambiar de inmediato a otro mecanismo (por ejemplo cookie HttpOnly o subprotocol) rompe clientes existentes.
-- El riesgo principal no es de validacion JWT (ya se valida), sino de exposicion accidental del token en logs.
+- El middleware actual extrae el JWT desde la cabecera `Authorization`.
+- Evita exponer tokens en querystring y reduce el riesgo de fuga en logs o trazas.
+- El contrato actual de tests en `jobs` y `organization` ya valida este mecanismo.
 
 ## Medidas aplicadas
 - Middleware endurecido con excepciones especificas (`InvalidToken`, `TokenError`, `AuthenticationFailed`, `ValueError`).
-- Logging estructurado sin incluir el token ni el querystring completo.
+- Logging estructurado sin incluir el token.
 - Eventos de fallo incluyen solo metadatos operativos: `reason`, `path`, `token_source`.
 
 ## Plan de evolucion recomendado
-1. Mantener querystring durante una ventana de compatibilidad.
-2. Introducir autenticacion por cookie segura/HttpOnly o encabezado negociado por subprotocol.
-3. Desactivar querystring cuando todos los clientes migren.
+1. Mantener `Authorization: Bearer` como contrato por defecto.
+2. Evaluar autenticacion por cookie segura/HttpOnly si aparecen clientes browser-first con esa necesidad.
+3. Mantener la documentacion de cada socket por separado del esquema OpenAPI HTTP.

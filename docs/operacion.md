@@ -25,6 +25,8 @@ docker compose -f compose.yml ps
 ```
 
 Debe verse `app`, `postgres` y `localstack` en estado `running`.
+Debe verse `nginx`, `app`, `postgres` y `localstack` en estado `running`.
+El arranque esperado es: primero `postgres` y `localstack` en estado `healthy`, después `app`, y finalmente `nginx`.
 
 ### Imagen de producción para websockets
 
@@ -60,6 +62,7 @@ docker compose -f compose.prod.yml logs -f app
 
 Este archivo levanta:
 
+- `nginx` como proxy inverso de entrada
 - `app` en modo `production` con `daphne`
 - `postgres` para la base de datos
 - `redis` como channel layer para websockets
@@ -69,7 +72,13 @@ El orden de arranque queda definido así:
 
 - `postgres`, `redis` y `localstack`
 - `app` cuando sus dependencias están sanas
-- `cloudflared` solo cuando `app` ya responde en `/health/`
+- `nginx` cuando `app` y `localstack` están sanos
+- `cloudflared` solo cuando `nginx` ya responde en `/health/`
+
+En `compose.prod.yml`, `nginx` es el único servicio publicado al host y expone:
+
+- `http://localhost:8000/` hacia `app`
+- `http://localhost:8000/s3/...` hacia `localstack`
 
 ### Cloudflare Tunnel opcional
 
@@ -95,10 +104,17 @@ docker compose -f compose.yml logs postgres
 
 El healthcheck usa `pg_isready -U postgres -d auth_db`.
 
-### Salud de LocalStack
+### Salud interna de LocalStack
 
 ```bash
-curl http://localhost:4566/_localstack/health
+docker compose -f compose.yml exec -T localstack \
+  python -c "import urllib.request; print(urllib.request.urlopen('http://127.0.0.1:4566/_localstack/health', timeout=5).read().decode())"
+```
+
+### Salud de LocalStack expuesta por `nginx`
+
+```bash
+curl http://localhost:24356/s3/_localstack/health
 ```
 
 ### Recursos AWS simulados (S3 y SES)

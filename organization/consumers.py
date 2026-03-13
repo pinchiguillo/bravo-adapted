@@ -1,7 +1,7 @@
-from django.conf import settings
-from django.core.cache import cache
 from channels.db import database_sync_to_async
 from channels.generic.websocket import AsyncJsonWebsocketConsumer
+from django.conf import settings
+from django.core.cache import cache
 from django.db.models import Q
 
 from .models import Organization
@@ -59,6 +59,7 @@ class OrganizationSearchConsumer(AsyncJsonWebsocketConsumer):
         result_limit = max(1, int(getattr(settings, "ORGANIZATION_SEARCH_WS_RESULT_LIMIT", 10)))
         queryset = (
             Organization.objects
+            .with_rating()
             .filter(
                 Q(name__icontains=query)
                 | Q(legal_name__icontains=query)

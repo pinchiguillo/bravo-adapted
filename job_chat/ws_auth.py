@@ -6,7 +6,7 @@ from rest_framework.exceptions import AuthenticationFailed
 from rest_framework_simplejwt.authentication import JWTAuthentication
 from rest_framework_simplejwt.exceptions import InvalidToken, TokenError
 
-from .permissions import user_has_jobs_access
+from jobs.permissions import user_has_jobs_access
 
 logger = logging.getLogger(__name__)
 
@@ -62,3 +62,4 @@ class JWTAuthMiddleware:
 
 def JWTAuthMiddlewareStack(inner):
     return JWTAuthMiddleware(inner)
+
