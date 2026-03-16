@@ -241,6 +241,17 @@ class AuthApiTests(APITestCase):
         self.assertIn("refresh", refresh_response.data)
         self.assertNotEqual(refresh_response.data["refresh"], refresh_token)
 
+    def test_refresh_rejects_invalid_token_with_401(self):
+        response = self.client.post(
+            "/api/auth/token/refresh/",
+            {"refresh": "placeholder"},
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, 401)
+        self.assertEqual(response.data["detail"], "Token is invalid")
+        self.assertEqual(response.data["code"], "token_not_valid")
+
     def test_me_returns_authenticated_user_profile(self):
         login_response = self.client.post(
             "/api/auth/login/",
