@@ -8,6 +8,7 @@ from channels.testing import WebsocketCommunicator
 from django.contrib.auth import get_user_model
 from django.core.cache import cache
 from django.db import connections, transaction
+from django.db.utils import IntegrityError
 from django.test import TransactionTestCase, override_settings
 from django.urls import NoReverseMatch, reverse
 from rest_framework import status
@@ -18,7 +19,15 @@ from rest_framework_simplejwt.tokens import RefreshToken
 from job_chat.ws_auth import JWTAuthMiddlewareStack
 from jobs.models import Job
 
-from .models import Organization, Service, ServicePrice, Subservice
+from .models import (
+    Announcement,
+    AnnouncementReview,
+    Category,
+    Organization,
+    Service,
+    ServicePrice,
+    Subservice,
+)
 from .routing import websocket_urlpatterns
 from .views import OrganizationViewSet
 
@@ -70,8 +79,17 @@ class OrganizationApiTests(APITestCase):
             billing_country="ES",
             billing_postal_code="08001",
         )
+        self.category = Category.objects.create(
+            name="Home Services",
+            description="Servicios para el hogar",
+        )
+        self.other_category = Category.objects.create(
+            name="Pet Services",
+            description="Servicios para mascotas",
+        )
         self.owner_service = Service.objects.create(
             organization=self.organization,
+            category=self.category,
             name="Owner Plan",
             description="Owner service",
         )
@@ -84,10 +102,12 @@ class OrganizationApiTests(APITestCase):
             subservice=self.owner_subservice,
             amount="49.99",
             currency="EUR",
+            charging_type=ServicePrice.ChargingType.PER_PROJECT,
             effective_from=date(2026, 1, 1),
         )
         self.other_service = Service.objects.create(
             organization=self.other_organization,
+            category=self.other_category,
             name="Other Plan",
             description="Other service",
         )
@@ -95,6 +115,33 @@ class OrganizationApiTests(APITestCase):
             service=self.other_service,
             name="Other Subservice",
             description="Other subservice",
+        )
+        self.announcement = Announcement.objects.create(
+            organization=self.organization,
+            category=self.category,
+            name="Weekend Cleaning",
+            location="Madrid",
+            announcement="Promo de limpieza",
+            status=Announcement.Status.ACTIVE,
+            description="Servicio de limpieza a domicilio",
+            free_text="Disponible sabados",
+            latitude="40.4168",
+            longitude="-3.7038",
+        )
+        self.announcement.services.add(self.owner_service)
+        self.announcement_review = AnnouncementReview.objects.create(
+            announcement=self.announcement,
+            content="Muy recomendable",
+        )
+        self.closed_announcement = Announcement.objects.create(
+            organization=self.other_organization,
+            category=self.other_category,
+            name="Dog Walking",
+            location="Barcelona",
+            announcement="Paseos diarios",
+            status=Announcement.Status.CLOSED,
+            description="Paseador con experiencia",
+            free_text="Disponible entre semana",
         )
 
     def test_organization_retrieve_is_public_by_uuid(self):
@@ -405,6 +452,7 @@ class OrganizationApiTests(APITestCase):
     def test_services_list_is_paginated(self):
         Service.objects.create(
             organization=self.organization,
+            category=self.category,
             name="Second Owner Plan",
             description="Second service",
         )
@@ -432,6 +480,7 @@ class OrganizationApiTests(APITestCase):
 
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertEqual(response.data["uuid"], str(self.owner_service.uuid))
+        self.assertEqual(response.data["category"], str(self.category.uuid))
         self.assertNotIn("id", response.data)
 
     def test_service_crud_for_organization_owner(self):
@@ -439,12 +488,17 @@ class OrganizationApiTests(APITestCase):
 
         create_response = self.client.post(
             reverse("organization-service-list", kwargs={"organization_uuid": self.organization.uuid}),
-            {"name": "New Service", "description": "Created via API"},
+            {
+                "category": str(self.category.uuid),
+                "name": "New Service",
+                "description": "Created via API",
+            },
             format="json",
         )
         self.assertEqual(create_response.status_code, status.HTTP_201_CREATED)
         created_service_uuid = create_response.data["uuid"]
         self.assertEqual(create_response.data["organization"], str(self.organization.uuid))
+        self.assertEqual(create_response.data["category"], str(self.category.uuid))
         self.assertNotIn("id", create_response.data)
 
         update_response = self.client.patch(
@@ -510,7 +564,7 @@ class OrganizationApiTests(APITestCase):
         self.client.force_authenticate(user=self.user_without_organization)
         response = self.client.post(
             reverse("organization-service-list", kwargs={"organization_uuid": self.organization.uuid}),
-            {"name": "Invalid Service", "description": ""},
+            {"category": str(self.category.uuid), "name": "Invalid Service", "description": ""},
             format="json",
         )
 
@@ -543,6 +597,7 @@ class OrganizationApiTests(APITestCase):
         self.client.force_authenticate(user=self.owner)
         second_service = Service.objects.create(
             organization=self.organization,
+            category=self.category,
             name="Second Service",
             description="Another owner service",
         )
@@ -579,6 +634,7 @@ class OrganizationApiTests(APITestCase):
                     "uuid": str(self.owner_service_price.uuid),
                     "amount": "49.99",
                     "currency": "EUR",
+                    "charging_type": ServicePrice.ChargingType.PER_PROJECT,
                     "effective_from": "2026-01-01",
                     "effective_to": None,
                     "created_at": self.owner_service_price.created_at.isoformat().replace("+00:00", "Z"),
@@ -610,6 +666,7 @@ class OrganizationApiTests(APITestCase):
                     "uuid": str(self.owner_service_price.uuid),
                     "amount": "49.99",
                     "currency": "EUR",
+                    "charging_type": ServicePrice.ChargingType.PER_PROJECT,
                     "effective_from": "2026-01-01",
                     "effective_to": None,
                     "created_at": self.owner_service_price.created_at.isoformat().replace("+00:00", "Z"),
@@ -664,6 +721,265 @@ class OrganizationApiTests(APITestCase):
 
         self.assertEqual(first_response.status_code, status.HTTP_200_OK)
         self.assertEqual(second_response.status_code, status.HTTP_429_TOO_MANY_REQUESTS)
+
+    def test_announcement_list_requires_authentication(self):
+        response = self.client.get(
+            reverse(
+                "organization-announcement-list",
+                kwargs={"organization_uuid": self.organization.uuid},
+            )
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_401_UNAUTHORIZED)
+
+    def test_public_announcement_list_allows_anonymous_requests_without_filters(self):
+        response = self.client.get(reverse("organization-public-announcement-list"))
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.data["count"], 1)
+        self.assertEqual(response.data["results"][0]["uuid"], str(self.announcement.uuid))
+
+    def test_public_announcement_list_filters_by_category_and_search_text(self):
+        matching = Announcement.objects.create(
+            organization=self.other_organization,
+            category=self.category,
+            name="Home Repairs",
+            location="Madrid Norte",
+            announcement="Reparaciones urgentes",
+            status=Announcement.Status.ACTIVE,
+            description="Servicio para averias domesticas",
+            free_text="guardias nocturnas",
+        )
+        non_matching_category = Announcement.objects.create(
+            organization=self.other_organization,
+            category=self.other_category,
+            name="Pet Grooming",
+            location="Madrid",
+            announcement="Peluqueria canina",
+            status=Announcement.Status.ACTIVE,
+            description="Corte y bano",
+            free_text="guardias nocturnas",
+        )
+        non_matching_text = Announcement.objects.create(
+            organization=self.other_organization,
+            category=self.category,
+            name="Home Painting",
+            location="Madrid",
+            announcement="Pintura interior",
+            status=Announcement.Status.ACTIVE,
+            description="Pintores profesionales",
+            free_text="trabajos programados",
+        )
+
+        response = self.client.get(
+            reverse("organization-public-announcement-list"),
+            {"category": str(self.category.uuid), "search": "guardias"},
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.data["count"], 1)
+        self.assertEqual(response.data["results"][0]["uuid"], str(matching.uuid))
+        self.assertNotEqual(response.data["results"][0]["uuid"], str(non_matching_category.uuid))
+        self.assertNotEqual(response.data["results"][0]["uuid"], str(non_matching_text.uuid))
+
+    def test_public_announcement_list_filters_by_categories_param(self):
+        matching = Announcement.objects.create(
+            organization=self.other_organization,
+            category=self.category,
+            name="Home Repairs",
+            location="Madrid Norte",
+            announcement="Reparaciones urgentes",
+            status=Announcement.Status.ACTIVE,
+            description="Servicio para averias domesticas",
+            free_text="guardias nocturnas",
+        )
+        Announcement.objects.create(
+            organization=self.other_organization,
+            category=self.other_category,
+            name="Pet Grooming",
+            location="Madrid",
+            announcement="Peluqueria canina",
+            status=Announcement.Status.ACTIVE,
+            description="Corte y bano",
+            free_text="guardias nocturnas",
+        )
+
+        response = self.client.get(
+            reverse("organization-public-announcement-list"),
+            {"categories": [str(self.category.uuid)]},
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.data["count"], 2)
+        self.assertEqual(
+            {item["uuid"] for item in response.data["results"]},
+            {str(self.announcement.uuid), str(matching.uuid)},
+        )
+
+    def test_announcement_list_filters_by_categories(self):
+        self.client.force_authenticate(user=self.owner)
+        second_category = Category.objects.create(name="Garden", description="Jardineria")
+        second_announcement = Announcement.objects.create(
+            organization=self.organization,
+            category=second_category,
+            name="Garden Maintenance",
+            location="Madrid Norte",
+            announcement="Puesta a punto de jardin",
+            status=Announcement.Status.ACTIVE,
+            description="Mantenimiento semanal",
+            free_text="Incluye poda",
+        )
+
+        response = self.client.get(
+            reverse(
+                "organization-announcement-list",
+                kwargs={"organization_uuid": self.organization.uuid},
+            ),
+            {"categories": [str(self.category.uuid)]},
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.data["count"], 1)
+        self.assertEqual(response.data["results"][0]["uuid"], str(self.announcement.uuid))
+        self.assertNotEqual(response.data["results"][0]["uuid"], str(second_announcement.uuid))
+
+    def test_announcement_list_filters_by_search_text(self):
+        self.client.force_authenticate(user=self.owner)
+        Announcement.objects.create(
+            organization=self.organization,
+            category=self.category,
+            name="Electric Repairs",
+            location="Barcelona",
+            announcement="Revision electrica",
+            status=Announcement.Status.ACTIVE,
+            description="Servicio tecnico general",
+            free_text="Disponible entre semana",
+        )
+
+        response = self.client.get(
+            reverse(
+                "organization-announcement-list",
+                kwargs={"organization_uuid": self.organization.uuid},
+            ),
+            {"search": "sabados"},
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.data["count"], 1)
+        self.assertEqual(response.data["results"][0]["uuid"], str(self.announcement.uuid))
+
+    def test_announcement_list_combines_category_and_search_filters(self):
+        self.client.force_authenticate(user=self.owner)
+        garden_category = Category.objects.create(name="Garden Plus", description="Exterior")
+        Announcement.objects.create(
+            organization=self.organization,
+            category=garden_category,
+            name="Garden Saturdays",
+            location="Madrid",
+            announcement="Jardineria express",
+            status=Announcement.Status.ACTIVE,
+            description="Cuidado del cesped",
+            free_text="Disponible sabados",
+        )
+
+        response = self.client.get(
+            reverse(
+                "organization-announcement-list",
+                kwargs={"organization_uuid": self.organization.uuid},
+            ),
+            {
+                "categories": [str(self.category.uuid)],
+                "search": "sabados",
+            },
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.data["count"], 1)
+        self.assertEqual(response.data["results"][0]["uuid"], str(self.announcement.uuid))
+
+    def test_organization_owner_can_create_announcement(self):
+        self.client.force_authenticate(user=self.owner)
+
+        response = self.client.post(
+            reverse(
+                "organization-announcement-list",
+                kwargs={"organization_uuid": self.organization.uuid},
+            ),
+            {
+                "category": str(self.category.uuid),
+                "services": [str(self.owner_service.uuid)],
+                "name": "Emergency Plumbing",
+                "location": "Madrid Centro",
+                "announcement": "Atencion 24 horas",
+                "status": Announcement.Status.ACTIVE,
+                "description": "Servicio urgente",
+                "free_text": "Atendemos festivos",
+                "latitude": "40.4167",
+                "longitude": "-3.7033",
+            },
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+        created = Announcement.objects.get(uuid=response.data["uuid"])
+        self.assertEqual(created.organization, self.organization)
+        self.assertEqual(response.data["organization"], str(self.organization.uuid))
+        self.assertEqual(response.data["category"], str(self.category.uuid))
+        self.assertEqual(response.data["services"], [str(self.owner_service.uuid)])
+        self.assertEqual(response.data["view_count"], 0)
+        self.assertIsNone(response.data["review"])
+
+    def test_announcement_create_rejects_services_from_another_organization(self):
+        self.client.force_authenticate(user=self.owner)
+
+        response = self.client.post(
+            reverse(
+                "organization-announcement-list",
+                kwargs={"organization_uuid": self.organization.uuid},
+            ),
+            {
+                "category": str(self.category.uuid),
+                "services": [str(self.other_service.uuid)],
+                "name": "Invalid Announcement",
+                "location": "Madrid",
+                "announcement": "No valida",
+                "status": Announcement.Status.ACTIVE,
+                "description": "Should fail",
+                "free_text": "",
+            },
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertEqual(
+            response.data["services"][0],
+            "Services must belong to the organization in the URL.",
+        )
+
+    def test_authenticated_retrieve_increments_announcement_view_count(self):
+        self.client.force_authenticate(user=self.other_owner)
+
+        response = self.client.get(
+            reverse(
+                "organization-announcement-detail",
+                kwargs={
+                    "organization_uuid": self.organization.uuid,
+                    "uuid": self.announcement.uuid,
+                },
+            )
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.announcement.refresh_from_db()
+        self.assertEqual(self.announcement.view_count, 1)
+        self.assertEqual(response.data["review"]["content"], self.announcement_review.content)
+
+    def test_announcement_review_is_one_to_one(self):
+        with self.assertRaises(IntegrityError):
+            AnnouncementReview.objects.create(
+                announcement=self.announcement,
+                content="Duplicated review",
+            )
 
     def test_organization_write_is_throttled(self):
         cache.clear()

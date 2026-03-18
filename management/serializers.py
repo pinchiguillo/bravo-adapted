@@ -4,6 +4,7 @@ from django.contrib.auth.password_validation import validate_password
 from rest_framework import serializers
 
 from jobs.models import Job
+from management.models import FeatureFlag
 from organization.models import Organization
 from organization.serializers import OrganizationRatingMixin
 
@@ -130,3 +131,18 @@ class ManagementJobSerializer(serializers.ModelSerializer):
                     {"organization_rating": "Organization rating can only be set for completed jobs."}
                 )
         return attrs
+
+
+class ManagementFeatureFlagSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = FeatureFlag
+        fields = (
+            "uuid",
+            "key",
+            "name",
+            "description",
+            "is_active",
+            "created_at",
+            "updated_at",
+        )
+        read_only_fields = ("uuid", "created_at", "updated_at")

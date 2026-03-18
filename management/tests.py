@@ -1,14 +1,27 @@
 from datetime import date
 from io import StringIO
 
+from django.conf import settings
 from django.contrib.auth import get_user_model
 from django.core.management import call_command
+from django.test import override_settings
 from django.urls import reverse
 from rest_framework import status
 from rest_framework.test import APITestCase
 
+from job_chat.models import JobChat, JobChatAttachment, JobChatMessage
 from jobs.models import Job
-from organization.models import Organization, Service, ServicePrice, Subservice
+from management.feature_flags import is_feature_enabled
+from management.models import FeatureFlag
+from organization.models import (
+    Announcement,
+    AnnouncementReview,
+    Category,
+    Organization,
+    Service,
+    ServicePrice,
+    Subservice,
+)
 
 
 class ManagementApiTests(APITestCase):
@@ -41,8 +54,13 @@ class ManagementApiTests(APITestCase):
             billing_country="ES",
             billing_postal_code="28001",
         )
+        self.category, _ = Category.objects.get_or_create(
+            name="Managed Category",
+            defaults={"description": "Categoria gestionada"},
+        )
         self.service = Service.objects.create(
             organization=self.organization,
+            category=self.category,
             name="Managed Plan",
             description="",
         )
@@ -55,6 +73,7 @@ class ManagementApiTests(APITestCase):
             subservice=self.subservice,
             amount="19.99",
             currency="EUR",
+            charging_type=ServicePrice.ChargingType.PER_PROJECT,
             effective_from=date(2026, 1, 1),
         )
         self.job = Job.objects.create(
@@ -281,6 +300,124 @@ class ManagementOrganizationListApiTests(APITestCase):
         self.assertEqual(response.data["results"][0]["uuid"], str(self.organization.uuid))
 
 
+class ManagementFeatureFlagApiTests(APITestCase):
+    def setUp(self):
+        user_model = get_user_model()
+        self.admin_user = user_model.objects.create_user(
+            username="feature-flag-admin",
+            email="feature-flag-admin@example.com",
+            password="testpass123",
+            is_staff=True,
+        )
+        self.regular_user = user_model.objects.create_user(
+            username="feature-flag-user",
+            email="feature-flag-user@example.com",
+            password="testpass123",
+        )
+        self.feature_flag = FeatureFlag.objects.create(
+            key="organization_search_v2",
+            name="Organization search v2",
+            description="Enables the second organization search implementation.",
+            is_active=False,
+        )
+
+    def test_admin_can_create_feature_flag(self):
+        self.client.force_authenticate(user=self.admin_user)
+
+        response = self.client.post(
+            reverse("management-feature-flags-list"),
+            {
+                "key": "jobs_bulk_actions",
+                "name": "Jobs bulk actions",
+                "description": "Enables bulk job management actions.",
+                "is_active": True,
+            },
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+        self.assertEqual(response.data["key"], "jobs_bulk_actions")
+        self.assertTrue(response.data["is_active"])
+        self.assertTrue(FeatureFlag.objects.filter(key="jobs_bulk_actions", is_active=True).exists())
+
+    def test_admin_can_activate_feature_flag(self):
+        self.client.force_authenticate(user=self.admin_user)
+
+        response = self.client.post(
+            reverse(
+                "management-feature-flags-activate",
+                kwargs={"uuid": self.feature_flag.uuid},
+            )
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.feature_flag.refresh_from_db()
+        self.assertTrue(self.feature_flag.is_active)
+
+    def test_admin_can_deactivate_feature_flag(self):
+        self.feature_flag.is_active = True
+        self.feature_flag.save(update_fields=["is_active"])
+        self.client.force_authenticate(user=self.admin_user)
+
+        response = self.client.post(
+            reverse(
+                "management-feature-flags-deactivate",
+                kwargs={"uuid": self.feature_flag.uuid},
+            )
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.feature_flag.refresh_from_db()
+        self.assertFalse(self.feature_flag.is_active)
+
+    def test_non_staff_cannot_manage_feature_flags(self):
+        self.client.force_authenticate(user=self.regular_user)
+
+        response = self.client.get(reverse("management-feature-flags-list"))
+
+        self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
+
+    def test_feature_flag_key_must_be_unique(self):
+        self.client.force_authenticate(user=self.admin_user)
+
+        response = self.client.post(
+            reverse("management-feature-flags-list"),
+            {
+                "key": self.feature_flag.key,
+                "name": "Duplicate key",
+                "description": "",
+                "is_active": False,
+            },
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn("key", response.data)
+
+
+class FeatureFlagHelperTests(APITestCase):
+    def test_returns_default_when_flag_does_not_exist(self):
+        self.assertFalse(is_feature_enabled("missing-flag"))
+        self.assertTrue(is_feature_enabled("missing-flag", default=True))
+
+    def test_returns_database_state_for_existing_flag(self):
+        FeatureFlag.objects.create(
+            key="job_chat_uploads",
+            name="Job chat uploads",
+            is_active=True,
+        )
+
+        self.assertTrue(is_feature_enabled("job_chat_uploads"))
+
+
+@override_settings(
+    STORAGES={
+        "default": {"BACKEND": "django.core.files.storage.FileSystemStorage"},
+        "staticfiles": {"BACKEND": "django.contrib.staticfiles.storage.StaticFilesStorage"},
+    },
+    MEDIA_ROOT="/tmp/bravo-management-seed-tests-media",
+    MEDIA_URL="/media/",
+)
 class SeedDemoDataCommandTests(APITestCase):
     def test_seed_demo_data_creates_expected_records_and_passwords(self):
         out = StringIO()
@@ -293,11 +430,26 @@ class SeedDemoDataCommandTests(APITestCase):
         self.assertEqual(Service.objects.count(), 4)
         self.assertEqual(Subservice.objects.count(), 8)
         self.assertEqual(ServicePrice.objects.count(), 8)
+        seeded_category_names = set(
+            Category.objects.filter(name__in={"Reformas", "Mantenimiento"}).values_list(
+                "name", flat=True
+            )
+        )
+        self.assertEqual(seeded_category_names, {"Reformas", "Mantenimiento"})
+        self.assertEqual(Announcement.objects.count(), 2)
+        self.assertEqual(AnnouncementReview.objects.count(), 2)
         self.assertEqual(Job.objects.count(), 4)
+        self.assertEqual(JobChat.objects.count(), 4)
+        self.assertEqual(JobChatMessage.objects.count(), 6)
+        self.assertEqual(JobChatAttachment.objects.count(), 1)
+        self.assertFalse(settings.RGPD_MODULE_ENABLED)
 
         seeded_user = user_model.objects.get(email="ana.client@example.com")
         self.assertTrue(seeded_user.check_password("change-me-admin-password"))
         self.assertIn("Seed completed", out.getvalue())
+        self.assertIn("categories=2", out.getvalue())
+        self.assertIn("job_chat_attachments=1", out.getvalue())
+        self.assertIn("rgpd_anonymous_consent_events=0", out.getvalue())
 
     def test_seed_demo_data_is_idempotent(self):
         first_out = StringIO()
@@ -312,5 +464,53 @@ class SeedDemoDataCommandTests(APITestCase):
         self.assertEqual(Service.objects.count(), 4)
         self.assertEqual(Subservice.objects.count(), 8)
         self.assertEqual(ServicePrice.objects.count(), 8)
+        seeded_category_names = set(
+            Category.objects.filter(name__in={"Reformas", "Mantenimiento"}).values_list(
+                "name", flat=True
+            )
+        )
+        self.assertEqual(seeded_category_names, {"Reformas", "Mantenimiento"})
+        self.assertEqual(Announcement.objects.count(), 2)
+        self.assertEqual(AnnouncementReview.objects.count(), 2)
         self.assertEqual(Job.objects.count(), 4)
+        self.assertEqual(JobChat.objects.count(), 4)
+        self.assertEqual(JobChatMessage.objects.count(), 6)
+        self.assertEqual(JobChatAttachment.objects.count(), 1)
         self.assertIn("created=0", second_out.getvalue())
+        self.assertIn("rgpd_consents=0", second_out.getvalue())
+
+
+class CreateAdminUserCommandTests(APITestCase):
+    def test_create_admin_user_creates_expected_superuser(self):
+        out = StringIO()
+
+        call_command("create_admin_user", stdout=out)
+
+        user_model = get_user_model()
+        admin_user = user_model.objects.get(email="admin@bravo.example.com")
+
+        self.assertEqual(admin_user.username, "admin")
+        self.assertTrue(admin_user.is_staff)
+        self.assertTrue(admin_user.is_superuser)
+        self.assertTrue(admin_user.check_password("change-me-admin-password"))
+        self.assertIn("created", out.getvalue())
+
+    def test_create_admin_user_is_idempotent_and_repairs_admin_flags(self):
+        user_model = get_user_model()
+        admin_user = user_model.objects.create_user(
+            username="custom-admin",
+            email="admin@bravo.example.com",
+            password="different-pass",
+            is_staff=False,
+            is_superuser=False,
+        )
+        out = StringIO()
+
+        call_command("create_admin_user", stdout=out)
+
+        admin_user.refresh_from_db()
+        self.assertEqual(admin_user.username, "custom-admin")
+        self.assertTrue(admin_user.is_staff)
+        self.assertTrue(admin_user.is_superuser)
+        self.assertTrue(admin_user.check_password("change-me-admin-password"))
+        self.assertIn("updated", out.getvalue())

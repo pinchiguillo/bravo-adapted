@@ -23,7 +23,7 @@ from job_chat.models import JobChatAttachment, JobChatMessage
 from job_chat.routing import websocket_urlpatterns
 from job_chat.views import JobChatViewSet
 from job_chat.ws_auth import JWTAuthMiddleware, JWTAuthMiddlewareStack
-from organization.models import Organization, Service, ServicePrice, Subservice
+from organization.models import Category, Organization, Service, ServicePrice, Subservice
 
 from .models import Job
 from .views import JobViewSet
@@ -215,7 +215,16 @@ class JobsApiTests(APITestCase):
             billing_country="ES",
             billing_postal_code="28001",
         )
-        self.service = Service.objects.create(organization=self.organization, name="Plan", description="")
+        self.category, _ = Category.objects.get_or_create(
+            name="General",
+            defaults={"description": "Categoria general"},
+        )
+        self.service = Service.objects.create(
+            organization=self.organization,
+            category=self.category,
+            name="Plan",
+            description="",
+        )
         self.subservice = Subservice.objects.create(
             service=self.service,
             name="Plan Variant",
@@ -225,6 +234,7 @@ class JobsApiTests(APITestCase):
             subservice=self.subservice,
             amount="99.99",
             currency="EUR",
+            charging_type=ServicePrice.ChargingType.PER_PROJECT,
             effective_from=date(2026, 1, 1),
         )
         self.second_organization = Organization.objects.create(
@@ -240,6 +250,7 @@ class JobsApiTests(APITestCase):
         )
         self.second_service = Service.objects.create(
             organization=self.second_organization,
+            category=self.category,
             name="Second Plan",
             description="",
         )
@@ -252,6 +263,7 @@ class JobsApiTests(APITestCase):
             subservice=self.second_subservice,
             amount="49.99",
             currency="EUR",
+            charging_type=ServicePrice.ChargingType.PER_PROJECT,
             effective_from=date(2026, 1, 1),
         )
 
@@ -486,7 +498,12 @@ class JobsApiTests(APITestCase):
             billing_country="ES",
             billing_postal_code="41001",
         )
-        outsider_service = Service.objects.create(organization=outsider_org, name="Out Plan", description="")
+        outsider_service = Service.objects.create(
+            organization=outsider_org,
+            category=self.category,
+            name="Out Plan",
+            description="",
+        )
         outsider_subservice = Subservice.objects.create(
             service=outsider_service,
             name="Out Variant",
@@ -496,6 +513,7 @@ class JobsApiTests(APITestCase):
             subservice=outsider_subservice,
             amount="10.00",
             currency="EUR",
+            charging_type=ServicePrice.ChargingType.PER_PROJECT,
             effective_from=date(2026, 1, 1),
         )
         outsider_job = Job.objects.create(
@@ -1130,6 +1148,7 @@ class JobChatWebSocketTests(TransactionTestCase):
         )
         service = Service.objects.create(
             organization=self.organization,
+            category=self.category,
             name="Websocket Plan",
             description="",
         )
@@ -1142,6 +1161,7 @@ class JobChatWebSocketTests(TransactionTestCase):
             subservice=subservice,
             amount="99.99",
             currency="EUR",
+            charging_type=ServicePrice.ChargingType.PER_PROJECT,
             effective_from=date(2026, 1, 1),
         )
         self.job = Job.objects.create(

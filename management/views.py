@@ -7,9 +7,11 @@ from rest_framework.response import Response
 from Core.permissions import IsActiveAccount
 from Core.throttling import ActionScopedRateThrottleMixin
 from jobs.models import Job
+from management.models import FeatureFlag
 from organization.models import Organization
 
 from .serializers import (
+    ManagementFeatureFlagSerializer,
     ManagementJobSerializer,
     ManagementOrganizationSerializer,
     ManagementUserSerializer,
@@ -42,6 +44,25 @@ class ManagementStatusActionsMixin:
         return self._set_status(request, self.status_serializer_class.SUSPENDED)
 
 
+class ManagementFeatureFlagActionsMixin:
+    def _set_active_state(self, is_active):
+        instance = self.get_object()
+        instance.is_active = is_active
+        instance.save(update_fields=["is_active"])
+        serializer = self.get_serializer(instance)
+        return Response(serializer.data, status=status.HTTP_200_OK)
+
+    @extend_schema(summary="Activate feature flag")
+    @action(detail=True, methods=["post"], url_path="activate")
+    def activate(self, request, *args, **kwargs):
+        return self._set_active_state(True)
+
+    @extend_schema(summary="Deactivate feature flag")
+    @action(detail=True, methods=["post"], url_path="deactivate")
+    def deactivate(self, request, *args, **kwargs):
+        return self._set_active_state(False)
+
+
 class ManagementUserViewSet(
     ActionScopedRateThrottleMixin,
     ManagementStatusActionsMixin,
@@ -66,6 +87,31 @@ class ManagementUserViewSet(
         "activate": "management_status",
         "deactivate": "management_status",
         "suspend": "management_status",
+    }
+
+
+class ManagementFeatureFlagViewSet(
+    ActionScopedRateThrottleMixin,
+    ManagementFeatureFlagActionsMixin,
+    mixins.ListModelMixin,
+    mixins.CreateModelMixin,
+    mixins.RetrieveModelMixin,
+    mixins.UpdateModelMixin,
+    viewsets.GenericViewSet,
+):
+    permission_classes = [IsActiveAccount, permissions.IsAdminUser]
+    serializer_class = ManagementFeatureFlagSerializer
+    queryset = FeatureFlag.objects.all().order_by("key")
+    lookup_field = "uuid"
+    throttle_scope_prefix = "management"
+    throttle_scope_action_map = {
+        "list": "management_read",
+        "retrieve": "management_read",
+        "create": "management_write",
+        "update": "management_write",
+        "partial_update": "management_write",
+        "activate": "management_status",
+        "deactivate": "management_status",
     }
 
 

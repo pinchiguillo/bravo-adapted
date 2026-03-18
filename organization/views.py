@@ -10,9 +10,14 @@ from rest_framework.response import Response
 from Core.permissions import IsActiveAccount
 from Core.throttling import ActionScopedRateThrottleMixin
 
-from .models import Category, Organization, Service, ServicePrice, Subservice
-from .permissions import IsOrganizationOwner, IsServiceOrganizationOwner
+from .models import Announcement, Category, Organization, Service, ServicePrice, Subservice
+from .permissions import (
+    IsAnnouncementOrganizationOwner,
+    IsOrganizationOwner,
+    IsServiceOrganizationOwner,
+)
 from .serializers import (
+    AnnouncementSerializer,
     CategorySerializer,
     OrganizationPublicSerializer,
     OrganizationSerializer,
@@ -37,6 +42,14 @@ organization_uuid_parameter = OpenApiParameter(
     description="UUID of the organization that owns the service.",
 )
 
+announcement_uuid_parameter = OpenApiParameter(
+    name="uuid",
+    type=str,
+    location=OpenApiParameter.PATH,
+    required=True,
+    description="UUID of the announcement.",
+)
+
 service_uuid_parameter = OpenApiParameter(
     name="service_uuid",
     type=str,
@@ -51,6 +64,32 @@ organization_search_parameter = OpenApiParameter(
     location=OpenApiParameter.QUERY,
     required=False,
     description="Search term with at least 3 characters to filter organizations.",
+)
+
+announcement_category_parameter = OpenApiParameter(
+    name="category",
+    type=str,
+    location=OpenApiParameter.QUERY,
+    required=False,
+    description="Single category UUID filter kept for backwards compatibility.",
+)
+
+announcement_search_parameter = OpenApiParameter(
+    name="search",
+    type=str,
+    location=OpenApiParameter.QUERY,
+    required=False,
+    description="Optional text used to filter announcements by their visible text fields.",
+)
+
+announcement_categories_parameter = OpenApiParameter(
+    name="categories",
+    type={"type": "array", "items": {"type": "string", "format": "uuid"}},
+    location=OpenApiParameter.QUERY,
+    required=False,
+    explode=True,
+    style="form",
+    description="Optional list of category UUIDs used to filter announcements.",
 )
 
 
@@ -307,6 +346,85 @@ class CategoryViewSet(ActionScopedRateThrottleMixin, viewsets.ReadOnlyModelViewS
     }
 
 
+class AnnouncementPublicFilterMixin:
+    public_search_fields = (
+        "name",
+        "location",
+        "announcement",
+        "description",
+        "free_text",
+        "organization__name",
+        "category__name",
+    )
+
+    def filter_announcements(self, queryset):
+        category_uuids = self._get_public_category_filters()
+        search_query = str(self.request.query_params.get("search", "")).strip()
+
+        if category_uuids:
+            queryset = queryset.filter(category__uuid__in=category_uuids)
+        if search_query:
+            search_filter = Q()
+            for field_name in self.public_search_fields:
+                search_filter |= Q(**{f"{field_name}__icontains": search_query})
+            queryset = queryset.filter(search_filter)
+        return queryset.distinct()
+
+    def _get_public_category_filters(self):
+        raw_values = self.request.query_params.getlist("categories")
+        if not raw_values:
+            single_category = str(self.request.query_params.get("category", "")).strip()
+            return [single_category] if single_category else []
+
+        category_uuids = []
+        for raw_value in raw_values:
+            for part in str(raw_value).split(","):
+                normalized_value = part.strip()
+                if normalized_value:
+                    category_uuids.append(normalized_value)
+        return category_uuids
+
+
+@extend_schema_view(
+    list=extend_schema(
+        summary="List public announcements",
+        description=(
+            "Lists active announcements. Supports optional filtering by category UUIDs "
+            "and plain text search."
+        ),
+        parameters=[
+            announcement_categories_parameter,
+            announcement_category_parameter,
+            announcement_search_parameter,
+        ],
+    ),
+)
+class PublicAnnouncementViewSet(
+    AnnouncementPublicFilterMixin,
+    ActionScopedRateThrottleMixin,
+    mixins.ListModelMixin,
+    viewsets.GenericViewSet,
+):
+    serializer_class = AnnouncementSerializer
+    permission_classes = [permissions.AllowAny]
+    queryset = (
+        Announcement.objects.select_related(
+            "organization",
+            "category",
+            "review",
+        )
+        .prefetch_related("services")
+        .filter(status=Announcement.Status.ACTIVE)
+    )
+    throttle_scope_prefix = "organization"
+    throttle_scope_action_map = {
+        "list": "organization_public_read",
+    }
+
+    def get_queryset(self):
+        return self.filter_announcements(self.queryset)
+
+
 @extend_schema_view(
     list=extend_schema(
         summary="List services",
@@ -370,6 +488,119 @@ class ServiceViewSet(ActionScopedRateThrottleMixin, viewsets.ModelViewSet):
         if organization_uuid is not None:
             queryset = queryset.filter(organization__uuid=organization_uuid)
         return queryset
+
+    def _get_organization_from_url(self):
+        organization_uuid = self.kwargs.get("organization_uuid")
+        organization = Organization.objects.filter(uuid=organization_uuid).first()
+        if organization is None:
+            raise NotFound("Organization not found.")
+        return organization
+
+    def perform_create(self, serializer):
+        organization = self._get_organization_from_url()
+        if organization.user_id != self.request.user.id:
+            raise PermissionDenied("Organization does not belong to the authenticated user.")
+        serializer.save(organization=organization)
+
+
+@extend_schema_view(
+    list=extend_schema(
+        summary="List announcements",
+        description="Lists announcements for the organization specified in the URL.",
+        parameters=[
+            organization_uuid_parameter,
+            announcement_categories_parameter,
+            announcement_search_parameter,
+        ],
+    ),
+    create=extend_schema(
+        summary="Create announcement",
+        description="Creates an announcement for the organization specified in the URL.",
+        parameters=[organization_uuid_parameter],
+    ),
+    retrieve=extend_schema(
+        summary="Get announcement",
+        description="Returns the details of an announcement belonging to the organization specified in the URL.",
+        parameters=[organization_uuid_parameter, announcement_uuid_parameter],
+    ),
+    update=extend_schema(
+        summary="Replace announcement",
+        description="Fully replaces an announcement owned by the organization specified in the URL.",
+        parameters=[organization_uuid_parameter, announcement_uuid_parameter],
+    ),
+    partial_update=extend_schema(
+        summary="Update announcement",
+        description="Partially updates an announcement owned by the organization specified in the URL.",
+        parameters=[organization_uuid_parameter, announcement_uuid_parameter],
+    ),
+    destroy=extend_schema(
+        summary="Delete announcement",
+        description="Deletes an announcement owned by the organization specified in the URL.",
+        parameters=[organization_uuid_parameter, announcement_uuid_parameter],
+    ),
+)
+class AnnouncementViewSet(ActionScopedRateThrottleMixin, viewsets.ModelViewSet):
+    serializer_class = AnnouncementSerializer
+    permission_classes = [IsActiveAccount]
+    queryset = Announcement.objects.select_related(
+        "organization",
+        "category",
+        "review",
+    ).prefetch_related("services")
+    lookup_field = "uuid"
+    throttle_scope_prefix = "organization"
+    throttle_scope_action_map = {
+        "list": "organization_authenticated_read",
+        "retrieve": "organization_authenticated_read",
+        "create": "organization_write",
+        "update": "organization_write",
+        "partial_update": "organization_write",
+        "destroy": "organization_write",
+    }
+
+    def get_permissions(self):
+        if self.action in {"update", "partial_update", "destroy"}:
+            return [IsActiveAccount(), IsAnnouncementOrganizationOwner()]
+        return [IsActiveAccount()]
+
+    def get_queryset(self):
+        queryset = self.queryset
+        organization_uuid = self.kwargs.get("organization_uuid")
+        if organization_uuid is not None:
+            queryset = queryset.filter(organization__uuid=organization_uuid)
+        category_uuids = self._get_category_filters()
+        if category_uuids:
+            queryset = queryset.filter(category__uuid__in=category_uuids)
+
+        search_query = str(self.request.query_params.get("search", "")).strip()
+        if search_query:
+            queryset = queryset.filter(
+                Q(name__icontains=search_query)
+                | Q(location__icontains=search_query)
+                | Q(announcement__icontains=search_query)
+                | Q(description__icontains=search_query)
+                | Q(free_text__icontains=search_query)
+            )
+
+        return queryset.distinct()
+
+    def _get_category_filters(self):
+        raw_values = self.request.query_params.getlist("categories")
+        category_uuids = []
+        for raw_value in raw_values:
+            for part in str(raw_value).split(","):
+                normalized_value = part.strip()
+                if normalized_value:
+                    category_uuids.append(normalized_value)
+        return category_uuids
+
+    def get_serializer_context(self):
+        context = super().get_serializer_context()
+        organization_uuid = self.kwargs.get("organization_uuid")
+        organization = Organization.objects.filter(uuid=organization_uuid).first()
+        if organization is not None:
+            context["organization"] = organization
+        return context
 
     def _get_organization_from_url(self):
         organization_uuid = self.kwargs.get("organization_uuid")

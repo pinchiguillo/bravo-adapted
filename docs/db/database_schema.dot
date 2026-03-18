@@ -1,85 +1,274 @@
-digraph DatabaseSchema {
-  rankdir=LR;
-  splines=ortho;
-  nodesep=0.8;
-  ranksep=1.0;
-  fontname="Helvetica";
+digraph model_graph {
+  // Dotfile by Django-Extensions graph_models
+  // Created: 2026-03-18 11:47
+  // Cli Options: --all-applications --disable-fields --exclude-models LogEntry,Permission,Group,ContentType,Session -o docs/db/database_schema.dot
 
-  node [shape=plain, fontname="Helvetica"];
-  edge [fontname="Helvetica", color="#4A5568"];
+  fontname = "Roboto"
+  fontsize = 8
+  splines  = true
+  rankdir = "TB"
+  
 
-  custom_auth_customuser [
-    label=<
-      <TABLE BORDER="1" CELLBORDER="1" CELLSPACING="0" CELLPADDING="6">
-        <TR><TD BGCOLOR="#2B6CB0"><FONT COLOR="white"><B>custom_auth_customuser</B></FONT></TD></TR>
-        <TR><TD ALIGN="LEFT">PK id (BigAutoField)</TD></TR>
-        <TR><TD ALIGN="LEFT">uuid (UUID, unique)</TD></TR>
-        <TR><TD ALIGN="LEFT">username (Char, unique)</TD></TR>
-        <TR><TD ALIGN="LEFT">email (Email, unique) [login]</TD></TR>
-        <TR><TD ALIGN="LEFT">phone (Char, nullable)</TD></TR>
-        <TR><TD ALIGN="LEFT">birthdate (Date, nullable)</TD></TR>
-        <TR><TD ALIGN="LEFT">avatar (Image, nullable)</TD></TR>
-        <TR><TD ALIGN="LEFT">status (Char)</TD></TR>
-      </TABLE>
-    >
-  ];
+  node [
+    fontname = "Roboto"
+    fontsize = 8
+    shape = "plaintext"
+  ]
 
-  organization_organization [
-    label=<
-      <TABLE BORDER="1" CELLBORDER="1" CELLSPACING="0" CELLPADDING="6">
-        <TR><TD BGCOLOR="#2F855A"><FONT COLOR="white"><B>organization_organization</B></FONT></TD></TR>
-        <TR><TD ALIGN="LEFT">PK id (BigAutoField)</TD></TR>
-        <TR><TD ALIGN="LEFT">uuid (UUID, unique)</TD></TR>
-        <TR><TD ALIGN="LEFT">name</TD></TR>
-        <TR><TD ALIGN="LEFT">legal_name</TD></TR>
-        <TR><TD ALIGN="LEFT">tax_id</TD></TR>
-        <TR><TD ALIGN="LEFT">billing_email</TD></TR>
-        <TR><TD ALIGN="LEFT">billing_address</TD></TR>
-        <TR><TD ALIGN="LEFT">billing_city</TD></TR>
-        <TR><TD ALIGN="LEFT">billing_country</TD></TR>
-        <TR><TD ALIGN="LEFT">billing_postal_code</TD></TR>
-      </TABLE>
-    >
-  ];
+  edge [
+    fontname = "Roboto"
+    fontsize = 8
+  ]
 
-  organization_category [
-    label=<
-      <TABLE BORDER="1" CELLBORDER="1" CELLSPACING="0" CELLPADDING="6">
-        <TR><TD BGCOLOR="#805AD5"><FONT COLOR="white"><B>organization_category</B></FONT></TD></TR>
-        <TR><TD ALIGN="LEFT">PK id (BigAutoField)</TD></TR>
-        <TR><TD ALIGN="LEFT">uuid (UUID, unique)</TD></TR>
-        <TR><TD ALIGN="LEFT">name (unique)</TD></TR>
-      </TABLE>
-    >
-  ];
+  // Labels
 
-  organization_organizationrole [
-    label=<
-      <TABLE BORDER="1" CELLBORDER="1" CELLSPACING="0" CELLPADDING="6">
-        <TR><TD BGCOLOR="#D69E2E"><FONT COLOR="white"><B>organization_organizationrole</B></FONT></TD></TR>
-        <TR><TD ALIGN="LEFT">PK id (BigAutoField)</TD></TR>
-        <TR><TD ALIGN="LEFT">FK organization_id</TD></TR>
-        <TR><TD ALIGN="LEFT">name</TD></TR>
-        <TR><TD ALIGN="LEFT">UNIQUE (organization_id, name)</TD></TR>
-      </TABLE>
-    >
-  ];
 
-  organization_organizationmember [
-    label=<
-      <TABLE BORDER="1" CELLBORDER="1" CELLSPACING="0" CELLPADDING="6">
-        <TR><TD BGCOLOR="#C53030"><FONT COLOR="white"><B>organization_organizationmember</B></FONT></TD></TR>
-        <TR><TD ALIGN="LEFT">PK id (BigAutoField)</TD></TR>
-        <TR><TD ALIGN="LEFT">FK organization_id</TD></TR>
-        <TR><TD ALIGN="LEFT">FK user_id</TD></TR>
-        <TR><TD ALIGN="LEFT">FK role_id</TD></TR>
-        <TR><TD ALIGN="LEFT">UNIQUE (organization_id, user_id)</TD></TR>
-      </TABLE>
-    >
-  ];
+  django_contrib_sessions_base_session_AbstractBaseSession [label=<
+    <TABLE BGCOLOR="white" BORDER="1" CELLBORDER="0" CELLSPACING="0">
+    <TR><TD COLSPAN="2" CELLPADDING="5" ALIGN="CENTER" BGCOLOR="#1b563f">
+    <FONT FACE="Roboto" COLOR="white" POINT-SIZE="10"><B>
+    AbstractBaseSession
+    </B></FONT></TD></TR>
+  
+    </TABLE>
+    >]
 
-  organization_organizationrole -> organization_organization [label="organization_id", arrowhead="crow"];
-  organization_organizationmember -> organization_organization [label="organization_id", arrowhead="crow"];
-  organization_organizationmember -> custom_auth_customuser [label="user_id", arrowhead="crow"];
-  organization_organizationmember -> organization_organizationrole [label="role_id", arrowhead="crow"];
+
+
+
+  django_contrib_auth_models_AbstractUser [label=<
+    <TABLE BGCOLOR="white" BORDER="1" CELLBORDER="0" CELLSPACING="0">
+    <TR><TD COLSPAN="2" CELLPADDING="5" ALIGN="CENTER" BGCOLOR="#1b563f">
+    <FONT FACE="Roboto" COLOR="white" POINT-SIZE="10"><B>
+    AbstractUser<BR/>&lt;<FONT FACE="Roboto"><I>AbstractBaseUser,PermissionsMixin</I></FONT>&gt;
+    </B></FONT></TD></TR>
+  
+    </TABLE>
+    >]
+
+  auth_models_CustomUser [label=<
+    <TABLE BGCOLOR="white" BORDER="1" CELLBORDER="0" CELLSPACING="0">
+    <TR><TD COLSPAN="2" CELLPADDING="5" ALIGN="CENTER" BGCOLOR="#1b563f">
+    <FONT FACE="Roboto" COLOR="white" POINT-SIZE="10"><B>
+    CustomUser<BR/>&lt;<FONT FACE="Roboto"><I>AbstractUser</I></FONT>&gt;
+    </B></FONT></TD></TR>
+  
+    </TABLE>
+    >]
+
+
+
+
+  organization_models_Organization [label=<
+    <TABLE BGCOLOR="white" BORDER="1" CELLBORDER="0" CELLSPACING="0">
+    <TR><TD COLSPAN="2" CELLPADDING="5" ALIGN="CENTER" BGCOLOR="#1b563f">
+    <FONT FACE="Roboto" COLOR="white" POINT-SIZE="10"><B>
+    Organization
+    </B></FONT></TD></TR>
+  
+    </TABLE>
+    >]
+
+  organization_models_Service [label=<
+    <TABLE BGCOLOR="white" BORDER="1" CELLBORDER="0" CELLSPACING="0">
+    <TR><TD COLSPAN="2" CELLPADDING="5" ALIGN="CENTER" BGCOLOR="#1b563f">
+    <FONT FACE="Roboto" COLOR="white" POINT-SIZE="10"><B>
+    Service
+    </B></FONT></TD></TR>
+  
+    </TABLE>
+    >]
+
+  organization_models_Subservice [label=<
+    <TABLE BGCOLOR="white" BORDER="1" CELLBORDER="0" CELLSPACING="0">
+    <TR><TD COLSPAN="2" CELLPADDING="5" ALIGN="CENTER" BGCOLOR="#1b563f">
+    <FONT FACE="Roboto" COLOR="white" POINT-SIZE="10"><B>
+    Subservice
+    </B></FONT></TD></TR>
+  
+    </TABLE>
+    >]
+
+  organization_models_ServicePrice [label=<
+    <TABLE BGCOLOR="white" BORDER="1" CELLBORDER="0" CELLSPACING="0">
+    <TR><TD COLSPAN="2" CELLPADDING="5" ALIGN="CENTER" BGCOLOR="#1b563f">
+    <FONT FACE="Roboto" COLOR="white" POINT-SIZE="10"><B>
+    ServicePrice
+    </B></FONT></TD></TR>
+  
+    </TABLE>
+    >]
+
+  organization_models_Category [label=<
+    <TABLE BGCOLOR="white" BORDER="1" CELLBORDER="0" CELLSPACING="0">
+    <TR><TD COLSPAN="2" CELLPADDING="5" ALIGN="CENTER" BGCOLOR="#1b563f">
+    <FONT FACE="Roboto" COLOR="white" POINT-SIZE="10"><B>
+    Category
+    </B></FONT></TD></TR>
+  
+    </TABLE>
+    >]
+
+  organization_models_Announcement [label=<
+    <TABLE BGCOLOR="white" BORDER="1" CELLBORDER="0" CELLSPACING="0">
+    <TR><TD COLSPAN="2" CELLPADDING="5" ALIGN="CENTER" BGCOLOR="#1b563f">
+    <FONT FACE="Roboto" COLOR="white" POINT-SIZE="10"><B>
+    Announcement
+    </B></FONT></TD></TR>
+  
+    </TABLE>
+    >]
+
+  organization_models_AnnouncementReview [label=<
+    <TABLE BGCOLOR="white" BORDER="1" CELLBORDER="0" CELLSPACING="0">
+    <TR><TD COLSPAN="2" CELLPADDING="5" ALIGN="CENTER" BGCOLOR="#1b563f">
+    <FONT FACE="Roboto" COLOR="white" POINT-SIZE="10"><B>
+    AnnouncementReview
+    </B></FONT></TD></TR>
+  
+    </TABLE>
+    >]
+
+
+
+
+  jobs_models_Job [label=<
+    <TABLE BGCOLOR="white" BORDER="1" CELLBORDER="0" CELLSPACING="0">
+    <TR><TD COLSPAN="2" CELLPADDING="5" ALIGN="CENTER" BGCOLOR="#1b563f">
+    <FONT FACE="Roboto" COLOR="white" POINT-SIZE="10"><B>
+    Job
+    </B></FONT></TD></TR>
+  
+    </TABLE>
+    >]
+
+
+
+
+  job_chat_models_JobChat [label=<
+    <TABLE BGCOLOR="white" BORDER="1" CELLBORDER="0" CELLSPACING="0">
+    <TR><TD COLSPAN="2" CELLPADDING="5" ALIGN="CENTER" BGCOLOR="#1b563f">
+    <FONT FACE="Roboto" COLOR="white" POINT-SIZE="10"><B>
+    JobChat
+    </B></FONT></TD></TR>
+  
+    </TABLE>
+    >]
+
+  job_chat_models_JobChatMessage [label=<
+    <TABLE BGCOLOR="white" BORDER="1" CELLBORDER="0" CELLSPACING="0">
+    <TR><TD COLSPAN="2" CELLPADDING="5" ALIGN="CENTER" BGCOLOR="#1b563f">
+    <FONT FACE="Roboto" COLOR="white" POINT-SIZE="10"><B>
+    JobChatMessage
+    </B></FONT></TD></TR>
+  
+    </TABLE>
+    >]
+
+  job_chat_models_JobChatAttachment [label=<
+    <TABLE BGCOLOR="white" BORDER="1" CELLBORDER="0" CELLSPACING="0">
+    <TR><TD COLSPAN="2" CELLPADDING="5" ALIGN="CENTER" BGCOLOR="#1b563f">
+    <FONT FACE="Roboto" COLOR="white" POINT-SIZE="10"><B>
+    JobChatAttachment
+    </B></FONT></TD></TR>
+  
+    </TABLE>
+    >]
+
+
+
+
+  management_models_FeatureFlag [label=<
+    <TABLE BGCOLOR="white" BORDER="1" CELLBORDER="0" CELLSPACING="0">
+    <TR><TD COLSPAN="2" CELLPADDING="5" ALIGN="CENTER" BGCOLOR="#1b563f">
+    <FONT FACE="Roboto" COLOR="white" POINT-SIZE="10"><B>
+    FeatureFlag
+    </B></FONT></TD></TR>
+  
+    </TABLE>
+    >]
+
+
+
+
+  // Relations
+
+  django_contrib_auth_base_user_AbstractBaseUser [label=<
+  <TABLE BGCOLOR="white" BORDER="0" CELLBORDER="0" CELLSPACING="0">
+  <TR><TD COLSPAN="2" CELLPADDING="4" ALIGN="CENTER" BGCOLOR="#1b563f">
+  <FONT FACE="Roboto" POINT-SIZE="12" COLOR="white">AbstractBaseUser</FONT>
+  </TD></TR>
+  </TABLE>
+  >]
+  django_contrib_auth_models_AbstractUser -> django_contrib_auth_base_user_AbstractBaseUser
+  [label=" abstract\ninheritance"] [arrowhead=empty, arrowtail=none, dir=both];
+  django_contrib_auth_models_PermissionsMixin [label=<
+  <TABLE BGCOLOR="white" BORDER="0" CELLBORDER="0" CELLSPACING="0">
+  <TR><TD COLSPAN="2" CELLPADDING="4" ALIGN="CENTER" BGCOLOR="#1b563f">
+  <FONT FACE="Roboto" POINT-SIZE="12" COLOR="white">PermissionsMixin</FONT>
+  </TD></TR>
+  </TABLE>
+  >]
+  django_contrib_auth_models_AbstractUser -> django_contrib_auth_models_PermissionsMixin
+  [label=" abstract\ninheritance"] [arrowhead=empty, arrowtail=none, dir=both];
+
+  auth_models_CustomUser -> django_contrib_auth_models_AbstractUser
+  [label=" abstract\ninheritance"] [arrowhead=empty, arrowtail=none, dir=both];
+
+
+  organization_models_Organization -> auth_models_CustomUser
+  [label=" user (organization)"] [arrowhead=none, arrowtail=none, dir=both];
+
+  organization_models_Service -> organization_models_Organization
+  [label=" organization (services)"] [arrowhead=none, arrowtail=dot, dir=both];
+
+  organization_models_Service -> organization_models_Category
+  [label=" category (services)"] [arrowhead=none, arrowtail=dot, dir=both];
+
+  organization_models_Subservice -> organization_models_Service
+  [label=" service (subservices)"] [arrowhead=none, arrowtail=dot, dir=both];
+
+  organization_models_ServicePrice -> organization_models_Subservice
+  [label=" subservice (price_table)"] [arrowhead=none, arrowtail=dot, dir=both];
+
+  organization_models_Announcement -> organization_models_Organization
+  [label=" organization (announcements)"] [arrowhead=none, arrowtail=dot, dir=both];
+
+  organization_models_Announcement -> organization_models_Category
+  [label=" category (announcements)"] [arrowhead=none, arrowtail=dot, dir=both];
+
+  organization_models_Announcement -> organization_models_Service
+  [label=" services (announcements)"] [arrowhead=dot arrowtail=dot, dir=both];
+
+  organization_models_AnnouncementReview -> organization_models_Announcement
+  [label=" announcement (review)"] [arrowhead=none, arrowtail=none, dir=both];
+
+
+  jobs_models_Job -> auth_models_CustomUser
+  [label=" user (jobs)"] [arrowhead=none, arrowtail=dot, dir=both];
+
+  jobs_models_Job -> organization_models_Organization
+  [label=" organization (jobs)"] [arrowhead=none, arrowtail=dot, dir=both];
+
+  jobs_models_Job -> organization_models_ServicePrice
+  [label=" plan_price (jobs)"] [arrowhead=none, arrowtail=dot, dir=both];
+
+
+  job_chat_models_JobChat -> jobs_models_Job
+  [label=" job (chat)"] [arrowhead=none, arrowtail=none, dir=both];
+
+  job_chat_models_JobChatMessage -> job_chat_models_JobChat
+  [label=" chat (messages)"] [arrowhead=none, arrowtail=dot, dir=both];
+
+  job_chat_models_JobChatMessage -> auth_models_CustomUser
+  [label=" sender (job_chat_messages)"] [arrowhead=none, arrowtail=dot, dir=both];
+
+  job_chat_models_JobChatAttachment -> job_chat_models_JobChatMessage
+  [label=" message (attachments)"] [arrowhead=none, arrowtail=dot, dir=both];
+
+  job_chat_models_JobChatAttachment -> auth_models_CustomUser
+  [label=" uploaded_by (job_chat_attachments)"] [arrowhead=none, arrowtail=dot, dir=both];
+
+
+
 }

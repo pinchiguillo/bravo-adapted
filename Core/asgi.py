@@ -17,17 +17,21 @@ from django.core.asgi import get_asgi_application
 
 django_asgi_app = get_asgi_application()
 
-from job_chat.routing import websocket_urlpatterns as job_chat_websocket_urlpatterns
-from job_chat.ws_auth import JWTAuthMiddlewareStack
-from organization.routing import websocket_urlpatterns as organization_websocket_urlpatterns
+
+def build_websocket_application():
+    from job_chat.routing import websocket_urlpatterns as job_chat_websocket_urlpatterns
+    from job_chat.ws_auth import JWTAuthMiddlewareStack
+    from organization.routing import websocket_urlpatterns as organization_websocket_urlpatterns
+
+    return AllowedHostsOriginValidator(
+        JWTAuthMiddlewareStack(
+            URLRouter([*job_chat_websocket_urlpatterns, *organization_websocket_urlpatterns])
+        )
+    )
 
 application = ProtocolTypeRouter(
     {
         "http": django_asgi_app,
-        "websocket": AllowedHostsOriginValidator(
-            JWTAuthMiddlewareStack(
-                URLRouter([*job_chat_websocket_urlpatterns, *organization_websocket_urlpatterns])
-            )
-        ),
+        "websocket": build_websocket_application(),
     }
 )

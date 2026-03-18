@@ -2,10 +2,12 @@ from django.urls import path
 from rest_framework.routers import DefaultRouter
 
 from .views import (
+    AnnouncementViewSet,
     CategoryViewSet,
     OrganizationSearchViewSet,
     OrganizationUserViewSet,
     OrganizationViewSet,
+    PublicAnnouncementViewSet,
     ServiceViewSet,
     SubserviceViewSet,
 )
@@ -25,9 +27,19 @@ subservice_list = SubserviceViewSet.as_view({"get": "list", "post": "create"})
 subservice_detail = SubserviceViewSet.as_view(
     {"get": "retrieve", "put": "update", "patch": "partial_update", "delete": "destroy"}
 )
+announcement_list = AnnouncementViewSet.as_view({"get": "list", "post": "create"})
+announcement_detail = AnnouncementViewSet.as_view(
+    {"get": "retrieve", "put": "update", "patch": "partial_update", "delete": "destroy"}
+)
+public_announcement_list = PublicAnnouncementViewSet.as_view({"get": "list"})
 organization_search = OrganizationSearchViewSet.as_view({"get": "list"})
 
 urlpatterns = [
+    path(
+        "announcements/",
+        public_announcement_list,
+        name="organization-public-announcement-list",
+    ),
     path(
         "search/",
         organization_search,
@@ -57,5 +69,15 @@ urlpatterns = [
         "<uuid:organization_uuid>/<uuid:service_uuid>/<uuid:uuid>/",
         subservice_detail,
         name="organization-subservice-detail",
+    ),
+    path(
+        "<uuid:organization_uuid>/announcements/",
+        announcement_list,
+        name="organization-announcement-list",
+    ),
+    path(
+        "<uuid:organization_uuid>/announcements/<uuid:uuid>/",
+        announcement_detail,
+        name="organization-announcement-detail",
     ),
 ] + router.urls

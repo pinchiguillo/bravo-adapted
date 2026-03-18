@@ -1,6 +1,7 @@
 import importlib
 import os
 
+from django.conf import settings
 from django.core.checks import run_checks
 from django.core.exceptions import ImproperlyConfigured
 from django.test import SimpleTestCase, override_settings
@@ -99,3 +100,12 @@ class SecuritySettingsTests(SimpleTestCase):
             "Core.pagination.DefaultPageNumberPagination",
         )
         self.assertEqual(settings_module.REST_FRAMEWORK["PAGE_SIZE"], 20)
+
+    def test_rgpd_module_is_disabled_by_default(self):
+        self.assertFalse(settings.RGPD_MODULE_ENABLED)
+        self.assertNotIn("rgpd.apps.RgpdConfig", settings.INSTALLED_APPS)
+
+    def test_rgpd_endpoint_is_not_registered_when_module_is_disabled(self):
+        response = self.client.get("/api/rgpd/me/")
+
+        self.assertEqual(response.status_code, 404)

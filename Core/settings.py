@@ -157,6 +157,7 @@ AUTH_ENFORCE_PASSWORD_RESTRICTIONS = env_bool(
     "AUTH_ENFORCE_PASSWORD_RESTRICTIONS",
     default=True,
 )
+RGPD_MODULE_ENABLED = env_bool("RGPD_MODULE_ENABLED", default=False)
 
 if IS_PRODUCTION and USE_S3_STORAGE:
     require_env("AWS_DEFAULT_REGION")
@@ -182,14 +183,17 @@ INSTALLED_APPS = [
     'django.contrib.staticfiles',
     'rest_framework',
     'drf_spectacular',
+    'django_extensions',
     'channels',
     'auth.apps.AuthConfig',
     'organization.apps.OrganizationConfig',
     'jobs.apps.JobsConfig',
     'job_chat.apps.JobChatConfig',
     'management.apps.ManagementConfig',
-    'rgpd.apps.RgpdConfig',
 ]
+
+if RGPD_MODULE_ENABLED:
+    INSTALLED_APPS.append('rgpd.apps.RgpdConfig')
 
 if USE_S3_STORAGE:
     INSTALLED_APPS.append("storages")
@@ -200,6 +204,7 @@ MIDDLEWARE = [
     'django.middleware.common.CommonMiddleware',
     'django.middleware.csrf.CsrfViewMiddleware',
     'django.contrib.auth.middleware.AuthenticationMiddleware',
+    'organization.middleware.AnnouncementViewCountMiddleware',
     'django.contrib.messages.middleware.MessageMiddleware',
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
 ]

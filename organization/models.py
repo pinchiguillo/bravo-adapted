@@ -67,6 +67,11 @@ class Service(models.Model):
     organization = models.ForeignKey(
         Organization, on_delete=models.CASCADE, related_name="services"
     )
+    category = models.ForeignKey(
+        "Category",
+        on_delete=models.PROTECT,
+        related_name="services",
+    )
     name = models.CharField(max_length=120)
     description = models.TextField(blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
@@ -105,6 +110,12 @@ class Subservice(models.Model):
 
 
 class ServicePrice(models.Model):
+    class ChargingType(models.TextChoices):
+        PER_DAY = "per_day", "Per day"
+        PER_HOUR = "per_hour", "Per hour"
+        PER_SQUARE_METER = "per_square_meter", "Per square meter"
+        PER_PROJECT = "per_project", "Per project"
+
     uuid = models.UUIDField(default=uuid.uuid4, unique=True, editable=False)
     subservice = models.ForeignKey(
         Subservice,
@@ -113,6 +124,11 @@ class ServicePrice(models.Model):
     )
     amount = models.DecimalField(max_digits=10, decimal_places=2)
     currency = models.CharField(max_length=3, default="EUR")
+    charging_type = models.CharField(
+        max_length=20,
+        choices=ChargingType.choices,
+        default=ChargingType.PER_PROJECT,
+    )
     effective_from = models.DateField()
     effective_to = models.DateField(blank=True, null=True)
     created_at = models.DateTimeField(auto_now_add=True)
@@ -139,9 +155,78 @@ class ServicePrice(models.Model):
 class Category(models.Model):
     uuid = models.UUIDField(default=uuid.uuid4, unique=True, editable=False)
     name = models.CharField(max_length=120, unique=True)
+    description = models.TextField(blank=True, default="")
 
     class Meta:
         ordering = ["name"]
 
     def __str__(self):
         return self.name
+
+
+class Announcement(models.Model):
+    class Status(models.TextChoices):
+        CLOSED = "closed", "Closed"
+        SUSPENDED = "suspended", "Suspended"
+        ACTIVE = "active", "Active"
+
+    uuid = models.UUIDField(default=uuid.uuid4, unique=True, editable=False)
+    organization = models.ForeignKey(
+        Organization,
+        on_delete=models.CASCADE,
+        related_name="announcements",
+    )
+    category = models.ForeignKey(
+        Category,
+        on_delete=models.PROTECT,
+        related_name="announcements",
+    )
+    services = models.ManyToManyField(Service, related_name="announcements", blank=True)
+    name = models.CharField(max_length=255)
+    location = models.CharField(max_length=255)
+    announcement = models.CharField(max_length=255)
+    status = models.CharField(
+        max_length=20,
+        choices=Status.choices,
+        default=Status.ACTIVE,
+    )
+    description = models.TextField(blank=True)
+    free_text = models.TextField(blank=True)
+    latitude = models.DecimalField(max_digits=9, decimal_places=6, blank=True, null=True)
+    longitude = models.DecimalField(max_digits=9, decimal_places=6, blank=True, null=True)
+    view_count = models.PositiveIntegerField(default=0)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ["organization_id", "-created_at", "-id"]
+        constraints = [
+            models.CheckConstraint(
+                condition=(
+                    models.Q(latitude__isnull=True, longitude__isnull=True)
+                    | models.Q(latitude__isnull=False, longitude__isnull=False)
+                ),
+                name="announcement_coordinates_all_or_none",
+            )
+        ]
+
+    def __str__(self):
+        return f"{self.organization_id}:{self.name}"
+
+
+class AnnouncementReview(models.Model):
+    uuid = models.UUIDField(default=uuid.uuid4, unique=True, editable=False)
+    announcement = models.OneToOneField(
+        Announcement,
+        on_delete=models.CASCADE,
+        related_name="review",
+    )
+    content = models.TextField()
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ["announcement_id"]
+
+    def __str__(self):
+        return f"{self.announcement_id}:review"
