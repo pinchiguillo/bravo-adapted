@@ -1,20 +1,23 @@
 name: Auto Tag
 
 on:
-  push:
-    branches: ["master", "develop"]
+  workflow_run:
+    workflows: ["CI"]
+    types: [completed]
 
 permissions:
   contents: write
 
 jobs:
   create-tag:
+    if: ${{ github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.event == 'push' && (github.event.workflow_run.head_branch == 'master' || github.event.workflow_run.head_branch == 'develop') }}
     runs-on: ubuntu-latest
 
     steps:
       - name: Checkout
         uses: actions/checkout@v4
         with:
+          ref: ${{ github.event.workflow_run.head_sha }}
           fetch-depth: 0
 
       - name: Compute tag
@@ -25,8 +28,10 @@ jobs:
 
           git fetch --tags --force
 
-          BRANCH="${GITHUB_REF_NAME}"
-          SHORT_SHA="${GITHUB_SHA::7}"
+          BRANCH="${{ github.event.workflow_run.head_branch }}"
+          WORKFLOW_SHA="${{ github.event.workflow_run.head_sha }}"
+          RUN_NUMBER="${{ github.event.workflow_run.run_number }}"
+          SHORT_SHA="${WORKFLOW_SHA::7}"
 
           VERSION_VALUE="$(tr -d '[:space:]' < VERSION)"
           if [[ ! "$VERSION_VALUE" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
@@ -49,7 +54,7 @@ jobs:
           if [[ "$BRANCH" == "master" ]]; then
             NEW_TAG="v${NEXT_STABLE}"
           else
-            NEW_TAG="v${NEXT_STABLE}-dev.${GITHUB_RUN_NUMBER}.${SHORT_SHA}"
+            NEW_TAG="v${NEXT_STABLE}-dev.${RUN_NUMBER}.${SHORT_SHA}"
           fi
 
           if git rev-parse -q --verify "refs/tags/${NEW_TAG}" >/dev/null; then
@@ -68,7 +73,7 @@ jobs:
           TAG="${{ steps.compute.outputs.tag }}"
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git tag -a "$TAG" -m "Auto tag for ${GITHUB_REF_NAME} (${GITHUB_SHA})"
+          git tag -a "$TAG" -m "Auto tag for ${{ github.event.workflow_run.head_branch }} (${{ github.event.workflow_run.head_sha }})"
 
       - name: Push tag
         if: steps.compute.outputs.exists == 'false'

@@ -24,7 +24,7 @@ jobs:
         run: docker compose up -d postgres localstack
 
       - name: Run lint
-        run: docker compose run --rm --no-deps app ruff check --config .github/ruff.toml Core apps manage.py
+        run: docker compose run --rm --no-deps app ruff check --config .github/ruff.toml Core common apps manage.py
 
       - name: Run tests
         run: docker compose run --rm --no-deps app python manage.py test
