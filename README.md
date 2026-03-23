@@ -42,6 +42,28 @@ Las peticiones `http://localhost:24356/s3/...` se enrutan a `localstack`.
 PostgreSQL queda accesible desde el host en `localhost:5432` o en el puerto definido por `POSTGRES_PORT`.
 La base de datos puede inspeccionarse en `http://localhost:24357` con servidor `postgres` y las credenciales de `POSTGRES_USER`/`POSTGRES_PASSWORD`.
 
+## Variantes de Compose
+
+- **`compose.yml`**: Desarrollo local (recomendado).
+- **`compose.prod.yml`**: Producción sin actualización automática de imágenes.
+- **`compose.prod-watchtower.yml`**: Producción con **Watchtower** (actualiza `app` automáticamente cuando hay nuevas imágenes remotas).
+
+### Usando Watchtower en producción
+
+Para levantar con actualización automática:
+
+```bash
+docker compose -f compose.prod-watchtower.yml up -d
+```
+
+**Watchtower**:
+- Verifica cada hora (configurable via `WATCHTOWER_POLL_INTERVAL`) si hay nuevas imágenes.
+- Descarga y reinicia automáticamente servicios etiquetados con `com.centurylinklabs.watchtower.enable: "true"`.
+- Solo afecta al servicio `app`; `postgres`, `redis`, `localstack` y `nginx` no se reinician automáticamente.
+- Limpia automáticamente imágenes antiguas (`WATCHTOWER_CLEANUP: "true"`).
+
+Para deshabilitarlo en un servicio específico, quita la etiqueta `com.centurylinklabs.watchtower.enable: "true"`.
+
 ## Endpoints principales
 
 Base URL REST: `http://localhost:8000/api/` o `http://localhost:24356/api/`
