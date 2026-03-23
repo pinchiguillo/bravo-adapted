@@ -23,6 +23,32 @@ jobs:
       - name: Start dependencies
         run: docker compose up -d postgres localstack
 
+      - name: Wait for dependencies
+        run: |
+          set -euo pipefail
+          for service in postgres localstack; do
+            container_id="$(docker compose ps -q "$service")"
+            if [ -z "$container_id" ]; then
+              echo "Container for $service was not created"
+              exit 1
+            fi
+
+            echo "Waiting for $service to become healthy..."
+            for attempt in $(seq 1 60); do
+              health_status="$(docker inspect --format='{{if .State.Health}}{{.State.Health.Status}}{{else}}{{.State.Status}}{{end}}' "$container_id")"
+              if [ "$health_status" = "healthy" ] || [ "$health_status" = "running" ]; then
+                echo "$service is $health_status"
+                break
+              fi
+              if [ "$attempt" -eq 60 ]; then
+                echo "$service did not become ready in time"
+                docker compose logs "$service"
+                exit 1
+              fi
+              sleep 2
+            done
+          done
+
       - name: Run lint
         run: docker compose run --rm --no-deps app ruff check --config .github/ruff.toml Core common apps manage.py
 
