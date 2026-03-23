@@ -27,15 +27,24 @@ jobs:
         run: |
           set -euo pipefail
           for service in postgres localstack; do
-            container_id="$(docker compose ps -q "$service")"
+            container_id="$(docker compose ps -a -q "$service")"
             if [ -z "$container_id" ]; then
               echo "Container for $service was not created"
+              docker compose ps -a
               exit 1
             fi
 
             echo "Waiting for $service to become healthy..."
             for attempt in $(seq 1 60); do
+              state_status="$(docker inspect --format='{{.State.Status}}' "$container_id")"
               health_status="$(docker inspect --format='{{if .State.Health}}{{.State.Health.Status}}{{else}}{{.State.Status}}{{end}}' "$container_id")"
+
+              if [ "$state_status" = "exited" ] || [ "$state_status" = "dead" ]; then
+                echo "$service is $state_status"
+                docker compose logs "$service"
+                exit 1
+              fi
+
               if [ "$health_status" = "healthy" ] || [ "$health_status" = "running" ]; then
                 echo "$service is $health_status"
                 break
