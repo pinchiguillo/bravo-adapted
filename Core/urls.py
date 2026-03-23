@@ -19,17 +19,17 @@ from django.contrib import admin
 from django.urls import include, path
 from drf_spectacular.views import SpectacularAPIView, SpectacularSwaggerView
 
-from .views import healthcheck
+from common.views import healthcheck
 
 urlpatterns = [
     path('admin/', admin.site.urls),
     path("health/", healthcheck, name="healthcheck"),
-    path("api/auth/", include("auth.urls")),
-    path("api/announcements/", include("organization.public_urls")),
-    path("api/organizations/", include("organization.urls")),
-    path("api/jobs/", include("jobs.urls")),
-    path("api/jobs/chats/", include("job_chat.urls")),
-    path("api/management/", include("management.urls")),
+    path("api/auth/", include("apps.auth.urls")),
+    path("api/announcements/", include("apps.organization.public_urls")),
+    path("api/organizations/", include("apps.organization.urls")),
+    path("api/jobs/", include("apps.jobs.urls")),
+    path("api/jobs/chats/", include("apps.job_chat.urls")),
+    path("api/management/", include("apps.management.urls")),
     path("api/schema/", SpectacularAPIView.as_view(), name="api-schema"),
     path(
         "api/docs/",
@@ -39,4 +39,4 @@ urlpatterns = [
 ]
 
 if settings.RGPD_MODULE_ENABLED:
-    urlpatterns.append(path("api/rgpd/", include("rgpd.urls")))
+    urlpatterns.append(path("api/rgpd/", include("apps.rgpd.urls")))

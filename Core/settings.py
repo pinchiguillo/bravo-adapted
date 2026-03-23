@@ -188,15 +188,15 @@ INSTALLED_APPS = [
     'drf_spectacular',
     'django_extensions',
     'channels',
-    'auth.apps.AuthConfig',
-    'organization.apps.OrganizationConfig',
-    'jobs.apps.JobsConfig',
-    'job_chat.apps.JobChatConfig',
-    'management.apps.ManagementConfig',
+    'apps.auth.apps.AuthConfig',
+    'apps.organization.apps.OrganizationConfig',
+    'apps.jobs.apps.JobsConfig',
+    'apps.job_chat.apps.JobChatConfig',
+    'apps.management.apps.ManagementConfig',
 ]
 
 if RGPD_MODULE_ENABLED:
-    INSTALLED_APPS.append('rgpd.apps.RgpdConfig')
+    INSTALLED_APPS.append('apps.rgpd.apps.RgpdConfig')
 
 if USE_S3_STORAGE:
     INSTALLED_APPS.append("storages")
@@ -207,7 +207,7 @@ MIDDLEWARE = [
     'django.middleware.common.CommonMiddleware',
     'django.middleware.csrf.CsrfViewMiddleware',
     'django.contrib.auth.middleware.AuthenticationMiddleware',
-    'organization.middleware.AnnouncementViewCountMiddleware',
+    'apps.organization.middleware.AnnouncementViewCountMiddleware',
     'django.contrib.messages.middleware.MessageMiddleware',
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
 ]
@@ -337,7 +337,7 @@ REST_FRAMEWORK = {
     "DEFAULT_AUTHENTICATION_CLASSES": (
         "rest_framework_simplejwt.authentication.JWTAuthentication",
     ),
-    "DEFAULT_PAGINATION_CLASS": "Core.pagination.DefaultPageNumberPagination",
+    "DEFAULT_PAGINATION_CLASS": "common.pagination.DefaultPageNumberPagination",
     "PAGE_SIZE": 20,
     "DEFAULT_THROTTLE_CLASSES": (
         "rest_framework.throttling.ScopedRateThrottle",
@@ -382,8 +382,8 @@ SPECTACULAR_SETTINGS = {
     "DESCRIPTION": "OpenAPI documentation for the Bravo backend.",
     "VERSION": "1.0.0",
     "ENUM_NAME_OVERRIDES": {
-        "AccountStatusEnum": "auth.models.CustomUser.Status",
-        "JobStatusEnum": "jobs.models.Job.Status",
+        "AccountStatusEnum": "apps.auth.models.CustomUser.Status",
+        "JobStatusEnum": "apps.jobs.models.Job.Status",
     },
 }
 
@@ -408,7 +408,7 @@ else:
     }
 
 default_email_backend = (
-    "Core.email_backends.SesEmailBackend"
+    "common.email_backends.SesEmailBackend"
     if USE_SES_EMAIL
     else "django.core.mail.backends.smtp.EmailBackend"
 )

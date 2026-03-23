@@ -1,12 +1,13 @@
 name: Docker CI/CD
 
 on:
-  pull_request:
-    branches: [ "develop", "main" ]
+  workflow_run:
+    workflows: ["CI"]
+    types: [completed]
   push:
-    branches: [ "develop" ]
     tags:
       - "v*.*.*"
+      - "v*.*.*-dev.*"
 
 permissions:
   contents: read
@@ -17,11 +18,13 @@ env:
 
 jobs:
   pr-build:
-    if: ${{ github.event_name == 'pull_request' }}
+    if: ${{ github.event_name == 'workflow_run' && github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.event == 'pull_request' }}
     runs-on: ubuntu-latest
 
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.workflow_run.head_sha }}
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v4
@@ -32,22 +35,25 @@ jobs:
           context: .
           file: ./Dockerfile
           push: false
-          tags: local/pr-check:${{ github.sha }}
+          tags: local/pr-check:${{ github.event.workflow_run.head_sha }}
 
   publish-dev:
-    if: ${{ github.event_name == 'push' && github.ref == 'refs/heads/develop' }}
+    if: ${{ github.event_name == 'workflow_run' && github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.event == 'push' && github.event.workflow_run.head_branch == 'develop' }}
     runs-on: ubuntu-latest
 
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.workflow_run.head_sha }}
 
       - name: Resolver tags dev
         id: meta
         shell: bash
         run: |
           VERSION="$(cat VERSION)"
-          SHORT_SHA="${GITHUB_SHA::7}"
-          IMAGE_TAG="${VERSION}-dev.${GITHUB_RUN_NUMBER}-${SHORT_SHA}"
+          WORKFLOW_SHA="${{ github.event.workflow_run.head_sha }}"
+          SHORT_SHA="${WORKFLOW_SHA::7}"
+          IMAGE_TAG="${VERSION}-dev.${{ github.event.workflow_run.run_number }}-${SHORT_SHA}"
 
           {
             echo "all_tags<<EOF"
@@ -77,7 +83,7 @@ jobs:
           cache-to: type=gha,mode=max
 
   publish-prod:
-    if: ${{ github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v') }}
+    if: ${{ github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v') && !contains(github.ref_name, '-dev.') }}
     runs-on: ubuntu-latest
     # Opcional:
     # environment: production

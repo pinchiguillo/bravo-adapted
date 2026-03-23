@@ -2,6 +2,10 @@
 
 Backend de Bravo basado en Django, Django REST Framework y Channels. El proyecto expone API REST, documentacion OpenAPI/Swagger y endpoints WebSocket para chat de jobs y busqueda de organizaciones.
 
+## Workflow
+
+[Workflow Guide](docs/workflow.md)
+
 ## Stack
 
 - Django 5
@@ -81,7 +85,7 @@ docker compose -f compose.yml up --build
 docker compose -f compose.yml exec -T app python manage.py test
 
 # Lint
-docker compose -f compose.yml exec -T app ruff check Core auth organization jobs management rgpd manage.py
+docker compose -f compose.yml exec -T app ruff check --config .github/ruff.toml Core apps manage.py
 
 # Generar migraciones
 docker compose -f compose.yml exec -T app python manage.py makemigrations
@@ -101,14 +105,8 @@ docker compose -f compose.yml exec -T app env \
 
 ## Documentacion adicional
 
+- `docs/README.md` (índice canónico de documentación)
 - `docs/setup-dev-env.md`
 - `docs/environment-variables.md`
-- `docs/active-apps.md`
-- `docs/arquitectura.md`
-- `docs/entorno-desarrollo.md`
-- `docs/operacion.md`
-- `docs/ws-auth-token-strategy.md`
-- `docs/ws-organization-search.md`
-- `docs/swagger.yaml`
-- `docs/swagger.html`
+- `docs/workflow.md`
 - `http://localhost:24356/api/docs/` para navegar el Swagger UI en local
