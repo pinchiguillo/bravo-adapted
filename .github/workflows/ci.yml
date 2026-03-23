@@ -60,26 +60,20 @@ jobs:
 
           bucket_name="$(grep '^AWS_STORAGE_BUCKET_NAME=' .env | cut -d= -f2- || true)"
           sender_email="$(grep '^DEFAULT_FROM_EMAIL=' .env | cut -d= -f2- || true)"
+          aws_region="$(grep '^AWS_DEFAULT_REGION=' .env | cut -d= -f2- || true)"
           bucket_name="${bucket_name:-bravo-media}"
           sender_email="${sender_email:-no-reply@bravo.local}"
+          aws_region="${aws_region:-us-east-1}"
 
-          echo "Waiting for LocalStack bootstrap resources (bucket=$bucket_name, sender=$sender_email)..."
-          for attempt in $(seq 1 60); do
-            if docker compose exec -T localstack awslocal s3api head-bucket --bucket "$bucket_name" >/dev/null 2>&1; then
-              identities="$(docker compose exec -T localstack awslocal ses list-identities --identity-type EmailAddress --output text 2>/dev/null || true)"
-              if echo "$identities" | grep -Fq "$sender_email"; then
-                echo "LocalStack bootstrap resources are ready"
-                break
-              fi
+          echo "Ensuring LocalStack bootstrap resources (bucket=$bucket_name, sender=$sender_email)..."
+          if ! docker compose exec -T localstack awslocal s3api head-bucket --bucket "$bucket_name" >/dev/null 2>&1; then
+            if [ "$aws_region" = "us-east-1" ]; then
+              docker compose exec -T localstack awslocal s3api create-bucket --bucket "$bucket_name"
+            else
+              docker compose exec -T localstack awslocal s3api create-bucket --bucket "$bucket_name" --create-bucket-configuration "LocationConstraint=$aws_region"
             fi
-
-            if [ "$attempt" -eq 60 ]; then
-              echo "LocalStack bootstrap resources were not ready in time"
-              docker compose logs localstack
-              exit 1
-            fi
-            sleep 2
-          done
+          fi
+          docker compose exec -T localstack awslocal ses verify-email-identity --email-address "$sender_email" >/dev/null
 
       - name: Run lint
         run: docker compose run --rm --no-deps app ruff check --config .github/ruff.toml Core common apps manage.py
