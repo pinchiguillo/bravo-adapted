@@ -68,6 +68,7 @@ class OrganizationApiTests(APITestCase):
             billing_city="Madrid",
             billing_country="ES",
             billing_postal_code="28001",
+            is_approved=True,
         )
         self.other_organization = Organization.objects.create(
             user=self.other_owner,
@@ -79,6 +80,7 @@ class OrganizationApiTests(APITestCase):
             billing_city="Barcelona",
             billing_country="ES",
             billing_postal_code="08001",
+            is_approved=True,
         )
         self.category = Category.objects.create(
             name="Home Services",
@@ -167,6 +169,7 @@ class OrganizationApiTests(APITestCase):
                 "uuid": str(self.organization.uuid),
                 "name": self.organization.name,
                 "verification_level": 0,
+                "is_approved": True,
                 "rating": None,
             },
         )
@@ -192,10 +195,45 @@ class OrganizationApiTests(APITestCase):
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertEqual(response.data["uuid"], str(self.organization.uuid))
         self.assertEqual(response.data["legal_name"], self.organization.legal_name)
+        self.assertTrue(response.data["is_approved"])
         self.assertEqual(response.data["tax_id"], self.organization.tax_id)
         self.assertEqual(response.data["billing_email"], self.organization.billing_email)
         self.assertEqual(response.data["verification_level"], self.organization.verification_level)
         self.assertIsNone(response.data["rating"])
+
+    def test_public_retrieve_hides_unapproved_organization_for_anonymous_user(self):
+        self.organization.is_approved = False
+        self.organization.save(update_fields=["is_approved"])
+
+        response = self.client.get(
+            reverse("organization-detail", kwargs={"uuid": self.organization.uuid})
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_404_NOT_FOUND)
+
+    def test_public_retrieve_hides_unapproved_organization_for_non_owner_user(self):
+        self.organization.is_approved = False
+        self.organization.save(update_fields=["is_approved"])
+        self.client.force_authenticate(user=self.other_owner)
+
+        response = self.client.get(
+            reverse("organization-detail", kwargs={"uuid": self.organization.uuid})
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_404_NOT_FOUND)
+
+    def test_owner_can_retrieve_unapproved_organization_by_uuid(self):
+        self.organization.is_approved = False
+        self.organization.save(update_fields=["is_approved"])
+        self.client.force_authenticate(user=self.owner)
+
+        response = self.client.get(
+            reverse("organization-detail", kwargs={"uuid": self.organization.uuid})
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.data["uuid"], str(self.organization.uuid))
+        self.assertFalse(response.data["is_approved"])
 
     def test_organization_retrieve_includes_verification_level_and_rating_from_completed_jobs(self):
         self.organization.verification_level = 4
@@ -315,6 +353,7 @@ class OrganizationApiTests(APITestCase):
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertEqual(response.data["uuid"], str(self.organization.uuid))
         self.assertEqual(response.data["legal_name"], self.organization.legal_name)
+        self.assertTrue(response.data["is_approved"])
 
     def test_user_endpoint_can_create_authenticated_user_organization(self):
         self.client.force_authenticate(user=self.user_without_organization)
@@ -338,6 +377,8 @@ class OrganizationApiTests(APITestCase):
         created = Organization.objects.get(user=self.user_without_organization)
         self.assertEqual(response.data["uuid"], str(created.uuid))
         self.assertEqual(response.data["name"], "Gamma User")
+        self.assertFalse(response.data["is_approved"])
+        self.assertFalse(created.is_approved)
 
     def test_user_endpoint_can_update_authenticated_user_organization(self):
         self.client.force_authenticate(user=self.owner)
@@ -835,12 +876,52 @@ class OrganizationApiTests(APITestCase):
         self.assertEqual(response.status_code, status.HTTP_401_UNAUTHORIZED)
 
     def test_public_announcement_list_allows_anonymous_requests_without_filters(self):
-        response = self.client.get(reverse("organization-public-announcement-list"))
+        response = self.client.get(reverse("public-announcement-list"))
 
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertEqual(response.data["count"], 1)
         self.assertEqual(response.data["results"][0]["uuid"], str(self.announcement.uuid))
         self.assertNotIn("review", response.data["results"][0])
+
+    def test_public_announcement_list_hides_unapproved_organization_announcements(self):
+        self.organization.is_approved = False
+        self.organization.save(update_fields=["is_approved"])
+
+        response = self.client.get(reverse("public-announcement-list"))
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.data["count"], 0)
+
+    def test_public_announcement_list_filters_across_all_organizations(self):
+        matching = Announcement.objects.create(
+            organization=self.other_organization,
+            category=self.category,
+            name="Electric Repairs",
+            location="Sevilla",
+            announcement="Urgencias electricas",
+            status=Announcement.Status.ACTIVE,
+            description="Servicio 24 horas",
+            free_text="guardias nocturnas",
+        )
+        Announcement.objects.create(
+            organization=self.organization,
+            category=self.other_category,
+            name="Dog Walking",
+            location="Madrid",
+            announcement="Paseos diarios",
+            status=Announcement.Status.ACTIVE,
+            description="Mascotas felices",
+            free_text="turno de manana",
+        )
+
+        response = self.client.get(
+            reverse("public-announcement-list"),
+            {"search": "guardias"},
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.data["count"], 1)
+        self.assertEqual(response.data["results"][0]["uuid"], str(matching.uuid))
 
     def test_public_announcement_list_filters_by_category_and_search_text(self):
         matching = Announcement.objects.create(
@@ -875,7 +956,7 @@ class OrganizationApiTests(APITestCase):
         )
 
         response = self.client.get(
-            reverse("organization-public-announcement-list"),
+            reverse("public-announcement-list"),
             {"category": str(self.category.uuid), "search": "guardias"},
         )
 
@@ -908,7 +989,7 @@ class OrganizationApiTests(APITestCase):
         )
 
         response = self.client.get(
-            reverse("organization-public-announcement-list"),
+            reverse("public-announcement-list"),
             {"categories": [str(self.category.uuid)]},
         )
 
@@ -941,13 +1022,18 @@ class OrganizationApiTests(APITestCase):
             free_text="orden de prueba",
         )
 
-        response = self.client.get(reverse("organization-public-announcement-list"))
+        response = self.client.get(reverse("public-announcement-list"))
 
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertEqual(
             [item["uuid"] for item in response.data["results"]],
             [str(newest.uuid), str(older.uuid), str(self.announcement.uuid)],
         )
+
+    def test_public_announcement_route_is_not_available_under_organizations_prefix(self):
+        response = self.client.get("/api/organizations/announcements/")
+
+        self.assertEqual(response.status_code, status.HTTP_404_NOT_FOUND)
 
     def test_announcement_list_filters_by_categories(self):
         self.client.force_authenticate(user=self.owner)

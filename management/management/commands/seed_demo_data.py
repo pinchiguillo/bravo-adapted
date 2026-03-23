@@ -69,6 +69,7 @@ ORGANIZATIONS = [
         "billing_country": "ES",
         "billing_postal_code": "28001",
         "verification_level": 3,
+        "is_approved": True,
         "services": [
             {
                 "name": "Pintura",
@@ -115,6 +116,7 @@ ORGANIZATIONS = [
         "billing_country": "ES",
         "billing_postal_code": "46002",
         "verification_level": 2,
+        "is_approved": False,
         "services": [
             {
                 "name": "Fontaneria",
@@ -395,6 +397,7 @@ class Command(BaseCommand):
                 "billing_country": organization_data["billing_country"],
                 "billing_postal_code": organization_data["billing_postal_code"],
                 "verification_level": organization_data["verification_level"],
+                "is_approved": organization_data["is_approved"],
                 "status": Organization.Status.ACTIVE,
             }
             organization, created = Organization.objects.update_or_create(

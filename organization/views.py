@@ -163,6 +163,7 @@ class OrganizationSearchMixin:
     retrieve=extend_schema(
         summary="Get organization",
         description="Returns the public details of an organization identified by UUID.",
+        auth=[],
     ),
     partial_update=extend_schema(
         summary="Update organization",
@@ -211,6 +212,20 @@ class OrganizationViewSet(
         if Organization.objects.filter(user=self.request.user).exists():
             raise ValidationError({"detail": "Authenticated user already has an organization."})
         serializer.save(user=self.request.user)
+
+    def get_object(self):
+        organization = super().get_object()
+        if self.action != "retrieve":
+            return organization
+
+        user = getattr(self.request, "user", None)
+        if organization.is_approved:
+            return organization
+        if user is not None and user.is_authenticated and (
+            user.is_staff or organization.user_id == user.id
+        ):
+            return organization
+        raise NotFound("Organization not found.")
 
     def partial_update(self, request, *args, **kwargs):
         organization = self.get_object()
@@ -419,6 +434,7 @@ class AnnouncementPublicFilterMixin:
             announcement_category_parameter,
             announcement_search_parameter,
         ],
+        auth=[],
     ),
 )
 class PublicAnnouncementViewSet(
@@ -435,7 +451,7 @@ class PublicAnnouncementViewSet(
             "category",
         )
         .prefetch_related("services")
-        .filter(status=Announcement.Status.ACTIVE)
+        .filter(status=Announcement.Status.ACTIVE, organization__is_approved=True)
     )
     throttle_scope_prefix = "organization"
     throttle_scope_action_map = {
@@ -451,6 +467,7 @@ class PublicAnnouncementViewSet(
         summary="List organization jobs",
         description="Lists the jobs of the organization specified in the URL.",
         parameters=[organization_uuid_parameter],
+        auth=[],
     ),
     create=extend_schema(
         summary="Create organization job",
@@ -464,6 +481,7 @@ class PublicAnnouncementViewSet(
         summary="Get organization job",
         description="Returns the details of a job belonging to the organization specified in the URL.",
         parameters=[organization_uuid_parameter, organization_job_uuid_parameter],
+        auth=[],
     ),
     update=extend_schema(
         summary="Replace organization job",
@@ -539,6 +557,7 @@ class OrganizationJobViewSet(ActionScopedRateThrottleMixin, viewsets.ModelViewSe
         summary="List services",
         description="Lists the services of the organization job specified in the URL.",
         parameters=[organization_uuid_parameter, organization_job_uuid_parameter],
+        auth=[],
     ),
     create=extend_schema(
         summary="Create service",
@@ -552,6 +571,7 @@ class OrganizationJobViewSet(ActionScopedRateThrottleMixin, viewsets.ModelViewSe
         summary="Get service",
         description="Returns the details of a service belonging to the organization job specified in the URL.",
         parameters=[organization_uuid_parameter, organization_job_uuid_parameter, service_uuid_parameter],
+        auth=[],
     ),
     update=extend_schema(
         summary="Replace service",

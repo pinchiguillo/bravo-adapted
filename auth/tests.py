@@ -14,12 +14,14 @@ from django.core.exceptions import ImproperlyConfigured
 from django.core.files.uploadedfile import SimpleUploadedFile
 from django.core.mail import EmailMultiAlternatives, get_connection
 from django.test import SimpleTestCase, TestCase, override_settings
+from drf_spectacular.generators import SchemaGenerator
 from rest_framework.test import APITestCase
 from rest_framework.throttling import SimpleRateThrottle
 
 from auth.serializers import VerifyEmailSerializer
 from auth.views import AuthViewSet
 from Core import settings as core_settings
+from organization.models import Organization
 
 
 class AwsLocalstackIntegrationTests(TestCase):
@@ -141,6 +143,42 @@ class SettingsEnvHelpersTests(SimpleTestCase):
                     default=os.environ.get("APP_MODE", "development").strip().lower() != "production",
                 )
             )
+
+
+class OpenApiSecuritySchemaTests(SimpleTestCase):
+    @staticmethod
+    def _get_operation(path, method):
+        schema = SchemaGenerator().get_schema(request=None, public=True)
+        return schema["paths"][path][method]
+
+    def test_public_endpoints_do_not_require_auth_in_schema(self):
+        public_operations = (
+            ("/api/auth/login/", "post"),
+            ("/api/auth/register/", "post"),
+            ("/api/auth/token/refresh/", "post"),
+            ("/api/auth/verify-email/", "post"),
+            ("/api/announcements/", "get"),
+            ("/api/organizations/{uuid}/", "get"),
+            ("/api/organizations/{organization_uuid}/jobs/", "get"),
+            ("/api/organizations/{organization_uuid}/jobs/{job_uuid}/services/", "get"),
+        )
+
+        for path, method in public_operations:
+            with self.subTest(path=path, method=method):
+                operation = self._get_operation(path, method)
+                self.assertNotIn("security", operation)
+
+    def test_private_endpoints_keep_jwt_auth_in_schema(self):
+        private_operations = (
+            ("/api/auth/me/", "get"),
+            ("/api/jobs/", "get"),
+            ("/api/organizations/user/", "get"),
+        )
+
+        for path, method in private_operations:
+            with self.subTest(path=path, method=method):
+                operation = self._get_operation(path, method)
+                self.assertEqual(operation.get("security"), [{"jwtAuth": []}])
 
 
 @override_settings(
@@ -290,7 +328,29 @@ class AuthApiTests(APITestCase):
         self.assertEqual(me_response.status_code, 200)
         self.assertEqual(me_response.data["email"], self.email)
         self.assertEqual(me_response.data["preferencias"], {})
+        self.assertFalse(me_response.data["is_provider"])
+        self.assertIsNone(me_response.data["provider_uuid"])
         self.assertEqual(me_response.data["permissions"], [])
+
+    def test_me_returns_provider_uuid_for_provider_user(self):
+        organization = Organization.objects.create(
+            user=self.user,
+            name="Provider Org",
+            legal_name="Provider Org SL",
+            tax_id="B12345678",
+            billing_email="billing@provider.test",
+            billing_address="Main street 1",
+            billing_city="Madrid",
+            billing_country="ES",
+            billing_postal_code="28001",
+        )
+
+        self.client.force_authenticate(user=self.user)
+        response = self.client.get("/api/auth/me/")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertTrue(response.data["is_provider"])
+        self.assertEqual(response.data["provider_uuid"], str(organization.uuid))
 
     def test_me_returns_user_permissions_as_strings(self):
         permission = Permission.objects.create(

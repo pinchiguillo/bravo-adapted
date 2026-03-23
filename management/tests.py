@@ -483,6 +483,8 @@ class SeedDemoDataCommandTests(APITestCase):
         self.assertEqual(JobChat.objects.count(), 4)
         self.assertEqual(JobChatMessage.objects.count(), 6)
         self.assertEqual(JobChatAttachment.objects.count(), 1)
+        self.assertEqual(Organization.objects.filter(is_approved=True).count(), 1)
+        self.assertEqual(Organization.objects.filter(is_approved=False).count(), 1)
         self.assertFalse(settings.RGPD_MODULE_ENABLED)
 
         seeded_user = user_model.objects.get(email="ana.client@example.com")
@@ -517,8 +519,96 @@ class SeedDemoDataCommandTests(APITestCase):
         self.assertEqual(JobChat.objects.count(), 4)
         self.assertEqual(JobChatMessage.objects.count(), 6)
         self.assertEqual(JobChatAttachment.objects.count(), 1)
+        self.assertEqual(Organization.objects.filter(is_approved=True).count(), 1)
+        self.assertEqual(Organization.objects.filter(is_approved=False).count(), 1)
         self.assertIn("created=0", second_out.getvalue())
         self.assertIn("rgpd_consents=0", second_out.getvalue())
+
+
+class SeedAnnouncementsCommandTests(APITestCase):
+    def setUp(self):
+        user_model = get_user_model()
+        self.first_owner = user_model.objects.create_user(
+            username="seed-ann-owner-1",
+            email="seed-ann-owner-1@example.com",
+            password="testpass123",
+        )
+        self.second_owner = user_model.objects.create_user(
+            username="seed-ann-owner-2",
+            email="seed-ann-owner-2@example.com",
+            password="testpass123",
+        )
+        self.active_organization_with_services = Organization.objects.create(
+            user=self.first_owner,
+            name="Seed Org One",
+            legal_name="Seed Org One SL",
+            tax_id="SEED-ORG-1",
+            billing_email="billing1@example.com",
+            billing_address="Main 1",
+            billing_city="Madrid",
+            billing_country="ES",
+            billing_postal_code="28001",
+            status=Organization.Status.ACTIVE,
+        )
+        self.active_organization_without_services = Organization.objects.create(
+            user=self.second_owner,
+            name="Seed Org Two",
+            legal_name="Seed Org Two SL",
+            tax_id="SEED-ORG-2",
+            billing_email="billing2@example.com",
+            billing_address="Second 2",
+            billing_city="Valencia",
+            billing_country="ES",
+            billing_postal_code="46001",
+            status=Organization.Status.ACTIVE,
+        )
+        self.category = Category.objects.create(
+            name="Seed Category",
+            description="Categoria para seed announcements",
+        )
+        self.organization_job = OrganizationJob.objects.create(
+            organization=self.active_organization_with_services,
+            name="Seed Job",
+            description="Seed job",
+        )
+        self.service = Service.objects.create(
+            job=self.organization_job,
+            category=self.category,
+            name="Seed Service",
+            description="Seed service",
+        )
+
+    def test_seed_announcements_creates_one_announcement_per_active_organization(self):
+        out = StringIO()
+
+        call_command("seed_announcements", stdout=out)
+
+        self.assertEqual(Announcement.objects.count(), 2)
+        serviced_announcement = Announcement.objects.get(
+            organization=self.active_organization_with_services,
+            name="Seed Org One - Servicio destacado",
+        )
+        fallback_announcement = Announcement.objects.get(
+            organization=self.active_organization_without_services,
+            name="Seed Org Two - Servicio destacado",
+        )
+
+        self.assertEqual(serviced_announcement.category, self.category)
+        self.assertEqual(list(serviced_announcement.services.all()), [self.service])
+        self.assertEqual(fallback_announcement.category.name, "General")
+        self.assertEqual(fallback_announcement.services.count(), 0)
+        self.assertIn("announcements_created=2", out.getvalue())
+
+    def test_seed_announcements_is_idempotent(self):
+        first_out = StringIO()
+        second_out = StringIO()
+
+        call_command("seed_announcements", stdout=first_out)
+        call_command("seed_announcements", stdout=second_out)
+
+        self.assertEqual(Announcement.objects.count(), 2)
+        self.assertIn("announcements_created=0", second_out.getvalue())
+        self.assertIn("announcements_updated=2", second_out.getvalue())
 
 
 class CreateAdminUserCommandTests(APITestCase):

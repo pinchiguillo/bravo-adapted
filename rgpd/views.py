@@ -107,6 +107,7 @@ class RgpdConsentViewSet(ActionScopedRateThrottleMixin, viewsets.GenericViewSet)
         ),
         request=RgpdAnonymousConsentUpsertSerializer,
         responses={200: RgpdAnonymousConsentSerializer, 201: RgpdAnonymousConsentSerializer},
+        auth=[],
     ),
 )
 class RgpdAnonymousConsentViewSet(ActionScopedRateThrottleMixin, viewsets.GenericViewSet):

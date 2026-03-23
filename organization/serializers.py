@@ -30,6 +30,7 @@ class OrganizationPublicSerializer(OrganizationRatingMixin, serializers.ModelSer
             "uuid",
             "name",
             "verification_level",
+            "is_approved",
             "rating",
         )
         read_only_fields = ("uuid",)
@@ -49,11 +50,19 @@ class OrganizationSerializer(OrganizationRatingMixin, serializers.ModelSerialize
             "billing_country",
             "billing_postal_code",
             "verification_level",
+            "is_approved",
             "rating",
             "created_at",
             "updated_at",
         )
-        read_only_fields = ("uuid", "verification_level", "rating", "created_at", "updated_at")
+        read_only_fields = (
+            "uuid",
+            "verification_level",
+            "is_approved",
+            "rating",
+            "created_at",
+            "updated_at",
+        )
 
 
 class CategorySerializer(serializers.ModelSerializer):

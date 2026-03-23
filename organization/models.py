@@ -39,6 +39,7 @@ class Organization(models.Model):
     billing_country = models.CharField(max_length=2)
     billing_postal_code = models.CharField(max_length=20)
     verification_level = models.PositiveIntegerField(default=0)
+    is_approved = models.BooleanField(default=False)
     status = models.CharField(
         max_length=20,
         choices=Status.choices,

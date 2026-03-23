@@ -49,6 +49,7 @@ class AuthViewSet(viewsets.GenericViewSet):
     @extend_schema(
         summary="Register user",
         description="Creates a new user account and returns the registered profile along with JWT tokens.",
+        auth=[],
     )
     @action(detail=False, methods=["post"], url_path="register")
     def register(self, request):
@@ -66,6 +67,7 @@ class AuthViewSet(viewsets.GenericViewSet):
     @extend_schema(
         summary="Login",
         description="Authenticates the user with email and password and returns JWT access and refresh tokens.",
+        auth=[],
     )
     @action(detail=False, methods=["post"], url_path="login")
     def login(self, request):
@@ -76,6 +78,7 @@ class AuthViewSet(viewsets.GenericViewSet):
     @extend_schema(
         summary="Refresh token",
         description="Receives a valid refresh token and returns a new JWT access token.",
+        auth=[],
     )
     @action(detail=False, methods=["post"], url_path="token/refresh")
     def refresh(self, request):
@@ -89,6 +92,7 @@ class AuthViewSet(viewsets.GenericViewSet):
     @extend_schema(
         summary="Verify email",
         description="Validates the verification token and marks the user's email as verified.",
+        auth=[],
     )
     @action(detail=False, methods=["post"], url_path="verify-email")
     def verify_email(self, request):

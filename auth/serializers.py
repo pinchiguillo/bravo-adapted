@@ -4,6 +4,7 @@ from django.conf import settings
 from django.contrib.auth import get_user_model
 from django.contrib.auth.password_validation import validate_password
 from django.core import signing
+from django.core.exceptions import ObjectDoesNotExist
 from django.core.exceptions import ValidationError as DjangoValidationError
 from django.core.mail import send_mail
 from django.db import transaction
@@ -43,6 +44,8 @@ def send_verification_email(user):
 class UserSerializer(serializers.ModelSerializer):
     preferencias = serializers.SerializerMethodField()
     permissions = serializers.SerializerMethodField()
+    is_provider = serializers.SerializerMethodField()
+    provider_uuid = serializers.SerializerMethodField()
 
     class Meta:
         model = get_user_model()
@@ -57,6 +60,8 @@ class UserSerializer(serializers.ModelSerializer):
             "status",
             "preferencias",
             "permissions",
+            "is_provider",
+            "provider_uuid",
         )
 
     @extend_schema_field({"type": "object", "additionalProperties": {}})
@@ -66,6 +71,23 @@ class UserSerializer(serializers.ModelSerializer):
     @extend_schema_field(serializers.ListField(child=serializers.CharField()))
     def get_permissions(self, obj):
         return sorted(obj.get_all_permissions())
+
+    @extend_schema_field(serializers.BooleanField())
+    def get_is_provider(self, obj):
+        return self._get_provider(obj) is not None
+
+    @extend_schema_field(serializers.UUIDField(allow_null=True))
+    def get_provider_uuid(self, obj):
+        provider = self._get_provider(obj)
+        if provider is None:
+            return None
+        return str(provider.uuid)
+
+    def _get_provider(self, obj):
+        try:
+            return obj.organization
+        except ObjectDoesNotExist:
+            return None
 
 
 class RegisterSerializer(serializers.ModelSerializer):

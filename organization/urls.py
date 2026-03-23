@@ -8,7 +8,6 @@ from .views import (
     OrganizationSearchViewSet,
     OrganizationUserViewSet,
     OrganizationViewSet,
-    PublicAnnouncementViewSet,
     ServiceViewSet,
     SubserviceViewSet,
 )
@@ -36,15 +35,9 @@ announcement_list = AnnouncementViewSet.as_view({"get": "list", "post": "create"
 announcement_detail = AnnouncementViewSet.as_view(
     {"get": "retrieve", "put": "update", "patch": "partial_update", "delete": "destroy"}
 )
-public_announcement_list = PublicAnnouncementViewSet.as_view({"get": "list"})
 organization_search = OrganizationSearchViewSet.as_view({"get": "list"})
 
 urlpatterns = [
-    path(
-        "announcements/",
-        public_announcement_list,
-        name="organization-public-announcement-list",
-    ),
     path(
         "search/",
         organization_search,

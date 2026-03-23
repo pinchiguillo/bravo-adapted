@@ -4,6 +4,55 @@ info:
   version: 1.0.0
   description: OpenAPI documentation for the Bravo backend.
 paths:
+  /api/announcements/:
+    get:
+      operationId: announcements_list
+      description: Lists active announcements. Supports optional filtering by category
+        UUIDs and plain text search.
+      summary: List public announcements
+      parameters:
+      - in: query
+        name: categories
+        schema:
+          type: array
+          items:
+            type: string
+            format: uuid
+        description: Optional list of category UUIDs used to filter announcements.
+        explode: true
+        style: form
+      - in: query
+        name: category
+        schema:
+          type: string
+        description: Single category UUID filter kept for backwards compatibility.
+      - name: page
+        required: false
+        in: query
+        description: A page number within the paginated result set.
+        schema:
+          type: integer
+      - name: page_size
+        required: false
+        in: query
+        description: Number of results to return per page.
+        schema:
+          type: integer
+      - in: query
+        name: search
+        schema:
+          type: string
+        description: Optional text used to filter announcements by their visible text
+          fields.
+      tags:
+      - announcements
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedAnnouncementList'
+          description: ''
   /api/auth/login/:
     post:
       operationId: auth_login_create
@@ -24,9 +73,6 @@ paths:
             schema:
               $ref: '#/components/schemas/EmailTokenObtainPair'
         required: true
-      security:
-      - jwtAuth: []
-      - {}
       responses:
         '200':
           content:
@@ -71,9 +117,6 @@ paths:
             schema:
               $ref: '#/components/schemas/Register'
         required: true
-      security:
-      - jwtAuth: []
-      - {}
       responses:
         '200':
           content:
@@ -100,9 +143,6 @@ paths:
             schema:
               $ref: '#/components/schemas/TokenRefresh'
         required: true
-      security:
-      - jwtAuth: []
-      - {}
       responses:
         '200':
           content:
@@ -130,9 +170,6 @@ paths:
             schema:
               $ref: '#/components/schemas/VerifyEmail'
         required: true
-      security:
-      - jwtAuth: []
-      - {}
       responses:
         '200':
           content:
@@ -143,10 +180,26 @@ paths:
   /api/jobs/:
     get:
       operationId: jobs_list
-      description: Searches the jobs where the authenticated user participates as
-        a client or organization.
+      description: Lists the jobs where the authenticated user participates as a client
+        or organization. Supports optional filtering by category UUIDs and plain text
+        search.
       summary: Search jobs
       parameters:
+      - in: query
+        name: categories
+        schema:
+          type: array
+          items:
+            type: string
+            format: uuid
+        description: Optional list of category UUIDs used to filter accessible jobs.
+        explode: true
+        style: form
+      - in: query
+        name: category
+        schema:
+          type: string
+        description: Single category UUID filter kept for backwards compatibility.
       - name: page
         required: false
         in: query
@@ -1413,7 +1466,7 @@ paths:
           description: Authenticated user already has an organization.
   /api/organizations/{organization_uuid}/announcements/:
     get:
-      operationId: organizations_announcements_list_2
+      operationId: organizations_announcements_list
       description: Lists announcements for the organization specified in the URL.
       summary: List announcements
       parameters:
@@ -1658,9 +1711,6 @@ paths:
           type: integer
       tags:
       - organizations
-      security:
-      - jwtAuth: []
-      - {}
       responses:
         '200':
           content:
@@ -1724,9 +1774,6 @@ paths:
         required: true
       tags:
       - organizations
-      security:
-      - jwtAuth: []
-      - {}
       responses:
         '200':
           content:
@@ -1869,9 +1916,6 @@ paths:
           type: integer
       tags:
       - organizations
-      security:
-      - jwtAuth: []
-      - {}
       responses:
         '200':
           content:
@@ -1947,9 +1991,6 @@ paths:
         required: true
       tags:
       - organizations
-      security:
-      - jwtAuth: []
-      - {}
       responses:
         '200':
           content:
@@ -2370,9 +2411,6 @@ paths:
         required: true
       tags:
       - organizations
-      security:
-      - jwtAuth: []
-      - {}
       responses:
         '200':
           content:
@@ -2432,58 +2470,6 @@ paths:
       responses:
         '204':
           description: No response body
-  /api/organizations/announcements/:
-    get:
-      operationId: organizations_announcements_list
-      description: Lists active announcements. Supports optional filtering by category
-        UUIDs and plain text search.
-      summary: List public announcements
-      parameters:
-      - in: query
-        name: categories
-        schema:
-          type: array
-          items:
-            type: string
-            format: uuid
-        description: Optional list of category UUIDs used to filter announcements.
-        explode: true
-        style: form
-      - in: query
-        name: category
-        schema:
-          type: string
-        description: Single category UUID filter kept for backwards compatibility.
-      - name: page
-        required: false
-        in: query
-        description: A page number within the paginated result set.
-        schema:
-          type: integer
-      - name: page_size
-        required: false
-        in: query
-        description: Number of results to return per page.
-        schema:
-          type: integer
-      - in: query
-        name: search
-        schema:
-          type: string
-        description: Optional text used to filter announcements by their visible text
-          fields.
-      tags:
-      - organizations
-      security:
-      - jwtAuth: []
-      - {}
-      responses:
-        '200':
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/PaginatedAnnouncementList'
-          description: ''
   /api/organizations/categories/:
     get:
       operationId: organizations_categories_list
@@ -2986,6 +2972,10 @@ components:
           type: integer
         plan_price:
           type: integer
+        chat_uuid:
+          type: string
+          nullable: true
+          readOnly: true
         status:
           $ref: '#/components/schemas/JobStatusEnum'
         organization_rating:
@@ -3003,6 +2993,7 @@ components:
           readOnly: true
       required:
       - announcement
+      - chat_uuid
       - created_at
       - id
       - plan_price
@@ -3675,6 +3666,10 @@ components:
           type: integer
         plan_price:
           type: integer
+        chat_uuid:
+          type: string
+          nullable: true
+          readOnly: true
         status:
           $ref: '#/components/schemas/JobStatusEnum'
         organization_rating:
@@ -4169,11 +4164,21 @@ components:
           items:
             type: string
           readOnly: true
+        is_provider:
+          type: boolean
+          readOnly: true
+        provider_uuid:
+          type: string
+          format: uuid
+          nullable: true
+          readOnly: true
       required:
       - email
       - id
+      - is_provider
       - permissions
       - preferencias
+      - provider_uuid
       - username
       - uuid
     VerifyEmail:
