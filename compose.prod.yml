@@ -106,6 +106,7 @@ services:
       AWS_DEFAULT_REGION: ${AWS_DEFAULT_REGION}
       AWS_STORAGE_BUCKET_NAME: ${AWS_STORAGE_BUCKET_NAME}
       DEFAULT_FROM_EMAIL: ${DEFAULT_FROM_EMAIL}
+      LOCALSTACK_ACKNOWLEDGE_ACCOUNT_REQUIREMENT: ${LOCALSTACK_ACKNOWLEDGE_ACCOUNT_REQUIREMENT:-1}
     volumes:
       - localstack_data:/var/lib/localstack
       - ./docker/localstack/init:/etc/localstack/init/ready.d
