@@ -14,7 +14,7 @@ from .models import (
 class OrganizationRatingMixin(serializers.Serializer):
     rating = serializers.SerializerMethodField()
 
-    def get_rating(self, obj):
+    def get_rating(self, obj) -> str | None:
         rating = getattr(obj, "calculated_rating", None)
         if rating is None:
             rating = obj.get_rating()
