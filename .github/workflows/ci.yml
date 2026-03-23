@@ -66,8 +66,8 @@ jobs:
           echo "Waiting for LocalStack bootstrap resources (bucket=$bucket_name, sender=$sender_email)..."
           for attempt in $(seq 1 60); do
             if docker compose exec -T localstack awslocal s3api head-bucket --bucket "$bucket_name" >/dev/null 2>&1; then
-              identity_count="$(docker compose exec -T localstack awslocal ses list-identities --identity-type EmailAddress --query \"length(Identities[?@=='$sender_email'])\" --output text 2>/dev/null || true)"
-              if [ "$identity_count" = "1" ]; then
+              identities="$(docker compose exec -T localstack awslocal ses list-identities --identity-type EmailAddress --output text 2>/dev/null || true)"
+              if echo "$identities" | grep -Fq "$sender_email"; then
                 echo "LocalStack bootstrap resources are ready"
                 break
               fi
