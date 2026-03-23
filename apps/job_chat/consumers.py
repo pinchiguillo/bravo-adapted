@@ -57,7 +57,7 @@ class JobChatConsumer(AsyncJsonWebsocketConsumer):
     @database_sync_to_async
     def _user_has_chat_access(self, chat_uuid, user_id):
         return JobChat.objects.filter(uuid=chat_uuid).filter(
-            Q(job__user_id=user_id) | Q(job__organization__user_id=user_id)
+            Q(job__user_id=user_id) | Q(job__announcement__organization__user_id=user_id)
         ).exists()
 
     @database_sync_to_async
@@ -82,7 +82,7 @@ class JobChatConsumer(AsyncJsonWebsocketConsumer):
         chat = (
             JobChat.objects.select_related("job")
             .filter(uuid=chat_uuid)
-            .filter(Q(job__user_id=sender_id) | Q(job__organization__user_id=sender_id))
+            .filter(Q(job__user_id=sender_id) | Q(job__announcement__organization__user_id=sender_id))
             .first()
         )
         if chat is None:

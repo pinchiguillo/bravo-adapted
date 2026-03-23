@@ -890,6 +890,7 @@ class JobsApiTests(APITestCase):
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertEqual(response.data["chat_uuid"], str(job.chat.uuid))
 
+    @override_settings(AUTH_BYPASS_EMAIL_VERIFICATION=False)
     def test_unverified_user_cannot_access_jobs_api(self):
         unverified_user = get_user_model().objects.create_user(
             username="jobs-unverified",
@@ -1229,6 +1230,10 @@ class JobChatWebSocketTests(TransactionTestCase):
     def setUp(self):
         cache.clear()
         user_model = get_user_model()
+        self.category, _ = Category.objects.get_or_create(
+            name="General",
+            defaults={"description": "Categoria general"},
+        )
         self.client_user = user_model.objects.create_user(
             username="ws-client",
             email="ws-client@example.com",
@@ -1366,6 +1371,7 @@ class JobChatWebSocketTests(TransactionTestCase):
         self.assertFalse(connected)
         self.assertEqual(close_code, 4403)
 
+    @override_settings(AUTH_BYPASS_EMAIL_VERIFICATION=False)
     def test_rejects_connection_when_user_is_not_verified(self):
         unverified_user = get_user_model().objects.create_user(
             username="ws-unverified",

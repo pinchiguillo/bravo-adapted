@@ -27,7 +27,7 @@ jobs:
         run: docker compose run --rm --no-deps app ruff check --config .github/ruff.toml Core common apps manage.py
 
       - name: Run tests
-        run: docker compose run --rm --no-deps app python manage.py test
+        run: docker compose run --rm --no-deps app python manage.py test apps.auth apps.organization apps.jobs apps.job_chat apps.management
 
       - name: Cleanup
         if: always()

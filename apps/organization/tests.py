@@ -1295,6 +1295,7 @@ class OrganizationSearchWebSocketTests(TransactionTestCase):
                 "uuid": str(self.organization.uuid),
                 "name": self.organization.name,
                 "verification_level": 0,
+                "is_approved": False,
                 "rating": None,
             },
         )
