@@ -45,8 +45,9 @@ class JobChatViewSet(
     queryset = JobChat.objects.select_related(
         "job",
         "job__user",
-        "job__organization",
-        "job__organization__user",
+        "job__announcement",
+        "job__announcement__organization",
+        "job__announcement__organization__user",
     )
     lookup_field = "uuid"
     throttle_scope_prefix = "jobs"
@@ -63,7 +64,7 @@ class JobChatViewSet(
         if getattr(user, "is_staff", False):
             return self.queryset
         return self.queryset.filter(
-            Q(job__user=user) | Q(job__organization__user=user)
+            Q(job__user=user) | Q(job__announcement__organization__user=user)
         ).distinct()
 
     def get_permissions(self):
@@ -153,4 +154,3 @@ class JobChatViewSet(
             },
             status=status.HTTP_200_OK,
         )
-

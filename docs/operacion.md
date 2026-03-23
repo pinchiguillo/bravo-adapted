@@ -25,8 +25,10 @@ docker compose -f compose.yml ps
 ```
 
 Debe verse `app`, `postgres` y `localstack` en estado `running`.
-Debe verse `nginx`, `app`, `postgres` y `localstack` en estado `running`.
+Debe verse `nginx`, `app`, `postgres`, `adminer` y `localstack` en estado `running`.
 El arranque esperado es: primero `postgres` y `localstack` en estado `healthy`, después `app`, y finalmente `nginx`.
+En desarrollo la API queda disponible directamente en `http://localhost:8000/` y también a través de `nginx` en `http://localhost:24356/`.
+La base de datos PostgreSQL queda disponible desde el host en `localhost:5432` o en el valor configurado en `POSTGRES_PORT`.
 
 ### Imagen de producción para websockets
 
@@ -103,6 +105,27 @@ docker compose -f compose.yml logs postgres
 ```
 
 El healthcheck usa `pg_isready -U postgres -d auth_db`.
+
+### Acceso PostgreSQL desde host
+
+Se puede conectar cualquier cliente usando:
+
+- Host: `127.0.0.1`
+- Puerto: `5432` o el valor de `POSTGRES_PORT`
+- Base de datos: valor de `POSTGRES_DB` en `.env` (por defecto `auth_db`)
+- Usuario: valor de `POSTGRES_USER` en `.env` (por defecto `postgres`)
+- Password: valor de `POSTGRES_PASSWORD` en `.env` (por defecto `postgres`)
+
+### Acceso web a PostgreSQL
+
+`Adminer` queda disponible en `http://localhost:24357`.
+Para iniciar sesión usar:
+
+- Sistema: `PostgreSQL`
+- Servidor: `postgres`
+- Usuario: valor de `POSTGRES_USER` en `.env` (por defecto `postgres`)
+- Password: valor de `POSTGRES_PASSWORD` en `.env` (por defecto `postgres`)
+- Base de datos: valor de `POSTGRES_DB` en `.env` (por defecto `auth_db`)
 
 ### Salud interna de LocalStack
 

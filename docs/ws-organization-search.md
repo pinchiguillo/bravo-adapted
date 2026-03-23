@@ -24,7 +24,9 @@ Formato esperado:
 Authorization: Bearer <access_token>
 ```
 
-Si el usuario no esta autenticado, la conexion se cierra con codigo `4401`.
+Si el usuario no esta autenticado, el servidor acepta el handshake y cierra a continuacion con codigo WebSocket `4401`.
+
+Ese detalle es intencional: evita que el cliente observe un rechazo HTTP `403` durante el handshake y mantiene el contrato documentado de cierre `4401`.
 
 ## Restricciones
 

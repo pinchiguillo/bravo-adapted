@@ -9,10 +9,10 @@ class OrganizationQuerySet(models.QuerySet):
     def with_rating(self):
         return self.annotate(
             calculated_rating=Avg(
-                "jobs__organization_rating",
+                "announcements__jobs__organization_rating",
                 filter=Q(
-                    jobs__status="completed",
-                    jobs__organization_rating__isnull=False,
+                    announcements__jobs__status="completed",
+                    announcements__jobs__organization_rating__isnull=False,
                 ),
             )
         )
@@ -56,16 +56,38 @@ class Organization(models.Model):
         return self.name
 
     def get_rating(self):
-        return self.jobs.filter(
-            status="completed",
-            organization_rating__isnull=False,
-        ).aggregate(rating=Avg("organization_rating"))["rating"]
+        return self.announcements.filter(
+            jobs__status="completed",
+            jobs__organization_rating__isnull=False,
+        ).aggregate(rating=Avg("jobs__organization_rating"))["rating"]
+
+
+class OrganizationJob(models.Model):
+    uuid = models.UUIDField(default=uuid.uuid4, unique=True, editable=False)
+    organization = models.ForeignKey(
+        Organization, on_delete=models.CASCADE, related_name="organization_jobs"
+    )
+    name = models.CharField(max_length=120)
+    description = models.TextField(blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(
+                fields=["organization", "name"], name="unique_organization_job_name"
+            )
+        ]
+        ordering = ["organization_id", "name"]
+
+    def __str__(self):
+        return f"{self.organization_id}:{self.name}"
 
 
 class Service(models.Model):
     uuid = models.UUIDField(default=uuid.uuid4, unique=True, editable=False)
-    organization = models.ForeignKey(
-        Organization, on_delete=models.CASCADE, related_name="services"
+    job = models.ForeignKey(
+        OrganizationJob, on_delete=models.CASCADE, related_name="services"
     )
     category = models.ForeignKey(
         "Category",
@@ -79,14 +101,12 @@ class Service(models.Model):
 
     class Meta:
         constraints = [
-            models.UniqueConstraint(
-                fields=["organization", "name"], name="unique_organization_service_name"
-            )
+            models.UniqueConstraint(fields=["job", "name"], name="unique_job_service_name")
         ]
-        ordering = ["organization_id", "name"]
+        ordering = ["job_id", "name"]
 
     def __str__(self):
-        return f"{self.organization_id}:{self.name}"
+        return f"{self.job_id}:{self.name}"
 
 
 class Subservice(models.Model):

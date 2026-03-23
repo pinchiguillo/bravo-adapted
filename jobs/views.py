@@ -19,12 +19,33 @@ job_search_parameter = OpenApiParameter(
     description="Search term with at least 3 characters to filter accessible jobs.",
 )
 
+job_category_parameter = OpenApiParameter(
+    name="category",
+    type=str,
+    location=OpenApiParameter.QUERY,
+    required=False,
+    description="Single category UUID filter kept for backwards compatibility.",
+)
+
+job_categories_parameter = OpenApiParameter(
+    name="categories",
+    type={"type": "array", "items": {"type": "string", "format": "uuid"}},
+    location=OpenApiParameter.QUERY,
+    required=False,
+    explode=True,
+    style="form",
+    description="Optional list of category UUIDs used to filter accessible jobs.",
+)
+
 
 @extend_schema_view(
     list=extend_schema(
         summary="Search jobs",
-        description="Searches the jobs where the authenticated user participates as a client or organization.",
-        parameters=[job_search_parameter],
+        description=(
+            "Lists the jobs where the authenticated user participates as a client or "
+            "organization. Supports optional filtering by category UUIDs and plain text search."
+        ),
+        parameters=[job_categories_parameter, job_category_parameter, job_search_parameter],
     ),
     create=extend_schema(
         summary="Create job",
@@ -52,8 +73,9 @@ class JobViewSet(ActionScopedRateThrottleMixin, viewsets.ModelViewSet):
     permission_classes = [permissions.IsAuthenticated]
     queryset = Job.objects.select_related(
         "user",
-        "organization",
-        "organization__user",
+        "announcement",
+        "announcement__organization",
+        "announcement__organization__user",
         "plan_price",
         "plan_price__subservice",
         "plan_price__subservice__service",
@@ -76,10 +98,12 @@ class JobViewSet(ActionScopedRateThrottleMixin, viewsets.ModelViewSet):
             queryset = self.queryset
         else:
             user = self.request.user
-            queryset = self.queryset.filter(Q(user=user) | Q(organization__user=user)).distinct()
+            queryset = self.queryset.filter(
+                Q(user=user) | Q(announcement__organization__user=user)
+            ).distinct()
 
         if self.action == "list":
-            queryset = self._filter_queryset_by_search(queryset)
+            queryset = self._filter_queryset(queryset)
 
         return queryset
 
@@ -93,29 +117,60 @@ class JobViewSet(ActionScopedRateThrottleMixin, viewsets.ModelViewSet):
     def perform_create(self, serializer):
         serializer.save(user=self.request.user)
 
-    def _filter_queryset_by_search(self, queryset):
+    def _filter_queryset(self, queryset):
+        category_uuids = self._get_category_filters()
+        if category_uuids:
+            queryset = queryset.filter(announcement__category__uuid__in=category_uuids)
+
         search_query = self._get_search_query()
-        search_filter = (
-            Q(status__icontains=search_query)
-            | Q(user__email__icontains=search_query)
-            | Q(user__username__icontains=search_query)
-            | Q(organization__name__icontains=search_query)
-            | Q(organization__legal_name__icontains=search_query)
-        )
-        search_uuid = self._parse_uuid(search_query)
-        if search_uuid is not None:
-            search_filter |= Q(uuid=search_uuid) | Q(organization__uuid=search_uuid)
-        return queryset.filter(search_filter).distinct()
+        if search_query:
+            search_filter = (
+                Q(status__icontains=search_query)
+                | Q(user__email__icontains=search_query)
+                | Q(user__username__icontains=search_query)
+                | Q(announcement__name__icontains=search_query)
+                | Q(announcement__organization__name__icontains=search_query)
+                | Q(announcement__organization__legal_name__icontains=search_query)
+            )
+            search_uuid = self._parse_uuid(search_query)
+            if search_uuid is not None:
+                search_filter |= (
+                    Q(uuid=search_uuid)
+                    | Q(announcement__uuid=search_uuid)
+                    | Q(announcement__organization__uuid=search_uuid)
+                )
+            queryset = queryset.filter(search_filter)
+
+        return queryset.distinct()
 
     def _get_search_query(self):
         search_query = str(self.request.query_params.get("search", "")).strip()
         if not search_query:
-            raise ValidationError({"search": "This query parameter is required."})
+            return ""
         if len(search_query) < 3:
             raise ValidationError(
                 {"search": "Ensure this query parameter has at least 3 characters."}
             )
         return search_query
+
+    def _get_category_filters(self):
+        query_params = self.request.query_params
+        if hasattr(query_params, "getlist"):
+            raw_values = query_params.getlist("categories")
+        else:
+            raw_categories = query_params.get("categories", [])
+            raw_values = raw_categories if isinstance(raw_categories, list) else [raw_categories]
+        if not raw_values:
+            single_category = str(self.request.query_params.get("category", "")).strip()
+            return [single_category] if single_category else []
+
+        category_uuids = []
+        for raw_value in raw_values:
+            for part in str(raw_value).split(","):
+                normalized_value = part.strip()
+                if normalized_value:
+                    category_uuids.append(normalized_value)
+        return category_uuids
 
     def _parse_uuid(self, raw_value):
         try:

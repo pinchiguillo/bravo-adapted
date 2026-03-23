@@ -1,3 +1,4 @@
+import os
 import uuid
 from unittest.mock import patch
 
@@ -5,18 +6,20 @@ import boto3
 from botocore.exceptions import BotoCoreError, ClientError, EndpointConnectionError
 from django.conf import settings
 from django.contrib.auth import get_user_model
+from django.contrib.auth.models import Permission
+from django.contrib.contenttypes.models import ContentType
 from django.core import mail
 from django.core.cache import cache
 from django.core.exceptions import ImproperlyConfigured
 from django.core.files.uploadedfile import SimpleUploadedFile
 from django.core.mail import EmailMultiAlternatives, get_connection
 from django.test import SimpleTestCase, TestCase, override_settings
-from rest_framework.throttling import SimpleRateThrottle
 from rest_framework.test import APITestCase
+from rest_framework.throttling import SimpleRateThrottle
 
-from Core import settings as core_settings
 from auth.serializers import VerifyEmailSerializer
 from auth.views import AuthViewSet
+from Core import settings as core_settings
 
 
 class AwsLocalstackIntegrationTests(TestCase):
@@ -121,10 +124,29 @@ class SettingsEnvHelpersTests(SimpleTestCase):
             with self.assertRaises(ImproperlyConfigured):
                 core_settings.require_env("MISSING_VAR")
 
+    def test_auth_bypass_email_verification_defaults_to_true_in_development(self):
+        with patch.dict("os.environ", {"APP_MODE": "development"}, clear=True):
+            self.assertTrue(
+                core_settings.env_bool(
+                    "AUTH_BYPASS_EMAIL_VERIFICATION",
+                    default=os.environ.get("APP_MODE", "development").strip().lower() != "production",
+                )
+            )
+
+    def test_auth_bypass_email_verification_defaults_to_false_in_production(self):
+        with patch.dict("os.environ", {"APP_MODE": "production"}, clear=True):
+            self.assertFalse(
+                core_settings.env_bool(
+                    "AUTH_BYPASS_EMAIL_VERIFICATION",
+                    default=os.environ.get("APP_MODE", "development").strip().lower() != "production",
+                )
+            )
+
 
 @override_settings(
     EMAIL_BACKEND="django.core.mail.backends.locmem.EmailBackend",
     AUTH_VERIFY_EMAIL_URL_TEMPLATE="https://frontend.example.com/verify-email?token={token}",
+    AUTH_BYPASS_EMAIL_VERIFICATION=False,
 )
 class AuthApiTests(APITestCase):
     def setUp(self):
@@ -160,6 +182,8 @@ class AuthApiTests(APITestCase):
         self.assertFalse(response.data["email_verified"])
         self.assertIn("access", response.data)
         self.assertIn("refresh", response.data)
+        self.assertEqual(response.data["preferencias"], {})
+        self.assertEqual(response.data["permissions"], [])
 
     def test_login_rejects_users_with_unverified_email(self):
         self.user.email_verified = False
@@ -265,6 +289,22 @@ class AuthApiTests(APITestCase):
 
         self.assertEqual(me_response.status_code, 200)
         self.assertEqual(me_response.data["email"], self.email)
+        self.assertEqual(me_response.data["preferencias"], {})
+        self.assertEqual(me_response.data["permissions"], [])
+
+    def test_me_returns_user_permissions_as_strings(self):
+        permission = Permission.objects.create(
+            codename="can_review_profile",
+            name="Can review profile",
+            content_type=ContentType.objects.get_for_model(get_user_model()),
+        )
+        self.user.user_permissions.add(permission)
+
+        self.client.force_authenticate(user=self.user)
+        response = self.client.get("/api/auth/me/")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.data["permissions"], ["custom_auth.can_review_profile"])
 
     def test_me_rejects_suspended_authenticated_user(self):
         self.user.status = self.user.Status.SUSPENDED

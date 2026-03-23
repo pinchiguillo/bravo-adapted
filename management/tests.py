@@ -18,6 +18,7 @@ from organization.models import (
     AnnouncementReview,
     Category,
     Organization,
+    OrganizationJob,
     Service,
     ServicePrice,
     Subservice,
@@ -54,12 +55,17 @@ class ManagementApiTests(APITestCase):
             billing_country="ES",
             billing_postal_code="28001",
         )
+        self.organization_job = OrganizationJob.objects.create(
+            organization=self.organization,
+            name="Managed Services",
+            description="Managed org job",
+        )
         self.category, _ = Category.objects.get_or_create(
             name="Managed Category",
             defaults={"description": "Categoria gestionada"},
         )
         self.service = Service.objects.create(
-            organization=self.organization,
+            job=self.organization_job,
             category=self.category,
             name="Managed Plan",
             description="",
@@ -76,9 +82,17 @@ class ManagementApiTests(APITestCase):
             charging_type=ServicePrice.ChargingType.PER_PROJECT,
             effective_from=date(2026, 1, 1),
         )
+        self.announcement = Announcement.objects.create(
+            organization=self.organization,
+            category=self.category,
+            name="Managed Announcement",
+            location="Madrid",
+            announcement="Managed plan disponible",
+        )
+        self.announcement.services.add(self.service)
         self.job = Job.objects.create(
             user=self.staff_candidate,
-            organization=self.organization,
+            announcement=self.announcement,
             plan_price=self.service_price,
             status=Job.Status.PENDING,
         )
@@ -237,6 +251,33 @@ class ManagementApiTests(APITestCase):
         self.job.refresh_from_db()
         self.assertEqual(self.job.status, Job.Status.SUSPENDED)
 
+    def test_unauthenticated_user_cannot_deactivate_job(self):
+        response = self.client.post(
+            reverse("management-jobs-deactivate", kwargs={"uuid": self.job.uuid})
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_401_UNAUTHORIZED)
+
+    def test_non_staff_user_cannot_deactivate_job(self):
+        self.client.force_authenticate(user=self.staff_candidate)
+
+        response = self.client.post(
+            reverse("management-jobs-deactivate", kwargs={"uuid": self.job.uuid})
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
+
+    def test_suspended_admin_cannot_activate_job(self):
+        self.admin_user.status = self.admin_user.Status.SUSPENDED
+        self.admin_user.save(update_fields=["status"])
+        self.client.force_authenticate(user=self.admin_user)
+
+        response = self.client.post(
+            reverse("management-jobs-activate", kwargs={"uuid": self.job.uuid})
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
+
     def test_suspended_admin_cannot_access_management_endpoints(self):
         self.admin_user.status = self.admin_user.Status.SUSPENDED
         self.admin_user.save(update_fields=["status"])
@@ -253,7 +294,7 @@ class ManagementApiTests(APITestCase):
             reverse("management-jobs-list"),
             {
                 "user": str(self.staff_candidate.uuid),
-                "organization": str(self.organization.uuid),
+                "announcement": str(self.announcement.uuid),
                 "plan_price": self.service_price.id,
                 "status": Job.Status.ACTIVE,
             },

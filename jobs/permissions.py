@@ -37,4 +37,7 @@ class IsJobMember(permissions.BasePermission):
     def has_object_permission(self, request, view, obj):
         if not user_has_jobs_access(request.user):
             return False
-        return obj.user_id == request.user.id or obj.organization.user_id == request.user.id
+        return (
+            obj.user_id == request.user.id
+            or obj.announcement.organization.user_id == request.user.id
+        )

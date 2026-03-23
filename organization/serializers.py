@@ -2,9 +2,9 @@ from rest_framework import serializers
 
 from .models import (
     Announcement,
-    AnnouncementReview,
     Category,
     Organization,
+    OrganizationJob,
     Service,
     ServicePrice,
     Subservice,
@@ -63,11 +63,20 @@ class CategorySerializer(serializers.ModelSerializer):
         read_only_fields = ("uuid",)
 
 
-class AnnouncementReviewSerializer(serializers.ModelSerializer):
+class OrganizationJobSerializer(serializers.ModelSerializer):
+    organization = serializers.UUIDField(source="organization.uuid", read_only=True)
+
     class Meta:
-        model = AnnouncementReview
-        fields = ("uuid", "content", "created_at", "updated_at")
-        read_only_fields = fields
+        model = OrganizationJob
+        fields = (
+            "uuid",
+            "organization",
+            "name",
+            "description",
+            "created_at",
+            "updated_at",
+        )
+        read_only_fields = ("uuid", "organization", "created_at", "updated_at")
 
 
 class AnnouncementSerializer(serializers.ModelSerializer):
@@ -75,11 +84,10 @@ class AnnouncementSerializer(serializers.ModelSerializer):
     category = serializers.SlugRelatedField(queryset=Category.objects.all(), slug_field="uuid")
     services = serializers.SlugRelatedField(
         many=True,
-        queryset=Service.objects.select_related("organization"),
+        queryset=Service.objects.select_related("job", "job__organization"),
         slug_field="uuid",
         required=False,
     )
-    review = AnnouncementReviewSerializer(read_only=True)
 
     class Meta:
         model = Announcement
@@ -97,7 +105,6 @@ class AnnouncementSerializer(serializers.ModelSerializer):
             "latitude",
             "longitude",
             "view_count",
-            "review",
             "created_at",
             "updated_at",
         )
@@ -105,7 +112,6 @@ class AnnouncementSerializer(serializers.ModelSerializer):
             "uuid",
             "organization",
             "view_count",
-            "review",
             "created_at",
             "updated_at",
         )
@@ -124,7 +130,9 @@ class AnnouncementSerializer(serializers.ModelSerializer):
         organization = self.context.get("organization")
         if organization is None:
             return value
-        invalid_services = [service for service in value if service.organization_id != organization.id]
+        invalid_services = [
+            service for service in value if service.job.organization_id != organization.id
+        ]
         if invalid_services:
             raise serializers.ValidationError("Services must belong to the organization in the URL.")
         return value
@@ -137,7 +145,8 @@ class AnnouncementSerializer(serializers.ModelSerializer):
 
 
 class ServiceSerializer(serializers.ModelSerializer):
-    organization = serializers.UUIDField(source="organization.uuid", read_only=True)
+    organization = serializers.UUIDField(source="job.organization.uuid", read_only=True)
+    job = serializers.UUIDField(source="job.uuid", read_only=True)
     category = serializers.SlugRelatedField(queryset=Category.objects.all(), slug_field="uuid")
 
     class Meta:
@@ -145,13 +154,14 @@ class ServiceSerializer(serializers.ModelSerializer):
         fields = (
             "uuid",
             "organization",
+            "job",
             "category",
             "name",
             "description",
             "created_at",
             "updated_at",
         )
-        read_only_fields = ("uuid", "organization", "created_at", "updated_at")
+        read_only_fields = ("uuid", "organization", "job", "created_at", "updated_at")
 
     def to_representation(self, instance):
         data = super().to_representation(instance)
@@ -176,7 +186,10 @@ class ServicePriceSerializer(serializers.ModelSerializer):
 
 
 class SubserviceSerializer(serializers.ModelSerializer):
-    service = serializers.SlugRelatedField(queryset=Service.objects.all(), slug_field="uuid")
+    service = serializers.SlugRelatedField(
+        queryset=Service.objects.select_related("job", "job__organization"),
+        slug_field="uuid",
+    )
     service_prices = ServicePriceSerializer(source="price_table", many=True, read_only=True)
 
     class Meta:

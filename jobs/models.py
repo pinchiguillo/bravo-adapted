@@ -4,7 +4,7 @@ from django.conf import settings
 from django.core.validators import MinValueValidator
 from django.db import models
 
-from organization.models import Organization, ServicePrice
+from organization.models import Announcement, ServicePrice
 
 
 class Job(models.Model):
@@ -22,8 +22,8 @@ class Job(models.Model):
         on_delete=models.CASCADE,
         related_name="jobs",
     )
-    organization = models.ForeignKey(
-        Organization,
+    announcement = models.ForeignKey(
+        Announcement,
         on_delete=models.CASCADE,
         related_name="jobs",
     )
@@ -48,3 +48,11 @@ class Job(models.Model):
 
     def __str__(self):
         return f"{self.uuid}:{self.status}"
+
+    @property
+    def organization(self):
+        return self.announcement.organization
+
+    @property
+    def organization_id(self):
+        return self.announcement.organization_id

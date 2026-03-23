@@ -5,7 +5,7 @@ from rest_framework import serializers
 
 from jobs.models import Job
 from management.models import FeatureFlag
-from organization.models import Organization
+from organization.models import Announcement, Organization
 from organization.serializers import OrganizationRatingMixin
 
 
@@ -98,7 +98,10 @@ class ManagementOrganizationSerializer(OrganizationRatingMixin, serializers.Mode
 
 class ManagementJobSerializer(serializers.ModelSerializer):
     user = serializers.SlugRelatedField(queryset=get_user_model().objects.all(), slug_field="uuid")
-    organization = serializers.SlugRelatedField(queryset=Organization.objects.all(), slug_field="uuid")
+    announcement = serializers.SlugRelatedField(
+        queryset=Announcement.objects.select_related("organization"),
+        slug_field="uuid",
+    )
 
     class Meta:
         model = Job
@@ -106,7 +109,7 @@ class ManagementJobSerializer(serializers.ModelSerializer):
             "id",
             "uuid",
             "user",
-            "organization",
+            "announcement",
             "plan_price",
             "status",
             "organization_rating",
@@ -116,12 +119,17 @@ class ManagementJobSerializer(serializers.ModelSerializer):
         read_only_fields = ("id", "uuid", "created_at", "updated_at")
 
     def validate(self, attrs):
-        organization = attrs.get("organization", getattr(self.instance, "organization", None))
+        announcement = attrs.get("announcement", getattr(self.instance, "announcement", None))
         plan_price = attrs.get("plan_price", getattr(self.instance, "plan_price", None))
-        if organization is not None and plan_price is not None:
-            if plan_price.subservice.service.organization_id != organization.id:
+        if announcement is not None and plan_price is not None:
+            service = plan_price.subservice.service
+            if service.job.organization_id != announcement.organization_id:
                 raise serializers.ValidationError(
-                    {"plan_price": "Plan price does not belong to the selected organization."}
+                    {"plan_price": "Plan price does not belong to the selected announcement."}
+                )
+            if not announcement.services.filter(pk=service.pk).exists():
+                raise serializers.ValidationError(
+                    {"plan_price": "Plan price does not belong to the selected announcement."}
                 )
 
         if "organization_rating" in attrs:

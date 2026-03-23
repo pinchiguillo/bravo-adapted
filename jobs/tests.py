@@ -23,10 +23,18 @@ from job_chat.models import JobChatAttachment, JobChatMessage
 from job_chat.routing import websocket_urlpatterns
 from job_chat.views import JobChatViewSet
 from job_chat.ws_auth import JWTAuthMiddleware, JWTAuthMiddlewareStack
-from organization.models import Category, Organization, Service, ServicePrice, Subservice
+from organization.models import (
+    Announcement,
+    Category,
+    Organization,
+    OrganizationJob,
+    Service,
+    ServicePrice,
+    Subservice,
+)
 
 from .models import Job
-from .views import JobViewSet
+from .views import JobViewSet, job_search_parameter
 
 
 class JobAttachmentDownloadUrlTests(SimpleTestCase):
@@ -121,16 +129,38 @@ class JobListSearchViewTests(SimpleTestCase):
     def setUp(self):
         self.factory = APIRequestFactory()
 
-    def test_list_requires_search_query(self):
+    def test_list_without_filters_returns_queryset(self):
         request = SimpleNamespace(query_params={}, user=SimpleNamespace(is_staff=True))
         view = JobViewSet()
         view.request = request
         view.action = "list"
 
-        with self.assertRaises(ValidationError) as exc:
-            view.get_queryset()
+        class FakeQuerySet:
+            def __init__(self):
+                self.filter_calls = []
 
-        self.assertEqual(exc.exception.detail["search"], "This query parameter is required.")
+            def filter(self, *args, **kwargs):
+                self.filter_calls.append((args, kwargs))
+                return self
+
+            def distinct(self):
+                return self
+
+        queryset = FakeQuerySet()
+        view.queryset = queryset
+
+        result = view.get_queryset()
+
+        self.assertIs(result, queryset)
+        self.assertEqual(queryset.filter_calls, [])
+
+    def test_list_contract_keeps_search_optional_in_schema_and_runtime(self):
+        request = SimpleNamespace(query_params={}, user=SimpleNamespace(is_staff=True))
+        view = JobViewSet()
+        view.request = request
+
+        self.assertEqual(view._get_search_query(), "")
+        self.assertFalse(job_search_parameter.required)
 
     def test_list_rejects_short_search_query(self):
         request = SimpleNamespace(query_params={"search": "Ac"}, user=SimpleNamespace(is_staff=True))
@@ -146,7 +176,7 @@ class JobListSearchViewTests(SimpleTestCase):
             "Ensure this query parameter has at least 3 characters.",
         )
 
-    def test_list_applies_search_filter_to_queryset(self):
+    def test_list_applies_category_and_search_filters_to_queryset(self):
         class FakeQuerySet:
             def __init__(self):
                 self.filter_calls = []
@@ -159,7 +189,10 @@ class JobListSearchViewTests(SimpleTestCase):
                 return self
 
         queryset = FakeQuerySet()
-        request = SimpleNamespace(query_params={"search": "Acm"}, user=SimpleNamespace(is_staff=True))
+        request = SimpleNamespace(
+            query_params={"categories": ["cat-uuid"], "search": "Acm"},
+            user=SimpleNamespace(is_staff=True),
+        )
         view = JobViewSet()
         view.request = request
         view.action = "list"
@@ -168,9 +201,13 @@ class JobListSearchViewTests(SimpleTestCase):
         result = view.get_queryset()
 
         self.assertIs(result, queryset)
-        self.assertEqual(len(queryset.filter_calls), 1)
-        search_filter = queryset.filter_calls[0][0][0]
-        self.assertIn(("organization__name__icontains", "Acm"), search_filter.children)
+        self.assertEqual(len(queryset.filter_calls), 2)
+        self.assertEqual(
+            queryset.filter_calls[0][1],
+            {"announcement__category__uuid__in": ["cat-uuid"]},
+        )
+        search_filter = queryset.filter_calls[1][0][0]
+        self.assertIn(("announcement__organization__name__icontains", "Acm"), search_filter.children)
 
 
 @override_settings(
@@ -215,12 +252,17 @@ class JobsApiTests(APITestCase):
             billing_country="ES",
             billing_postal_code="28001",
         )
+        self.organization_job = OrganizationJob.objects.create(
+            organization=self.organization,
+            name="Home Services",
+            description="Primary org job",
+        )
         self.category, _ = Category.objects.get_or_create(
             name="General",
             defaults={"description": "Categoria general"},
         )
         self.service = Service.objects.create(
-            organization=self.organization,
+            job=self.organization_job,
             category=self.category,
             name="Plan",
             description="",
@@ -237,6 +279,14 @@ class JobsApiTests(APITestCase):
             charging_type=ServicePrice.ChargingType.PER_PROJECT,
             effective_from=date(2026, 1, 1),
         )
+        self.announcement = Announcement.objects.create(
+            organization=self.organization,
+            category=self.category,
+            name="Plan Announcement",
+            location="Madrid",
+            announcement="Plan disponible",
+        )
+        self.announcement.services.add(self.service)
         self.second_organization = Organization.objects.create(
             user=self.client_user,
             name="Client Org",
@@ -248,8 +298,13 @@ class JobsApiTests(APITestCase):
             billing_country="ES",
             billing_postal_code="46001",
         )
-        self.second_service = Service.objects.create(
+        self.second_organization_job = OrganizationJob.objects.create(
             organization=self.second_organization,
+            name="Client Services",
+            description="Secondary org job",
+        )
+        self.second_service = Service.objects.create(
+            job=self.second_organization_job,
             category=self.category,
             name="Second Plan",
             description="",
@@ -266,6 +321,24 @@ class JobsApiTests(APITestCase):
             charging_type=ServicePrice.ChargingType.PER_PROJECT,
             effective_from=date(2026, 1, 1),
         )
+        self.second_announcement = Announcement.objects.create(
+            organization=self.second_organization,
+            category=self.category,
+            name="Second Announcement",
+            location="Valencia",
+            announcement="Segundo plan disponible",
+        )
+        self.second_announcement.services.add(self.second_service)
+
+    def create_job(self, **overrides):
+        payload = {
+            "user": self.client_user,
+            "announcement": self.announcement,
+            "plan_price": self.service_price,
+            "status": Job.Status.PENDING,
+        }
+        payload.update(overrides)
+        return Job.objects.create(**payload)
 
     def test_create_job_creates_chat(self):
         self.client.force_authenticate(user=self.client_user)
@@ -273,7 +346,7 @@ class JobsApiTests(APITestCase):
         response = self.client.post(
             reverse("jobs-list"),
             {
-                "organization": self.organization.id,
+                "announcement": self.announcement.id,
                 "plan_price": self.service_price.id,
                 "status": Job.Status.PENDING,
             },
@@ -284,14 +357,10 @@ class JobsApiTests(APITestCase):
         job = Job.objects.get(id=response.data["id"])
         self.assertTrue(hasattr(job, "chat"))
         self.assertIsNotNone(job.chat.uuid)
+        self.assertEqual(response.data["chat_uuid"], str(job.chat.uuid))
 
     def test_job_chat_detail_returns_chat_for_member(self):
-        job = Job.objects.create(
-            user=self.client_user,
-            organization=self.organization,
-            plan_price=self.service_price,
-            status=Job.Status.PENDING,
-        )
+        job = self.create_job()
 
         self.client.force_authenticate(user=self.client_user)
         response = self.client.get(reverse("job-chats-detail", kwargs={"uuid": job.chat.uuid}))
@@ -305,7 +374,7 @@ class JobsApiTests(APITestCase):
         response = self.client.post(
             reverse("jobs-list"),
             {
-                "organization": self.organization.id,
+                "announcement": self.announcement.id,
                 "plan_price": self.service_price.id,
                 "status": Job.Status.ACTIVE,
             },
@@ -316,12 +385,7 @@ class JobsApiTests(APITestCase):
         self.assertIn("status", response.data)
 
     def test_job_member_cannot_change_status_directly(self):
-        job = Job.objects.create(
-            user=self.client_user,
-            organization=self.organization,
-            plan_price=self.service_price,
-            status=Job.Status.PENDING,
-        )
+        job = self.create_job()
 
         self.client.force_authenticate(user=self.client_user)
         response = self.client.patch(
@@ -335,38 +399,28 @@ class JobsApiTests(APITestCase):
         job.refresh_from_db()
         self.assertEqual(job.status, Job.Status.PENDING)
 
-    def test_job_member_cannot_change_organization_or_plan_price(self):
-        job = Job.objects.create(
-            user=self.client_user,
-            organization=self.organization,
-            plan_price=self.service_price,
-            status=Job.Status.PENDING,
-        )
+    def test_job_member_cannot_change_announcement_or_plan_price(self):
+        job = self.create_job()
 
         self.client.force_authenticate(user=self.client_user)
         response = self.client.patch(
             reverse("jobs-detail", kwargs={"uuid": job.uuid}),
             {
-                "organization": self.second_organization.id,
+                "announcement": self.second_announcement.id,
                 "plan_price": self.second_service_price.id,
             },
             format="json",
         )
 
         self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
-        self.assertIn("organization", response.data)
+        self.assertIn("announcement", response.data)
         self.assertIn("plan_price", response.data)
         job.refresh_from_db()
-        self.assertEqual(job.organization_id, self.organization.id)
+        self.assertEqual(job.announcement_id, self.announcement.id)
         self.assertEqual(job.plan_price_id, self.service_price.id)
 
     def test_job_member_can_rate_completed_job(self):
-        job = Job.objects.create(
-            user=self.client_user,
-            organization=self.organization,
-            plan_price=self.service_price,
-            status=Job.Status.COMPLETED,
-        )
+        job = self.create_job(status=Job.Status.COMPLETED)
 
         self.client.force_authenticate(user=self.client_user)
         response = self.client.patch(
@@ -380,12 +434,7 @@ class JobsApiTests(APITestCase):
         self.assertEqual(str(job.organization_rating), "4.50")
 
     def test_job_member_cannot_rate_non_completed_job(self):
-        job = Job.objects.create(
-            user=self.client_user,
-            organization=self.organization,
-            plan_price=self.service_price,
-            status=Job.Status.PENDING,
-        )
+        job = self.create_job()
 
         self.client.force_authenticate(user=self.client_user)
         response = self.client.patch(
@@ -409,12 +458,7 @@ class JobsApiTests(APITestCase):
             password="testpass123",
             email_verified=True,
         )
-        job = Job.objects.create(
-            user=self.client_user,
-            organization=self.organization,
-            plan_price=self.service_price,
-            status=Job.Status.PENDING,
-        )
+        job = self.create_job()
 
         self.client.force_authenticate(user=outsider)
         response = self.client.patch(
@@ -428,12 +472,7 @@ class JobsApiTests(APITestCase):
         self.assertEqual(job.status, Job.Status.PENDING)
 
     def test_non_admin_cannot_delete_job(self):
-        job = Job.objects.create(
-            user=self.client_user,
-            organization=self.organization,
-            plan_price=self.service_price,
-            status=Job.Status.PENDING,
-        )
+        job = self.create_job()
 
         self.client.force_authenticate(user=self.client_user)
         response = self.client.delete(reverse("jobs-detail", kwargs={"uuid": job.uuid}))
@@ -442,12 +481,7 @@ class JobsApiTests(APITestCase):
         self.assertTrue(Job.objects.filter(uuid=job.uuid).exists())
 
     def test_admin_can_delete_job(self):
-        job = Job.objects.create(
-            user=self.client_user,
-            organization=self.organization,
-            plan_price=self.service_price,
-            status=Job.Status.PENDING,
-        )
+        job = self.create_job()
 
         self.client.force_authenticate(user=self.admin_user)
         response = self.client.delete(reverse("jobs-detail", kwargs={"uuid": job.uuid}))
@@ -462,12 +496,7 @@ class JobsApiTests(APITestCase):
             password="testpass123",
             email_verified=True,
         )
-        job = Job.objects.create(
-            user=self.client_user,
-            organization=self.organization,
-            plan_price=self.service_price,
-            status=Job.Status.PENDING,
-        )
+        job = self.create_job()
 
         self.client.force_authenticate(user=outsider)
         response = self.client.get(reverse("job-chats-messages", kwargs={"uuid": job.chat.uuid}))
@@ -475,12 +504,7 @@ class JobsApiTests(APITestCase):
         self.assertEqual(response.status_code, status.HTTP_404_NOT_FOUND)
 
     def test_job_list_is_scoped_to_member_jobs(self):
-        owner_job = Job.objects.create(
-            user=self.client_user,
-            organization=self.organization,
-            plan_price=self.service_price,
-            status=Job.Status.PENDING,
-        )
+        owner_job = self.create_job()
         outsider = get_user_model().objects.create_user(
             username="jobs-outsider",
             email="jobs-outsider@example.com",
@@ -498,8 +522,13 @@ class JobsApiTests(APITestCase):
             billing_country="ES",
             billing_postal_code="41001",
         )
-        outsider_service = Service.objects.create(
+        outsider_org_job = OrganizationJob.objects.create(
             organization=outsider_org,
+            name="Outsider Services",
+            description="Outsider org job",
+        )
+        outsider_service = Service.objects.create(
+            job=outsider_org_job,
             category=self.category,
             name="Out Plan",
             description="",
@@ -516,9 +545,17 @@ class JobsApiTests(APITestCase):
             charging_type=ServicePrice.ChargingType.PER_PROJECT,
             effective_from=date(2026, 1, 1),
         )
+        outsider_announcement = Announcement.objects.create(
+            organization=outsider_org,
+            category=self.category,
+            name="Out Announcement",
+            location="Sevilla",
+            announcement="Out plan disponible",
+        )
+        outsider_announcement.services.add(outsider_service)
         outsider_job = Job.objects.create(
             user=outsider,
-            organization=outsider_org,
+            announcement=outsider_announcement,
             plan_price=outsider_price,
             status=Job.Status.PENDING,
         )
@@ -531,13 +568,24 @@ class JobsApiTests(APITestCase):
         self.assertIn(owner_job.id, returned_job_ids)
         self.assertNotIn(outsider_job.id, returned_job_ids)
 
-    def test_job_list_requires_search_query(self):
+    def test_job_list_without_filters_returns_member_jobs(self):
         self.client.force_authenticate(user=self.client_user)
+        first_job = self.create_job()
+        second_job = self.create_job(
+            announcement=self.second_announcement,
+            plan_price=self.second_service_price,
+        )
 
         response = self.client.get(reverse("jobs-list"))
 
-        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
-        self.assertEqual(response.data["search"], "This query parameter is required.")
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        returned_job_ids = {item["id"] for item in response.data["results"]}
+        self.assertEqual(returned_job_ids, {first_job.id, second_job.id})
+        returned_chat_uuids = {item["chat_uuid"] for item in response.data["results"]}
+        self.assertEqual(
+            returned_chat_uuids,
+            {str(first_job.chat.uuid), str(second_job.chat.uuid)},
+        )
 
     def test_job_list_rejects_short_search_query(self):
         self.client.force_authenticate(user=self.client_user)
@@ -548,17 +596,10 @@ class JobsApiTests(APITestCase):
         self.assertEqual(response.data["search"], "Ensure this query parameter has at least 3 characters.")
 
     def test_job_list_filters_results_by_search_query(self):
-        matching_job = Job.objects.create(
-            user=self.client_user,
-            organization=self.organization,
-            plan_price=self.service_price,
-            status=Job.Status.PENDING,
-        )
-        other_job = Job.objects.create(
-            user=self.client_user,
-            organization=self.second_organization,
+        matching_job = self.create_job()
+        other_job = self.create_job(
+            announcement=self.second_announcement,
             plan_price=self.second_service_price,
-            status=Job.Status.PENDING,
         )
 
         self.client.force_authenticate(user=self.client_user)
@@ -570,12 +611,139 @@ class JobsApiTests(APITestCase):
         self.assertEqual(returned_job_ids, {matching_job.id})
         self.assertNotIn(other_job.id, returned_job_ids)
 
-    def test_create_job_rejects_plan_price_from_another_organization(self):
+    def test_job_list_filters_results_by_categories(self):
+        garden_category = Category.objects.create(name="Garden", description="Jardineria")
+        garden_service = Service.objects.create(
+            job=self.second_organization_job,
+            category=garden_category,
+            name="Garden Plan",
+            description="",
+        )
+        garden_subservice = Subservice.objects.create(
+            service=garden_service,
+            name="Garden Variant",
+            description="",
+        )
+        garden_price = ServicePrice.objects.create(
+            subservice=garden_subservice,
+            amount="59.99",
+            currency="EUR",
+            charging_type=ServicePrice.ChargingType.PER_PROJECT,
+            effective_from=date(2026, 1, 1),
+        )
+        garden_announcement = Announcement.objects.create(
+            organization=self.second_organization,
+            category=garden_category,
+            name="Garden Announcement",
+            location="Valencia",
+            announcement="Servicio de jardineria",
+        )
+        garden_announcement.services.add(garden_service)
+        matching_job = self.create_job(
+            announcement=garden_announcement,
+            plan_price=garden_price,
+        )
+        other_job = self.create_job()
+
+        self.client.force_authenticate(user=self.client_user)
+        response = self.client.get(
+            reverse("jobs-list"),
+            {"categories": [str(garden_category.uuid)]},
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.data["count"], 1)
+        returned_job_ids = {item["id"] for item in response.data["results"]}
+        self.assertEqual(returned_job_ids, {matching_job.id})
+        self.assertNotIn(other_job.id, returned_job_ids)
+
+    def test_job_list_filters_results_by_legacy_category_param(self):
+        matching_job = self.create_job()
+        other_job = self.create_job(
+            announcement=self.second_announcement,
+            plan_price=self.second_service_price,
+        )
+
+        self.client.force_authenticate(user=self.client_user)
+        response = self.client.get(
+            reverse("jobs-list"),
+            {"category": str(self.category.uuid)},
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        returned_job_ids = {item["id"] for item in response.data["results"]}
+        self.assertIn(matching_job.id, returned_job_ids)
+        self.assertIn(other_job.id, returned_job_ids)
+
+    def test_job_list_combines_categories_and_search_filters(self):
+        garden_category = Category.objects.create(name="Garden Plus", description="Exterior")
+        garden_service = Service.objects.create(
+            job=self.second_organization_job,
+            category=garden_category,
+            name="Garden Plan",
+            description="",
+        )
+        garden_subservice = Subservice.objects.create(
+            service=garden_service,
+            name="Garden Variant",
+            description="",
+        )
+        garden_price = ServicePrice.objects.create(
+            subservice=garden_subservice,
+            amount="69.99",
+            currency="EUR",
+            charging_type=ServicePrice.ChargingType.PER_PROJECT,
+            effective_from=date(2026, 1, 1),
+        )
+        matching_announcement = Announcement.objects.create(
+            organization=self.second_organization,
+            category=garden_category,
+            name="Garden Saturdays",
+            location="Valencia",
+            announcement="Disponible fines de semana",
+        )
+        matching_announcement.services.add(garden_service)
+        non_matching_text_announcement = Announcement.objects.create(
+            organization=self.second_organization,
+            category=garden_category,
+            name="Garden Weekdays",
+            location="Valencia",
+            announcement="Disponible entre semana",
+        )
+        non_matching_text_announcement.services.add(garden_service)
+
+        matching_job = self.create_job(
+            announcement=matching_announcement,
+            plan_price=garden_price,
+        )
+        non_matching_text_job = self.create_job(
+            announcement=non_matching_text_announcement,
+            plan_price=garden_price,
+        )
+        non_matching_category_job = self.create_job()
+
+        self.client.force_authenticate(user=self.client_user)
+        response = self.client.get(
+            reverse("jobs-list"),
+            {
+                "categories": [str(garden_category.uuid)],
+                "search": "Saturdays",
+            },
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.data["count"], 1)
+        returned_job_ids = {item["id"] for item in response.data["results"]}
+        self.assertEqual(returned_job_ids, {matching_job.id})
+        self.assertNotIn(non_matching_text_job.id, returned_job_ids)
+        self.assertNotIn(non_matching_category_job.id, returned_job_ids)
+
+    def test_create_job_rejects_plan_price_from_another_announcement(self):
         self.client.force_authenticate(user=self.client_user)
         response = self.client.post(
             reverse("jobs-list"),
             {
-                "organization": self.organization.id,
+                "announcement": self.announcement.id,
                 "plan_price": self.second_service_price.id,
                 "status": Job.Status.PENDING,
             },
@@ -586,12 +754,7 @@ class JobsApiTests(APITestCase):
         self.assertIn("plan_price", response.data)
 
     def test_create_job_message_rejects_blank_content(self):
-        job = Job.objects.create(
-            user=self.client_user,
-            organization=self.organization,
-            plan_price=self.service_price,
-            status=Job.Status.PENDING,
-        )
+        job = self.create_job()
         self.client.force_authenticate(user=self.client_user)
         response = self.client.post(
             reverse("job-chats-messages", kwargs={"uuid": job.chat.uuid}),
@@ -603,12 +766,7 @@ class JobsApiTests(APITestCase):
         self.assertIn("content", response.data)
 
     def test_upload_attachment_requires_job_membership(self):
-        job = Job.objects.create(
-            user=self.client_user,
-            organization=self.organization,
-            plan_price=self.service_price,
-            status=Job.Status.PENDING,
-        )
+        job = self.create_job()
         message = JobChatMessage.objects.create(chat=job.chat, sender=self.client_user, content="hello")
         outsider = get_user_model().objects.create_user(
             username="attachment-outsider",
@@ -628,12 +786,7 @@ class JobsApiTests(APITestCase):
         self.assertEqual(JobChatAttachment.objects.count(), 0)
 
     def test_upload_attachment_returns_404_when_message_not_found(self):
-        job = Job.objects.create(
-            user=self.client_user,
-            organization=self.organization,
-            plan_price=self.service_price,
-            status=Job.Status.PENDING,
-        )
+        job = self.create_job()
         self.client.force_authenticate(user=self.client_user)
         response = self.client.post(
             reverse("job-chats-attachments", kwargs={"uuid": job.chat.uuid, "message_id": 999999}),
@@ -644,12 +797,7 @@ class JobsApiTests(APITestCase):
         self.assertEqual(response.status_code, status.HTTP_404_NOT_FOUND)
 
     def test_upload_attachment_succeeds_for_job_member(self):
-        job = Job.objects.create(
-            user=self.client_user,
-            organization=self.organization,
-            plan_price=self.service_price,
-            status=Job.Status.PENDING,
-        )
+        job = self.create_job()
         message = JobChatMessage.objects.create(chat=job.chat, sender=self.client_user, content="hello")
         self.client.force_authenticate(user=self.client_user)
         response = self.client.post(
@@ -665,12 +813,7 @@ class JobsApiTests(APITestCase):
         self.assertNotIn("file", response.data)
 
     def test_upload_attachment_requires_message_sender(self):
-        job = Job.objects.create(
-            user=self.client_user,
-            organization=self.organization,
-            plan_price=self.service_price,
-            status=Job.Status.PENDING,
-        )
+        job = self.create_job()
         message = JobChatMessage.objects.create(chat=job.chat, sender=self.client_user, content="hello")
 
         self.client.force_authenticate(user=self.organization_owner)
@@ -688,12 +831,7 @@ class JobsApiTests(APITestCase):
         JOB_CHAT_ATTACHMENT_MAX_BYTES=4,
     )
     def test_upload_attachment_rejects_invalid_type_and_oversize(self):
-        job = Job.objects.create(
-            user=self.client_user,
-            organization=self.organization,
-            plan_price=self.service_price,
-            status=Job.Status.PENDING,
-        )
+        job = self.create_job()
         message = JobChatMessage.objects.create(chat=job.chat, sender=self.client_user, content="hello")
         self.client.force_authenticate(user=self.client_user)
 
@@ -715,12 +853,7 @@ class JobsApiTests(APITestCase):
         self.assertEqual(JobChatAttachment.objects.count(), 0)
 
     def test_upload_attachment_rejects_mismatched_file_signature(self):
-        job = Job.objects.create(
-            user=self.client_user,
-            organization=self.organization,
-            plan_price=self.service_price,
-            status=Job.Status.PENDING,
-        )
+        job = self.create_job()
         message = JobChatMessage.objects.create(chat=job.chat, sender=self.client_user, content="hello")
         self.client.force_authenticate(user=self.client_user)
 
@@ -741,17 +874,21 @@ class JobsApiTests(APITestCase):
             password="testpass123",
             email_verified=True,
         )
-        job = Job.objects.create(
-            user=self.client_user,
-            organization=self.organization,
-            plan_price=self.service_price,
-            status=Job.Status.PENDING,
-        )
+        job = self.create_job()
 
         self.client.force_authenticate(user=outsider)
         response = self.client.get(reverse("jobs-detail", kwargs={"uuid": job.uuid}))
 
         self.assertEqual(response.status_code, status.HTTP_404_NOT_FOUND)
+
+    def test_job_detail_exposes_chat_uuid_for_member(self):
+        job = self.create_job()
+
+        self.client.force_authenticate(user=self.client_user)
+        response = self.client.get(reverse("jobs-detail", kwargs={"uuid": job.uuid}))
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.data["chat_uuid"], str(job.chat.uuid))
 
     def test_unverified_user_cannot_access_jobs_api(self):
         unverified_user = get_user_model().objects.create_user(
@@ -782,12 +919,7 @@ class JobsApiTests(APITestCase):
         self.assertNotEqual(response.status_code, status.HTTP_403_FORBIDDEN)
 
     def test_download_attachment_requires_job_access(self):
-        job = Job.objects.create(
-            user=self.client_user,
-            organization=self.organization,
-            plan_price=self.service_price,
-            status=Job.Status.PENDING,
-        )
+        job = self.create_job()
         message = JobChatMessage.objects.create(chat=job.chat, sender=self.client_user, content="hello")
         attachment = JobChatAttachment.objects.create(
             message=message,
@@ -812,12 +944,7 @@ class JobsApiTests(APITestCase):
         self.assertEqual(response.status_code, status.HTTP_404_NOT_FOUND)
 
     def test_download_attachment_returns_file_for_job_member(self):
-        job = Job.objects.create(
-            user=self.client_user,
-            organization=self.organization,
-            plan_price=self.service_price,
-            status=Job.Status.PENDING,
-        )
+        job = self.create_job()
         message = JobChatMessage.objects.create(chat=job.chat, sender=self.client_user, content="hello")
         attachment = JobChatAttachment.objects.create(
             message=message,
@@ -842,12 +969,7 @@ class JobsApiTests(APITestCase):
 
     @override_settings(JOB_CHAT_ATTACHMENT_URL_TTL_SECONDS=123)
     def test_download_attachment_uses_ttl_when_storage_supports_expire(self):
-        job = Job.objects.create(
-            user=self.client_user,
-            organization=self.organization,
-            plan_price=self.service_price,
-            status=Job.Status.PENDING,
-        )
+        job = self.create_job()
         message = JobChatMessage.objects.create(chat=job.chat, sender=self.client_user, content="hello")
         attachment = JobChatAttachment.objects.create(
             message=message,
@@ -875,12 +997,7 @@ class JobsApiTests(APITestCase):
 
     @override_settings(JOB_CHAT_ATTACHMENT_URL_TTL_SECONDS=123)
     def test_download_attachment_falls_back_when_storage_has_no_expire_kwarg(self):
-        job = Job.objects.create(
-            user=self.client_user,
-            organization=self.organization,
-            plan_price=self.service_price,
-            status=Job.Status.PENDING,
-        )
+        job = self.create_job()
         message = JobChatMessage.objects.create(chat=job.chat, sender=self.client_user, content="hello")
         attachment = JobChatAttachment.objects.create(
             message=message,
@@ -935,7 +1052,7 @@ class JobsApiTests(APITestCase):
         cache.clear()
         self.client.force_authenticate(user=self.client_user)
         payload = {
-            "organization": self.organization.id,
+            "announcement": self.announcement.id,
             "plan_price": self.service_price.id,
             "status": Job.Status.PENDING,
         }
@@ -958,12 +1075,7 @@ class JobsApiTests(APITestCase):
         self.assertEqual(second_response.status_code, status.HTTP_429_TOO_MANY_REQUESTS)
 
     def test_create_job_message_is_throttled(self):
-        job = Job.objects.create(
-            user=self.client_user,
-            organization=self.organization,
-            plan_price=self.service_price,
-            status=Job.Status.PENDING,
-        )
+        job = self.create_job()
         self.client.force_authenticate(user=self.client_user)
 
         class JobsMessagesTestThrottle(SimpleRateThrottle):
@@ -1146,8 +1258,13 @@ class JobChatWebSocketTests(TransactionTestCase):
             billing_country="ES",
             billing_postal_code="28001",
         )
-        service = Service.objects.create(
+        organization_job = OrganizationJob.objects.create(
             organization=self.organization,
+            name="Websocket Services",
+            description="Websocket org job",
+        )
+        service = Service.objects.create(
+            job=organization_job,
             category=self.category,
             name="Websocket Plan",
             description="",
@@ -1164,9 +1281,17 @@ class JobChatWebSocketTests(TransactionTestCase):
             charging_type=ServicePrice.ChargingType.PER_PROJECT,
             effective_from=date(2026, 1, 1),
         )
+        announcement = Announcement.objects.create(
+            organization=self.organization,
+            category=self.category,
+            name="Websocket Announcement",
+            location="Madrid",
+            announcement="Websocket plan disponible",
+        )
+        announcement.services.add(service)
         self.job = Job.objects.create(
             user=self.client_user,
-            organization=self.organization,
+            announcement=announcement,
             plan_price=service_price,
             status=Job.Status.PENDING,
         )

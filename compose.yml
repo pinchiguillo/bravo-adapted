@@ -19,6 +19,8 @@ services:
       - .env
     volumes:
       - .:/app
+    ports:
+      - "${PORT:-8000}:8000"
     environment:
       APP_MODE: ${APP_MODE:-development}
       PORT: ${PORT:-8000}
@@ -68,6 +70,8 @@ services:
     image: postgres:16-alpine
     env_file:
       - .env
+    ports:
+      - "${POSTGRES_PORT:-5432}:5432"
     environment:
       POSTGRES_DB: ${POSTGRES_DB:-auth_db}
       POSTGRES_USER: ${POSTGRES_USER:-postgres}

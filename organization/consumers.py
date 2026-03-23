@@ -12,6 +12,7 @@ class OrganizationSearchConsumer(AsyncJsonWebsocketConsumer):
     async def connect(self):
         user = self.scope.get("user")
         if not user or not user.is_authenticated:
+            await self.accept()
             await self.close(code=4401)
             return
         await self.accept()

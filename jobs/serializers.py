@@ -10,6 +10,7 @@ class JobSerializer(serializers.ModelSerializer):
         Job.Status.COMPLETED,
         Job.Status.REJECTED,
     }
+    chat_uuid = serializers.SerializerMethodField()
 
     class Meta:
         model = Job
@@ -17,14 +18,21 @@ class JobSerializer(serializers.ModelSerializer):
             "id",
             "uuid",
             "user",
-            "organization",
+            "announcement",
             "plan_price",
+            "chat_uuid",
             "status",
             "organization_rating",
             "created_at",
             "updated_at",
         )
-        read_only_fields = ("id", "uuid", "user", "created_at", "updated_at")
+        read_only_fields = ("id", "uuid", "user", "chat_uuid", "created_at", "updated_at")
+
+    def get_chat_uuid(self, obj) -> str | None:
+        chat = getattr(obj, "chat", None)
+        if chat is None:
+            return None
+        return str(chat.uuid)
 
     def validate(self, attrs):
         if self.instance is None:
@@ -34,10 +42,10 @@ class JobSerializer(serializers.ModelSerializer):
                     {"status": "New jobs must start in pending status."}
                 )
             attrs["status"] = Job.Status.PENDING
-            return self._validate_plan_price_belongs_to_organization(attrs)
+            return self._validate_plan_price_belongs_to_announcement(attrs)
 
         errors = {}
-        for field_name in ("organization", "plan_price", "status"):
+        for field_name in ("announcement", "plan_price", "status"):
             if field_name not in attrs:
                 continue
             if attrs[field_name] != getattr(self.instance, field_name):
@@ -47,15 +55,20 @@ class JobSerializer(serializers.ModelSerializer):
             raise serializers.ValidationError(errors)
 
         self._validate_rating_can_be_set(attrs)
-        return self._validate_plan_price_belongs_to_organization(attrs)
+        return self._validate_plan_price_belongs_to_announcement(attrs)
 
-    def _validate_plan_price_belongs_to_organization(self, attrs):
-        organization = attrs.get("organization", getattr(self.instance, "organization", None))
+    def _validate_plan_price_belongs_to_announcement(self, attrs):
+        announcement = attrs.get("announcement", getattr(self.instance, "announcement", None))
         plan_price = attrs.get("plan_price", getattr(self.instance, "plan_price", None))
-        if organization is not None and plan_price is not None:
-            if plan_price.subservice.service.organization_id != organization.id:
+        if announcement is not None and plan_price is not None:
+            service = plan_price.subservice.service
+            if service.job.organization_id != announcement.organization_id:
                 raise serializers.ValidationError(
-                    {"plan_price": "Plan price does not belong to the selected organization."}
+                    {"plan_price": "Plan price does not belong to the selected announcement."}
+                )
+            if not announcement.services.filter(pk=service.pk).exists():
+                raise serializers.ValidationError(
+                    {"plan_price": "Plan price does not belong to the selected announcement."}
                 )
         return attrs
 

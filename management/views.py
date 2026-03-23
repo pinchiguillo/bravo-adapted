@@ -155,8 +155,9 @@ class ManagementJobViewSet(
     serializer_class = ManagementJobSerializer
     queryset = Job.objects.select_related(
         "user",
-        "organization",
-        "organization__user",
+        "announcement",
+        "announcement__organization",
+        "announcement__organization__user",
         "plan_price",
         "plan_price__subservice",
         "plan_price__subservice__service",

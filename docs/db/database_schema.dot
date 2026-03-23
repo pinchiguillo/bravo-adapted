@@ -1,7 +1,7 @@
 digraph model_graph {
   // Dotfile by Django-Extensions graph_models
-  // Created: 2026-03-18 11:47
-  // Cli Options: --all-applications --disable-fields --exclude-models LogEntry,Permission,Group,ContentType,Session -o docs/db/database_schema.dot
+  // Created: 2026-03-17 23:46
+  // Cli Options: auth organization jobs job_chat management rgpd --disable-fields -o docs/db/database_schema.dot
 
   fontname = "Roboto"
   fontsize = 8
@@ -23,34 +23,21 @@ digraph model_graph {
   // Labels
 
 
-  django_contrib_sessions_base_session_AbstractBaseSession [label=<
+  django_contrib_auth_models_Permission [label=<
     <TABLE BGCOLOR="white" BORDER="1" CELLBORDER="0" CELLSPACING="0">
     <TR><TD COLSPAN="2" CELLPADDING="5" ALIGN="CENTER" BGCOLOR="#1b563f">
     <FONT FACE="Roboto" COLOR="white" POINT-SIZE="10"><B>
-    AbstractBaseSession
+    Permission
     </B></FONT></TD></TR>
   
     </TABLE>
     >]
 
-
-
-
-  django_contrib_auth_models_AbstractUser [label=<
+  django_contrib_auth_models_Group [label=<
     <TABLE BGCOLOR="white" BORDER="1" CELLBORDER="0" CELLSPACING="0">
     <TR><TD COLSPAN="2" CELLPADDING="5" ALIGN="CENTER" BGCOLOR="#1b563f">
     <FONT FACE="Roboto" COLOR="white" POINT-SIZE="10"><B>
-    AbstractUser<BR/>&lt;<FONT FACE="Roboto"><I>AbstractBaseUser,PermissionsMixin</I></FONT>&gt;
-    </B></FONT></TD></TR>
-  
-    </TABLE>
-    >]
-
-  auth_models_CustomUser [label=<
-    <TABLE BGCOLOR="white" BORDER="1" CELLBORDER="0" CELLSPACING="0">
-    <TR><TD COLSPAN="2" CELLPADDING="5" ALIGN="CENTER" BGCOLOR="#1b563f">
-    <FONT FACE="Roboto" COLOR="white" POINT-SIZE="10"><B>
-    CustomUser<BR/>&lt;<FONT FACE="Roboto"><I>AbstractUser</I></FONT>&gt;
+    Group
     </B></FONT></TD></TR>
   
     </TABLE>
@@ -178,11 +165,61 @@ digraph model_graph {
 
 
 
-  management_models_FeatureFlag [label=<
+  rgpd_models_BaseRgpdConsentEvent [label=<
     <TABLE BGCOLOR="white" BORDER="1" CELLBORDER="0" CELLSPACING="0">
     <TR><TD COLSPAN="2" CELLPADDING="5" ALIGN="CENTER" BGCOLOR="#1b563f">
     <FONT FACE="Roboto" COLOR="white" POINT-SIZE="10"><B>
-    FeatureFlag
+    BaseRgpdConsentEvent
+    </B></FONT></TD></TR>
+  
+    </TABLE>
+    >]
+
+  rgpd_models_BaseRgpdConsent [label=<
+    <TABLE BGCOLOR="white" BORDER="1" CELLBORDER="0" CELLSPACING="0">
+    <TR><TD COLSPAN="2" CELLPADDING="5" ALIGN="CENTER" BGCOLOR="#1b563f">
+    <FONT FACE="Roboto" COLOR="white" POINT-SIZE="10"><B>
+    BaseRgpdConsent
+    </B></FONT></TD></TR>
+  
+    </TABLE>
+    >]
+
+  rgpd_models_RgpdConsent [label=<
+    <TABLE BGCOLOR="white" BORDER="1" CELLBORDER="0" CELLSPACING="0">
+    <TR><TD COLSPAN="2" CELLPADDING="5" ALIGN="CENTER" BGCOLOR="#1b563f">
+    <FONT FACE="Roboto" COLOR="white" POINT-SIZE="10"><B>
+    RgpdConsent<BR/>&lt;<FONT FACE="Roboto"><I>BaseRgpdConsent</I></FONT>&gt;
+    </B></FONT></TD></TR>
+  
+    </TABLE>
+    >]
+
+  rgpd_models_RgpdAnonymousConsent [label=<
+    <TABLE BGCOLOR="white" BORDER="1" CELLBORDER="0" CELLSPACING="0">
+    <TR><TD COLSPAN="2" CELLPADDING="5" ALIGN="CENTER" BGCOLOR="#1b563f">
+    <FONT FACE="Roboto" COLOR="white" POINT-SIZE="10"><B>
+    RgpdAnonymousConsent<BR/>&lt;<FONT FACE="Roboto"><I>BaseRgpdConsent</I></FONT>&gt;
+    </B></FONT></TD></TR>
+  
+    </TABLE>
+    >]
+
+  rgpd_models_RgpdConsentEvent [label=<
+    <TABLE BGCOLOR="white" BORDER="1" CELLBORDER="0" CELLSPACING="0">
+    <TR><TD COLSPAN="2" CELLPADDING="5" ALIGN="CENTER" BGCOLOR="#1b563f">
+    <FONT FACE="Roboto" COLOR="white" POINT-SIZE="10"><B>
+    RgpdConsentEvent<BR/>&lt;<FONT FACE="Roboto"><I>BaseRgpdConsentEvent</I></FONT>&gt;
+    </B></FONT></TD></TR>
+  
+    </TABLE>
+    >]
+
+  rgpd_models_RgpdAnonymousConsentEvent [label=<
+    <TABLE BGCOLOR="white" BORDER="1" CELLBORDER="0" CELLSPACING="0">
+    <TR><TD COLSPAN="2" CELLPADDING="5" ALIGN="CENTER" BGCOLOR="#1b563f">
+    <FONT FACE="Roboto" COLOR="white" POINT-SIZE="10"><B>
+    RgpdAnonymousConsentEvent<BR/>&lt;<FONT FACE="Roboto"><I>BaseRgpdConsentEvent</I></FONT>&gt;
     </B></FONT></TD></TR>
   
     </TABLE>
@@ -192,38 +229,31 @@ digraph model_graph {
 
 
   // Relations
-
-  django_contrib_auth_base_user_AbstractBaseUser [label=<
+  django_contrib_contenttypes_models_ContentType [label=<
   <TABLE BGCOLOR="white" BORDER="0" CELLBORDER="0" CELLSPACING="0">
   <TR><TD COLSPAN="2" CELLPADDING="4" ALIGN="CENTER" BGCOLOR="#1b563f">
-  <FONT FACE="Roboto" POINT-SIZE="12" COLOR="white">AbstractBaseUser</FONT>
+  <FONT FACE="Roboto" POINT-SIZE="12" COLOR="white">ContentType</FONT>
   </TD></TR>
   </TABLE>
   >]
-  django_contrib_auth_models_AbstractUser -> django_contrib_auth_base_user_AbstractBaseUser
-  [label=" abstract\ninheritance"] [arrowhead=empty, arrowtail=none, dir=both];
-  django_contrib_auth_models_PermissionsMixin [label=<
+  django_contrib_auth_models_Permission -> django_contrib_contenttypes_models_ContentType
+  [label=" content_type (permission)"] [arrowhead=none, arrowtail=dot, dir=both];
+
+  django_contrib_auth_models_Group -> django_contrib_auth_models_Permission
+  [label=" permissions (group)"] [arrowhead=dot arrowtail=dot, dir=both];
+
+  auth_models_CustomUser [label=<
   <TABLE BGCOLOR="white" BORDER="0" CELLBORDER="0" CELLSPACING="0">
   <TR><TD COLSPAN="2" CELLPADDING="4" ALIGN="CENTER" BGCOLOR="#1b563f">
-  <FONT FACE="Roboto" POINT-SIZE="12" COLOR="white">PermissionsMixin</FONT>
+  <FONT FACE="Roboto" POINT-SIZE="12" COLOR="white">CustomUser</FONT>
   </TD></TR>
   </TABLE>
   >]
-  django_contrib_auth_models_AbstractUser -> django_contrib_auth_models_PermissionsMixin
-  [label=" abstract\ninheritance"] [arrowhead=empty, arrowtail=none, dir=both];
-
-  auth_models_CustomUser -> django_contrib_auth_models_AbstractUser
-  [label=" abstract\ninheritance"] [arrowhead=empty, arrowtail=none, dir=both];
-
-
   organization_models_Organization -> auth_models_CustomUser
   [label=" user (organization)"] [arrowhead=none, arrowtail=none, dir=both];
 
   organization_models_Service -> organization_models_Organization
   [label=" organization (services)"] [arrowhead=none, arrowtail=dot, dir=both];
-
-  organization_models_Service -> organization_models_Category
-  [label=" category (services)"] [arrowhead=none, arrowtail=dot, dir=both];
 
   organization_models_Subservice -> organization_models_Service
   [label=" service (subservices)"] [arrowhead=none, arrowtail=dot, dir=both];
@@ -243,7 +273,13 @@ digraph model_graph {
   organization_models_AnnouncementReview -> organization_models_Announcement
   [label=" announcement (review)"] [arrowhead=none, arrowtail=none, dir=both];
 
-
+  auth_models_CustomUser [label=<
+  <TABLE BGCOLOR="white" BORDER="0" CELLBORDER="0" CELLSPACING="0">
+  <TR><TD COLSPAN="2" CELLPADDING="4" ALIGN="CENTER" BGCOLOR="#1b563f">
+  <FONT FACE="Roboto" POINT-SIZE="12" COLOR="white">CustomUser</FONT>
+  </TD></TR>
+  </TABLE>
+  >]
   jobs_models_Job -> auth_models_CustomUser
   [label=" user (jobs)"] [arrowhead=none, arrowtail=dot, dir=both];
 
@@ -259,16 +295,55 @@ digraph model_graph {
 
   job_chat_models_JobChatMessage -> job_chat_models_JobChat
   [label=" chat (messages)"] [arrowhead=none, arrowtail=dot, dir=both];
-
+  auth_models_CustomUser [label=<
+  <TABLE BGCOLOR="white" BORDER="0" CELLBORDER="0" CELLSPACING="0">
+  <TR><TD COLSPAN="2" CELLPADDING="4" ALIGN="CENTER" BGCOLOR="#1b563f">
+  <FONT FACE="Roboto" POINT-SIZE="12" COLOR="white">CustomUser</FONT>
+  </TD></TR>
+  </TABLE>
+  >]
   job_chat_models_JobChatMessage -> auth_models_CustomUser
   [label=" sender (job_chat_messages)"] [arrowhead=none, arrowtail=dot, dir=both];
 
   job_chat_models_JobChatAttachment -> job_chat_models_JobChatMessage
   [label=" message (attachments)"] [arrowhead=none, arrowtail=dot, dir=both];
-
+  auth_models_CustomUser [label=<
+  <TABLE BGCOLOR="white" BORDER="0" CELLBORDER="0" CELLSPACING="0">
+  <TR><TD COLSPAN="2" CELLPADDING="4" ALIGN="CENTER" BGCOLOR="#1b563f">
+  <FONT FACE="Roboto" POINT-SIZE="12" COLOR="white">CustomUser</FONT>
+  </TD></TR>
+  </TABLE>
+  >]
   job_chat_models_JobChatAttachment -> auth_models_CustomUser
   [label=" uploaded_by (job_chat_attachments)"] [arrowhead=none, arrowtail=dot, dir=both];
 
+  auth_models_CustomUser [label=<
+  <TABLE BGCOLOR="white" BORDER="0" CELLBORDER="0" CELLSPACING="0">
+  <TR><TD COLSPAN="2" CELLPADDING="4" ALIGN="CENTER" BGCOLOR="#1b563f">
+  <FONT FACE="Roboto" POINT-SIZE="12" COLOR="white">CustomUser</FONT>
+  </TD></TR>
+  </TABLE>
+  >]
+  rgpd_models_RgpdConsent -> auth_models_CustomUser
+  [label=" user (rgpd_consent)"] [arrowhead=none, arrowtail=none, dir=both];
+
+  rgpd_models_RgpdConsent -> rgpd_models_BaseRgpdConsent
+  [label=" abstract\ninheritance"] [arrowhead=empty, arrowtail=none, dir=both];
+
+  rgpd_models_RgpdAnonymousConsent -> rgpd_models_BaseRgpdConsent
+  [label=" abstract\ninheritance"] [arrowhead=empty, arrowtail=none, dir=both];
+
+  rgpd_models_RgpdConsentEvent -> rgpd_models_RgpdConsent
+  [label=" consent (events)"] [arrowhead=none, arrowtail=dot, dir=both];
+
+  rgpd_models_RgpdConsentEvent -> rgpd_models_BaseRgpdConsentEvent
+  [label=" abstract\ninheritance"] [arrowhead=empty, arrowtail=none, dir=both];
+
+  rgpd_models_RgpdAnonymousConsentEvent -> rgpd_models_RgpdAnonymousConsent
+  [label=" consent (events)"] [arrowhead=none, arrowtail=dot, dir=both];
+
+  rgpd_models_RgpdAnonymousConsentEvent -> rgpd_models_BaseRgpdConsentEvent
+  [label=" abstract\ninheritance"] [arrowhead=empty, arrowtail=none, dir=both];
 
 
 }

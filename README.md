@@ -29,15 +29,18 @@ Servicios definidos en `compose.yml`:
 - `nginx`: proxy inverso de entrada
 - `app`: backend Django
 - `postgres`: base de datos principal
+- `adminer`: interfaz web para inspección manual de PostgreSQL
 - `localstack`: emulacion local de S3/SES
 - `db-diagram-exporter`: exportacion del esquema de base de datos
 
-El backend queda expuesto unicamente en `http://localhost:24356`.
+El backend queda expuesto directamente en `http://localhost:8000` y también a través de `nginx` en `http://localhost:24356`.
 Las peticiones `http://localhost:24356/s3/...` se enrutan a `localstack`.
+PostgreSQL queda accesible desde el host en `localhost:5432` o en el puerto definido por `POSTGRES_PORT`.
+La base de datos puede inspeccionarse en `http://localhost:24357` con servidor `postgres` y las credenciales de `POSTGRES_USER`/`POSTGRES_PASSWORD`.
 
 ## Endpoints principales
 
-Base URL REST: `http://localhost:24356/api/`
+Base URL REST: `http://localhost:8000/api/` o `http://localhost:24356/api/`
 
 Rutas registradas:
 

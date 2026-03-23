@@ -1,7 +1,12 @@
 import uuid
 
 from django.db.models import Q
-from drf_spectacular.utils import OpenApiParameter, OpenApiResponse, extend_schema, extend_schema_view
+from drf_spectacular.utils import (
+    OpenApiParameter,
+    OpenApiResponse,
+    extend_schema,
+    extend_schema_view,
+)
 from rest_framework import mixins, permissions, status, viewsets
 from rest_framework.decorators import action
 from rest_framework.exceptions import NotFound, PermissionDenied, ValidationError
@@ -10,7 +15,15 @@ from rest_framework.response import Response
 from Core.permissions import IsActiveAccount
 from Core.throttling import ActionScopedRateThrottleMixin
 
-from .models import Announcement, Category, Organization, Service, ServicePrice, Subservice
+from .models import (
+    Announcement,
+    Category,
+    Organization,
+    OrganizationJob,
+    Service,
+    ServicePrice,
+    Subservice,
+)
 from .permissions import (
     IsAnnouncementOrganizationOwner,
     IsOrganizationOwner,
@@ -19,6 +32,7 @@ from .permissions import (
 from .serializers import (
     AnnouncementSerializer,
     CategorySerializer,
+    OrganizationJobSerializer,
     OrganizationPublicSerializer,
     OrganizationSerializer,
     ServicePriceSerializer,
@@ -39,7 +53,15 @@ organization_uuid_parameter = OpenApiParameter(
     type=str,
     location=OpenApiParameter.PATH,
     required=True,
-    description="UUID of the organization that owns the service.",
+    description="UUID of the organization that owns the nested resource.",
+)
+
+organization_job_uuid_parameter = OpenApiParameter(
+    name="job_uuid",
+    type=str,
+    location=OpenApiParameter.PATH,
+    required=True,
+    description="UUID of the organization job that owns the service.",
 )
 
 announcement_uuid_parameter = OpenApiParameter(
@@ -55,7 +77,7 @@ service_uuid_parameter = OpenApiParameter(
     type=str,
     location=OpenApiParameter.PATH,
     required=True,
-    description="UUID of the service that owns the subservice.",
+    description="UUID of the service that owns the nested subservice.",
 )
 
 organization_search_parameter = OpenApiParameter(
@@ -411,7 +433,6 @@ class PublicAnnouncementViewSet(
         Announcement.objects.select_related(
             "organization",
             "category",
-            "review",
         )
         .prefetch_related("services")
         .filter(status=Announcement.Status.ACTIVE)
@@ -422,47 +443,135 @@ class PublicAnnouncementViewSet(
     }
 
     def get_queryset(self):
-        return self.filter_announcements(self.queryset)
+        return self.filter_announcements(self.queryset).order_by("-created_at", "-id")
 
 
 @extend_schema_view(
     list=extend_schema(
-        summary="List services",
-        description="Lists the services of the organization specified in the URL.",
+        summary="List organization jobs",
+        description="Lists the jobs of the organization specified in the URL.",
         parameters=[organization_uuid_parameter],
     ),
     create=extend_schema(
-        summary="Create service",
+        summary="Create organization job",
         description=(
-            "Creates a service in the organization specified in the URL "
+            "Creates an organization job in the organization specified in the URL "
             "if it belongs to the authenticated user."
         ),
         parameters=[organization_uuid_parameter],
     ),
     retrieve=extend_schema(
+        summary="Get organization job",
+        description="Returns the details of a job belonging to the organization specified in the URL.",
+        parameters=[organization_uuid_parameter, organization_job_uuid_parameter],
+    ),
+    update=extend_schema(
+        summary="Replace organization job",
+        description="Fully replaces a job in the organization specified in the URL.",
+        parameters=[organization_uuid_parameter, organization_job_uuid_parameter],
+    ),
+    partial_update=extend_schema(
+        summary="Update organization job",
+        description="Partially updates a job in the organization specified in the URL.",
+        parameters=[organization_uuid_parameter, organization_job_uuid_parameter],
+    ),
+    destroy=extend_schema(
+        summary="Delete organization job",
+        description="Deletes a job in the organization specified in the URL.",
+        parameters=[organization_uuid_parameter, organization_job_uuid_parameter],
+    ),
+)
+class OrganizationJobViewSet(ActionScopedRateThrottleMixin, viewsets.ModelViewSet):
+    serializer_class = OrganizationJobSerializer
+    queryset = OrganizationJob.objects.select_related("organization")
+    lookup_field = "uuid"
+    lookup_url_kwarg = "job_uuid"
+    throttle_scope_prefix = "organization"
+    throttle_scope_action_map = {
+        "list": "organization_public_read",
+        "retrieve": "organization_public_read",
+        "create": "organization_write",
+        "update": "organization_write",
+        "partial_update": "organization_write",
+        "destroy": "organization_write",
+    }
+
+    def get_permissions(self):
+        if self.action in {"list", "retrieve"}:
+            return [permissions.AllowAny()]
+        return [IsActiveAccount()]
+
+    def get_queryset(self):
+        queryset = self.queryset
+        organization_uuid = self.kwargs.get("organization_uuid")
+        if organization_uuid is not None:
+            queryset = queryset.filter(organization__uuid=organization_uuid)
+        return queryset
+
+    def _get_organization_from_url(self):
+        organization_uuid = self.kwargs.get("organization_uuid")
+        organization = Organization.objects.filter(uuid=organization_uuid).first()
+        if organization is None:
+            raise NotFound("Organization not found.")
+        return organization
+
+    def _validate_organization_owner(self, organization):
+        if organization.user_id != self.request.user.id:
+            raise PermissionDenied("Organization does not belong to the authenticated user.")
+
+    def perform_create(self, serializer):
+        organization = self._get_organization_from_url()
+        self._validate_organization_owner(organization)
+        serializer.save(organization=organization)
+
+    def perform_update(self, serializer):
+        organization = self._get_organization_from_url()
+        self._validate_organization_owner(organization)
+        serializer.save(organization=organization)
+
+    def perform_destroy(self, instance):
+        self._validate_organization_owner(instance.organization)
+        instance.delete()
+
+
+@extend_schema_view(
+    list=extend_schema(
+        summary="List services",
+        description="Lists the services of the organization job specified in the URL.",
+        parameters=[organization_uuid_parameter, organization_job_uuid_parameter],
+    ),
+    create=extend_schema(
+        summary="Create service",
+        description=(
+            "Creates a service in the organization job specified in the URL "
+            "if it belongs to the authenticated user."
+        ),
+        parameters=[organization_uuid_parameter, organization_job_uuid_parameter],
+    ),
+    retrieve=extend_schema(
         summary="Get service",
-        description="Returns the details of a service belonging to the organization specified in the URL.",
-        parameters=[organization_uuid_parameter],
+        description="Returns the details of a service belonging to the organization job specified in the URL.",
+        parameters=[organization_uuid_parameter, organization_job_uuid_parameter, service_uuid_parameter],
     ),
     update=extend_schema(
         summary="Replace service",
-        description="Fully replaces a service in the organization specified in the URL.",
-        parameters=[organization_uuid_parameter],
+        description="Fully replaces a service in the organization job specified in the URL.",
+        parameters=[organization_uuid_parameter, organization_job_uuid_parameter, service_uuid_parameter],
     ),
     partial_update=extend_schema(
         summary="Update service",
-        description="Partially updates a service in the organization specified in the URL.",
-        parameters=[organization_uuid_parameter],
+        description="Partially updates a service in the organization job specified in the URL.",
+        parameters=[organization_uuid_parameter, organization_job_uuid_parameter, service_uuid_parameter],
     ),
     destroy=extend_schema(
         summary="Delete service",
-        description="Deletes a service in the organization specified in the URL.",
-        parameters=[organization_uuid_parameter],
+        description="Deletes a service in the organization job specified in the URL.",
+        parameters=[organization_uuid_parameter, organization_job_uuid_parameter, service_uuid_parameter],
     ),
 )
 class ServiceViewSet(ActionScopedRateThrottleMixin, viewsets.ModelViewSet):
     serializer_class = ServiceSerializer
-    queryset = Service.objects.select_related("organization")
+    queryset = Service.objects.select_related("job", "job__organization")
     lookup_field = "uuid"
     lookup_url_kwarg = "service_uuid"
     throttle_scope_prefix = "organization"
@@ -486,21 +595,28 @@ class ServiceViewSet(ActionScopedRateThrottleMixin, viewsets.ModelViewSet):
         queryset = self.queryset
         organization_uuid = self.kwargs.get("organization_uuid")
         if organization_uuid is not None:
-            queryset = queryset.filter(organization__uuid=organization_uuid)
+            queryset = queryset.filter(job__organization__uuid=organization_uuid)
+        job_uuid = self.kwargs.get("job_uuid")
+        if job_uuid is not None:
+            queryset = queryset.filter(job__uuid=job_uuid)
         return queryset
 
-    def _get_organization_from_url(self):
+    def _get_job_from_url(self):
         organization_uuid = self.kwargs.get("organization_uuid")
-        organization = Organization.objects.filter(uuid=organization_uuid).first()
-        if organization is None:
-            raise NotFound("Organization not found.")
-        return organization
+        job_uuid = self.kwargs.get("job_uuid")
+        organization_job = OrganizationJob.objects.select_related("organization").filter(uuid=job_uuid)
+        if organization_uuid is not None:
+            organization_job = organization_job.filter(organization__uuid=organization_uuid)
+        organization_job = organization_job.first()
+        if organization_job is None:
+            raise NotFound("Organization job not found.")
+        return organization_job
 
     def perform_create(self, serializer):
-        organization = self._get_organization_from_url()
-        if organization.user_id != self.request.user.id:
+        organization_job = self._get_job_from_url()
+        if organization_job.organization.user_id != self.request.user.id:
             raise PermissionDenied("Organization does not belong to the authenticated user.")
-        serializer.save(organization=organization)
+        serializer.save(job=organization_job)
 
 
 @extend_schema_view(
@@ -545,7 +661,6 @@ class AnnouncementViewSet(ActionScopedRateThrottleMixin, viewsets.ModelViewSet):
     queryset = Announcement.objects.select_related(
         "organization",
         "category",
-        "review",
     ).prefetch_related("services")
     lookup_field = "uuid"
     throttle_scope_prefix = "organization"
@@ -620,39 +735,39 @@ class AnnouncementViewSet(ActionScopedRateThrottleMixin, viewsets.ModelViewSet):
     list=extend_schema(
         summary="List subservices",
         description="Lists the subservices of the service specified in the URL.",
-        parameters=[service_uuid_parameter],
+        parameters=[organization_uuid_parameter, organization_job_uuid_parameter, service_uuid_parameter],
     ),
     create=extend_schema(
         summary="Create subservice",
         description="Creates a subservice associated with the service specified in the URL.",
-        parameters=[service_uuid_parameter],
+        parameters=[organization_uuid_parameter, organization_job_uuid_parameter, service_uuid_parameter],
     ),
     retrieve=extend_schema(
         summary="Get subservice",
         description="Returns the details of a subservice belonging to the service specified in the URL.",
-        parameters=[service_uuid_parameter],
+        parameters=[organization_uuid_parameter, organization_job_uuid_parameter, service_uuid_parameter],
     ),
     update=extend_schema(
         summary="Replace subservice",
         description="Fully replaces a subservice of the service specified in the URL.",
-        parameters=[service_uuid_parameter],
+        parameters=[organization_uuid_parameter, organization_job_uuid_parameter, service_uuid_parameter],
     ),
     partial_update=extend_schema(
         summary="Update subservice",
         description="Partially updates a subservice of the service specified in the URL.",
-        parameters=[service_uuid_parameter],
+        parameters=[organization_uuid_parameter, organization_job_uuid_parameter, service_uuid_parameter],
     ),
     destroy=extend_schema(
         summary="Delete subservice",
         description="Deletes a subservice of the service specified in the URL.",
-        parameters=[service_uuid_parameter],
+        parameters=[organization_uuid_parameter, organization_job_uuid_parameter, service_uuid_parameter],
     ),
 )
 class SubserviceViewSet(ActionScopedRateThrottleMixin, viewsets.ModelViewSet):
     serializer_class = SubserviceSerializer
     permission_classes = [IsActiveAccount]
     queryset = Subservice.objects.select_related(
-        "service", "service__organization"
+        "service", "service__job", "service__job__organization"
     ).prefetch_related("price_table")
     lookup_field = "uuid"
     throttle_scope_prefix = "organization"
@@ -666,10 +781,13 @@ class SubserviceViewSet(ActionScopedRateThrottleMixin, viewsets.ModelViewSet):
     }
 
     def get_queryset(self):
-        queryset = self.queryset.filter(service__organization__user=self.request.user)
+        queryset = self.queryset.filter(service__job__organization__user=self.request.user)
         organization_uuid = self.kwargs.get("organization_uuid")
         if organization_uuid is not None:
-            queryset = queryset.filter(service__organization__uuid=organization_uuid)
+            queryset = queryset.filter(service__job__organization__uuid=organization_uuid)
+        job_uuid = self.kwargs.get("job_uuid")
+        if job_uuid is not None:
+            queryset = queryset.filter(service__job__uuid=job_uuid)
         service_uuid = self.kwargs.get("service_uuid")
         if service_uuid is not None:
             queryset = queryset.filter(service__uuid=service_uuid)
@@ -677,12 +795,15 @@ class SubserviceViewSet(ActionScopedRateThrottleMixin, viewsets.ModelViewSet):
 
     def _get_service_from_url(self):
         organization_uuid = self.kwargs.get("organization_uuid")
+        job_uuid = self.kwargs.get("job_uuid")
         service_uuid = self.kwargs.get("service_uuid")
-        service = Service.objects.select_related("organization").filter(
+        service = Service.objects.select_related("job", "job__organization").filter(
             uuid=service_uuid
         )
         if organization_uuid is not None:
-            service = service.filter(organization__uuid=organization_uuid)
+            service = service.filter(job__organization__uuid=organization_uuid)
+        if job_uuid is not None:
+            service = service.filter(job__uuid=job_uuid)
         service = service.first()
         if service is None:
             raise NotFound("Service not found.")
@@ -690,7 +811,7 @@ class SubserviceViewSet(ActionScopedRateThrottleMixin, viewsets.ModelViewSet):
 
     def perform_create(self, serializer):
         service = self._get_service_from_url()
-        if service.organization.user_id != self.request.user.id:
+        if service.job.organization.user_id != self.request.user.id:
             raise PermissionDenied("Service does not belong to the authenticated user organization.")
         payload_service = serializer.validated_data["service"]
         if payload_service.uuid != service.uuid:
@@ -699,7 +820,7 @@ class SubserviceViewSet(ActionScopedRateThrottleMixin, viewsets.ModelViewSet):
 
     def perform_update(self, serializer):
         service = self._get_service_from_url()
-        if service.organization.user_id != self.request.user.id:
+        if service.job.organization.user_id != self.request.user.id:
             raise PermissionDenied("Service does not belong to the authenticated user organization.")
         payload_service = serializer.validated_data.get("service", serializer.instance.service)
         if payload_service.uuid != service.uuid:
@@ -743,7 +864,8 @@ class ServicePriceViewSet(ActionScopedRateThrottleMixin, viewsets.ModelViewSet):
     queryset = ServicePrice.objects.select_related(
         "subservice",
         "subservice__service",
-        "subservice__service__organization",
+        "subservice__service__job",
+        "subservice__service__job__organization",
     )
     lookup_field = "uuid"
     throttle_scope_prefix = "organization"
@@ -757,11 +879,11 @@ class ServicePriceViewSet(ActionScopedRateThrottleMixin, viewsets.ModelViewSet):
     }
 
     def get_queryset(self):
-        return self.queryset.filter(subservice__service__organization__user=self.request.user)
+        return self.queryset.filter(subservice__service__job__organization__user=self.request.user)
 
     def _get_subservice(self, serializer):
         subservice = serializer.validated_data.get("subservice", serializer.instance.subservice)
-        if subservice.service.organization.user_id != self.request.user.id:
+        if subservice.service.job.organization.user_id != self.request.user.id:
             raise PermissionDenied("Subservice does not belong to the authenticated user organization.")
         return subservice
 

@@ -62,7 +62,7 @@ Si `REDIS_URL` no existe fuera de produccion, Channels usa `InMemoryChannelLayer
 ## Auth y JWT
 
 - `AUTH_VERIFY_EMAIL_URL_TEMPLATE`: URL base para verificacion de email.
-- `AUTH_BYPASS_EMAIL_VERIFICATION`: cuando vale `1`, omite la verificacion de email en toda la app (auth, endpoints protegidos y acceso jobs/ws) para entornos de desarrollo.
+- `AUTH_BYPASS_EMAIL_VERIFICATION`: cuando vale `1`, omite la verificacion de email en toda la app (auth, endpoints protegidos y acceso jobs/ws). En desarrollo el valor por defecto es `1`; en produccion el valor por defecto es `0`.
 - `AUTH_ENFORCE_PASSWORD_RESTRICTIONS`: cuando vale `0`, desactiva validadores de Django y longitud minima en serializers para permitir contrasenas sin restricciones.
 - `JWT_ROTATE_REFRESH_TOKENS`: rota refresh tokens al renovar sesion.
 

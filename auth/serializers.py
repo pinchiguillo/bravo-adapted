@@ -3,10 +3,11 @@ import time
 from django.conf import settings
 from django.contrib.auth import get_user_model
 from django.contrib.auth.password_validation import validate_password
-from django.core.exceptions import ValidationError as DjangoValidationError
 from django.core import signing
+from django.core.exceptions import ValidationError as DjangoValidationError
 from django.core.mail import send_mail
 from django.db import transaction
+from drf_spectacular.utils import extend_schema_field
 from rest_framework import serializers
 from rest_framework.exceptions import AuthenticationFailed
 from rest_framework_simplejwt.serializers import TokenObtainPairSerializer
@@ -40,6 +41,9 @@ def send_verification_email(user):
 
 
 class UserSerializer(serializers.ModelSerializer):
+    preferencias = serializers.SerializerMethodField()
+    permissions = serializers.SerializerMethodField()
+
     class Meta:
         model = get_user_model()
         fields = (
@@ -51,7 +55,17 @@ class UserSerializer(serializers.ModelSerializer):
             "first_name",
             "last_name",
             "status",
+            "preferencias",
+            "permissions",
         )
+
+    @extend_schema_field({"type": "object", "additionalProperties": {}})
+    def get_preferencias(self, obj):
+        return {}
+
+    @extend_schema_field(serializers.ListField(child=serializers.CharField()))
+    def get_permissions(self, obj):
+        return sorted(obj.get_all_permissions())
 
 
 class RegisterSerializer(serializers.ModelSerializer):

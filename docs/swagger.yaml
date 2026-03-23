@@ -143,9 +143,27 @@ paths:
   /api/jobs/:
     get:
       operationId: jobs_list
-      description: Lists the jobs where the authenticated user participates as a client
-        or organization.
-      summary: List jobs
+      description: Searches the jobs where the authenticated user participates as
+        a client or organization.
+      summary: Search jobs
+      parameters:
+      - name: page
+        required: false
+        in: query
+        description: A page number within the paginated result set.
+        schema:
+          type: integer
+      - name: page_size
+        required: false
+        in: query
+        description: Number of results to return per page.
+        schema:
+          type: integer
+      - in: query
+        name: search
+        schema:
+          type: string
+        description: Search term with at least 3 characters to filter accessible jobs.
       tags:
       - jobs
       security:
@@ -155,9 +173,7 @@ paths:
           content:
             application/json:
               schema:
-                type: array
-                items:
-                  $ref: '#/components/schemas/Job'
+                $ref: '#/components/schemas/PaginatedJobList'
           description: ''
     post:
       operationId: jobs_create
@@ -294,11 +310,11 @@ paths:
       responses:
         '204':
           description: No response body
-  /api/jobs/{uuid}/messages/:
+  /api/jobs/chats/{uuid}/:
     get:
-      operationId: jobs_messages_retrieve
-      description: Gets job chat messages or creates a new message in that chat.
-      summary: Manage job messages
+      operationId: jobs_chats_retrieve
+      description: Returns the chat associated with an accessible job.
+      summary: Get job chat
       parameters:
       - in: path
         name: uuid
@@ -315,12 +331,35 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/Job'
+                $ref: '#/components/schemas/JobChat'
+          description: ''
+  /api/jobs/chats/{uuid}/messages/:
+    get:
+      operationId: jobs_chats_messages_retrieve
+      description: Gets messages or creates a new message in the selected chat.
+      summary: Manage chat messages
+      parameters:
+      - in: path
+        name: uuid
+        schema:
+          type: string
+          format: uuid
+        required: true
+      tags:
+      - jobs
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/JobChat'
           description: ''
     post:
-      operationId: jobs_messages_create
-      description: Gets job chat messages or creates a new message in that chat.
-      summary: Manage job messages
+      operationId: jobs_chats_messages_create
+      description: Gets messages or creates a new message in the selected chat.
+      summary: Manage chat messages
       parameters:
       - in: path
         name: uuid
@@ -334,14 +373,13 @@ paths:
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/Job'
+              $ref: '#/components/schemas/JobChat'
           application/x-www-form-urlencoded:
             schema:
-              $ref: '#/components/schemas/Job'
+              $ref: '#/components/schemas/JobChat'
           multipart/form-data:
             schema:
-              $ref: '#/components/schemas/Job'
-        required: true
+              $ref: '#/components/schemas/JobChat'
       security:
       - jwtAuth: []
       responses:
@@ -349,12 +387,13 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/Job'
+                $ref: '#/components/schemas/JobChat'
           description: ''
-  /api/jobs/{uuid}/messages/{message_id}/attachments/:
+  /api/jobs/chats/{uuid}/messages/{message_id}/attachments/:
     post:
-      operationId: jobs_messages_attachments_create
-      description: Uploads a file and links it to an existing message in the job chat.
+      operationId: jobs_chats_messages_attachments_create
+      description: Uploads a file and links it to an existing message in the selected
+        chat.
       summary: Attach file to message
       parameters:
       - in: path
@@ -375,11 +414,10 @@ paths:
         content:
           multipart/form-data:
             schema:
-              $ref: '#/components/schemas/Job'
+              $ref: '#/components/schemas/JobChat'
           application/x-www-form-urlencoded:
             schema:
-              $ref: '#/components/schemas/Job'
-        required: true
+              $ref: '#/components/schemas/JobChat'
       security:
       - jwtAuth: []
       responses:
@@ -387,13 +425,13 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/Job'
+                $ref: '#/components/schemas/JobChat'
           description: ''
-  /api/jobs/{uuid}/messages/{message_id}/attachments/{attachment_id}/download/:
+  /api/jobs/chats/{uuid}/messages/{message_id}/attachments/{attachment_id}/download/:
     get:
-      operationId: jobs_messages_attachments_download_retrieve
+      operationId: jobs_chats_messages_attachments_download_retrieve
       description: Returns a temporary signed URL to download the chat attachment
-        if the authorized user still has access to the job.
+        if the authorized user still has access to the chat.
       summary: Get temporary attachment URL
       parameters:
       - in: path
@@ -423,11 +461,24 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/Job'
+                $ref: '#/components/schemas/JobChat'
           description: ''
-  /api/management/jobs/:
+  /api/management/feature-flags/:
     get:
-      operationId: management_jobs_list
+      operationId: management_feature_flags_list
+      parameters:
+      - name: page
+        required: false
+        in: query
+        description: A page number within the paginated result set.
+        schema:
+          type: integer
+      - name: page_size
+        required: false
+        in: query
+        description: Number of results to return per page.
+        schema:
+          type: integer
       tags:
       - management
       security:
@@ -437,9 +488,211 @@ paths:
           content:
             application/json:
               schema:
-                type: array
-                items:
-                  $ref: '#/components/schemas/ManagementJob'
+                $ref: '#/components/schemas/PaginatedManagementFeatureFlagList'
+          description: ''
+    post:
+      operationId: management_feature_flags_create
+      tags:
+      - management
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ManagementFeatureFlag'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/ManagementFeatureFlag'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/ManagementFeatureFlag'
+        required: true
+      security:
+      - jwtAuth: []
+      responses:
+        '201':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ManagementFeatureFlag'
+          description: ''
+  /api/management/feature-flags/{uuid}/:
+    get:
+      operationId: management_feature_flags_retrieve
+      parameters:
+      - in: path
+        name: uuid
+        schema:
+          type: string
+          format: uuid
+        required: true
+      tags:
+      - management
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ManagementFeatureFlag'
+          description: ''
+    put:
+      operationId: management_feature_flags_update
+      parameters:
+      - in: path
+        name: uuid
+        schema:
+          type: string
+          format: uuid
+        required: true
+      tags:
+      - management
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ManagementFeatureFlag'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/ManagementFeatureFlag'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/ManagementFeatureFlag'
+        required: true
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ManagementFeatureFlag'
+          description: ''
+    patch:
+      operationId: management_feature_flags_partial_update
+      parameters:
+      - in: path
+        name: uuid
+        schema:
+          type: string
+          format: uuid
+        required: true
+      tags:
+      - management
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PatchedManagementFeatureFlag'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/PatchedManagementFeatureFlag'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/PatchedManagementFeatureFlag'
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ManagementFeatureFlag'
+          description: ''
+  /api/management/feature-flags/{uuid}/activate/:
+    post:
+      operationId: management_feature_flags_activate_create
+      summary: Activate feature flag
+      parameters:
+      - in: path
+        name: uuid
+        schema:
+          type: string
+          format: uuid
+        required: true
+      tags:
+      - management
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ManagementFeatureFlag'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/ManagementFeatureFlag'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/ManagementFeatureFlag'
+        required: true
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ManagementFeatureFlag'
+          description: ''
+  /api/management/feature-flags/{uuid}/deactivate/:
+    post:
+      operationId: management_feature_flags_deactivate_create
+      summary: Deactivate feature flag
+      parameters:
+      - in: path
+        name: uuid
+        schema:
+          type: string
+          format: uuid
+        required: true
+      tags:
+      - management
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ManagementFeatureFlag'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/ManagementFeatureFlag'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/ManagementFeatureFlag'
+        required: true
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ManagementFeatureFlag'
+          description: ''
+  /api/management/jobs/:
+    get:
+      operationId: management_jobs_list
+      parameters:
+      - name: page
+        required: false
+        in: query
+        description: A page number within the paginated result set.
+        schema:
+          type: integer
+      - name: page_size
+        required: false
+        in: query
+        description: Number of results to return per page.
+        schema:
+          type: integer
+      tags:
+      - management
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedManagementJobList'
           description: ''
     post:
       operationId: management_jobs_create
@@ -655,6 +908,19 @@ paths:
   /api/management/organizations/:
     get:
       operationId: management_organizations_list
+      parameters:
+      - name: page
+        required: false
+        in: query
+        description: A page number within the paginated result set.
+        schema:
+          type: integer
+      - name: page_size
+        required: false
+        in: query
+        description: Number of results to return per page.
+        schema:
+          type: integer
       tags:
       - management
       security:
@@ -664,9 +930,7 @@ paths:
           content:
             application/json:
               schema:
-                type: array
-                items:
-                  $ref: '#/components/schemas/ManagementOrganization'
+                $ref: '#/components/schemas/PaginatedManagementOrganizationList'
           description: ''
     post:
       operationId: management_organizations_create
@@ -882,6 +1146,19 @@ paths:
   /api/management/users/:
     get:
       operationId: management_users_list
+      parameters:
+      - name: page
+        required: false
+        in: query
+        description: A page number within the paginated result set.
+        schema:
+          type: integer
+      - name: page_size
+        required: false
+        in: query
+        description: Number of results to return per page.
+        schema:
+          type: integer
       tags:
       - management
       security:
@@ -891,9 +1168,7 @@ paths:
           content:
             application/json:
               schema:
-                type: array
-                items:
-                  $ref: '#/components/schemas/ManagementUser'
+                $ref: '#/components/schemas/PaginatedManagementUserList'
           description: ''
     post:
       operationId: management_users_create
@@ -1106,13 +1381,78 @@ paths:
               schema:
                 $ref: '#/components/schemas/ManagementUser'
           description: ''
-  /api/organization/:
-    get:
-      operationId: organization_list
-      description: Lists all organizations. Only available to admin users.
-      summary: List organizations
+  /api/organizations/:
+    post:
+      operationId: organizations_create
+      description: Creates an organization associated with the authenticated user.
+      summary: Create organization
       tags:
-      - organization
+      - organizations
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Organization'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/Organization'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/Organization'
+        required: true
+      security:
+      - jwtAuth: []
+      responses:
+        '201':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Organization'
+          description: ''
+        '400':
+          description: Authenticated user already has an organization.
+  /api/organizations/{organization_uuid}/announcements/:
+    get:
+      operationId: organizations_announcements_list_2
+      description: Lists announcements for the organization specified in the URL.
+      summary: List announcements
+      parameters:
+      - in: query
+        name: categories
+        schema:
+          type: array
+          items:
+            type: string
+            format: uuid
+        description: Optional list of category UUIDs used to filter announcements.
+        explode: true
+        style: form
+      - in: path
+        name: organization_uuid
+        schema:
+          type: string
+        description: UUID of the organization that owns the nested resource.
+        required: true
+      - name: page
+        required: false
+        in: query
+        description: A page number within the paginated result set.
+        schema:
+          type: integer
+      - name: page_size
+        required: false
+        in: query
+        description: Number of results to return per page.
+        schema:
+          type: integer
+      - in: query
+        name: search
+        schema:
+          type: string
+        description: Optional text used to filter announcements by their visible text
+          fields.
+      tags:
+      - organizations
       security:
       - jwtAuth: []
       responses:
@@ -1120,24 +1460,204 @@ paths:
           content:
             application/json:
               schema:
-                type: array
-                items:
-                  $ref: '#/components/schemas/Organization'
+                $ref: '#/components/schemas/PaginatedAnnouncementList'
           description: ''
-  /api/organization/{organization_uuid}/services/:
-    get:
-      operationId: organization_services_list
-      description: Lists the services of the organization specified in the URL.
-      summary: List services
+    post:
+      operationId: organizations_announcements_create
+      description: Creates an announcement for the organization specified in the URL.
+      summary: Create announcement
       parameters:
       - in: path
         name: organization_uuid
         schema:
           type: string
-        description: UUID of the organization that owns the service.
+        description: UUID of the organization that owns the nested resource.
         required: true
       tags:
-      - organization
+      - organizations
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Announcement'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/Announcement'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/Announcement'
+        required: true
+      security:
+      - jwtAuth: []
+      responses:
+        '201':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Announcement'
+          description: ''
+  /api/organizations/{organization_uuid}/announcements/{uuid}/:
+    get:
+      operationId: organizations_announcements_retrieve
+      description: Returns the details of an announcement belonging to the organization
+        specified in the URL.
+      summary: Get announcement
+      parameters:
+      - in: path
+        name: organization_uuid
+        schema:
+          type: string
+        description: UUID of the organization that owns the nested resource.
+        required: true
+      - in: path
+        name: uuid
+        schema:
+          type: string
+        description: UUID of the announcement.
+        required: true
+      tags:
+      - organizations
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Announcement'
+          description: ''
+    put:
+      operationId: organizations_announcements_update
+      description: Fully replaces an announcement owned by the organization specified
+        in the URL.
+      summary: Replace announcement
+      parameters:
+      - in: path
+        name: organization_uuid
+        schema:
+          type: string
+        description: UUID of the organization that owns the nested resource.
+        required: true
+      - in: path
+        name: uuid
+        schema:
+          type: string
+        description: UUID of the announcement.
+        required: true
+      tags:
+      - organizations
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Announcement'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/Announcement'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/Announcement'
+        required: true
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Announcement'
+          description: ''
+    patch:
+      operationId: organizations_announcements_partial_update
+      description: Partially updates an announcement owned by the organization specified
+        in the URL.
+      summary: Update announcement
+      parameters:
+      - in: path
+        name: organization_uuid
+        schema:
+          type: string
+        description: UUID of the organization that owns the nested resource.
+        required: true
+      - in: path
+        name: uuid
+        schema:
+          type: string
+        description: UUID of the announcement.
+        required: true
+      tags:
+      - organizations
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PatchedAnnouncement'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/PatchedAnnouncement'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/PatchedAnnouncement'
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Announcement'
+          description: ''
+    delete:
+      operationId: organizations_announcements_destroy
+      description: Deletes an announcement owned by the organization specified in
+        the URL.
+      summary: Delete announcement
+      parameters:
+      - in: path
+        name: organization_uuid
+        schema:
+          type: string
+        description: UUID of the organization that owns the nested resource.
+        required: true
+      - in: path
+        name: uuid
+        schema:
+          type: string
+        description: UUID of the announcement.
+        required: true
+      tags:
+      - organizations
+      security:
+      - jwtAuth: []
+      responses:
+        '204':
+          description: No response body
+  /api/organizations/{organization_uuid}/jobs/:
+    get:
+      operationId: organizations_jobs_list
+      description: Lists the jobs of the organization specified in the URL.
+      summary: List organization jobs
+      parameters:
+      - in: path
+        name: organization_uuid
+        schema:
+          type: string
+        description: UUID of the organization that owns the nested resource.
+        required: true
+      - name: page
+        required: false
+        in: query
+        description: A page number within the paginated result set.
+        schema:
+          type: integer
+      - name: page_size
+        required: false
+        in: query
+        description: Number of results to return per page.
+        schema:
+          type: integer
+      tags:
+      - organizations
       security:
       - jwtAuth: []
       - {}
@@ -1146,24 +1666,239 @@ paths:
           content:
             application/json:
               schema:
-                type: array
-                items:
-                  $ref: '#/components/schemas/Service'
+                $ref: '#/components/schemas/PaginatedOrganizationJobList'
           description: ''
     post:
-      operationId: organization_services_create
-      description: Creates a service in the organization specified in the URL if it
-        belongs to the authenticated user.
-      summary: Create service
+      operationId: organizations_jobs_create
+      description: Creates an organization job in the organization specified in the
+        URL if it belongs to the authenticated user.
+      summary: Create organization job
       parameters:
       - in: path
         name: organization_uuid
         schema:
           type: string
-        description: UUID of the organization that owns the service.
+        description: UUID of the organization that owns the nested resource.
         required: true
       tags:
-      - organization
+      - organizations
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/OrganizationJob'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/OrganizationJob'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/OrganizationJob'
+        required: true
+      security:
+      - jwtAuth: []
+      responses:
+        '201':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OrganizationJob'
+          description: ''
+  /api/organizations/{organization_uuid}/jobs/{job_uuid}/:
+    get:
+      operationId: organizations_jobs_retrieve
+      description: Returns the details of a job belonging to the organization specified
+        in the URL.
+      summary: Get organization job
+      parameters:
+      - in: path
+        name: job_uuid
+        schema:
+          type: string
+        description: UUID of the organization job that owns the service.
+        required: true
+      - in: path
+        name: organization_uuid
+        schema:
+          type: string
+        description: UUID of the organization that owns the nested resource.
+        required: true
+      tags:
+      - organizations
+      security:
+      - jwtAuth: []
+      - {}
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OrganizationJob'
+          description: ''
+    put:
+      operationId: organizations_jobs_update
+      description: Fully replaces a job in the organization specified in the URL.
+      summary: Replace organization job
+      parameters:
+      - in: path
+        name: job_uuid
+        schema:
+          type: string
+        description: UUID of the organization job that owns the service.
+        required: true
+      - in: path
+        name: organization_uuid
+        schema:
+          type: string
+        description: UUID of the organization that owns the nested resource.
+        required: true
+      tags:
+      - organizations
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/OrganizationJob'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/OrganizationJob'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/OrganizationJob'
+        required: true
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OrganizationJob'
+          description: ''
+    patch:
+      operationId: organizations_jobs_partial_update
+      description: Partially updates a job in the organization specified in the URL.
+      summary: Update organization job
+      parameters:
+      - in: path
+        name: job_uuid
+        schema:
+          type: string
+        description: UUID of the organization job that owns the service.
+        required: true
+      - in: path
+        name: organization_uuid
+        schema:
+          type: string
+        description: UUID of the organization that owns the nested resource.
+        required: true
+      tags:
+      - organizations
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PatchedOrganizationJob'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/PatchedOrganizationJob'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/PatchedOrganizationJob'
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OrganizationJob'
+          description: ''
+    delete:
+      operationId: organizations_jobs_destroy
+      description: Deletes a job in the organization specified in the URL.
+      summary: Delete organization job
+      parameters:
+      - in: path
+        name: job_uuid
+        schema:
+          type: string
+        description: UUID of the organization job that owns the service.
+        required: true
+      - in: path
+        name: organization_uuid
+        schema:
+          type: string
+        description: UUID of the organization that owns the nested resource.
+        required: true
+      tags:
+      - organizations
+      security:
+      - jwtAuth: []
+      responses:
+        '204':
+          description: No response body
+  /api/organizations/{organization_uuid}/jobs/{job_uuid}/services/:
+    get:
+      operationId: organizations_jobs_services_list
+      description: Lists the services of the organization job specified in the URL.
+      summary: List services
+      parameters:
+      - in: path
+        name: job_uuid
+        schema:
+          type: string
+        description: UUID of the organization job that owns the service.
+        required: true
+      - in: path
+        name: organization_uuid
+        schema:
+          type: string
+        description: UUID of the organization that owns the nested resource.
+        required: true
+      - name: page
+        required: false
+        in: query
+        description: A page number within the paginated result set.
+        schema:
+          type: integer
+      - name: page_size
+        required: false
+        in: query
+        description: Number of results to return per page.
+        schema:
+          type: integer
+      tags:
+      - organizations
+      security:
+      - jwtAuth: []
+      - {}
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedServiceList'
+          description: ''
+    post:
+      operationId: organizations_jobs_services_create
+      description: Creates a service in the organization job specified in the URL
+        if it belongs to the authenticated user.
+      summary: Create service
+      parameters:
+      - in: path
+        name: job_uuid
+        schema:
+          type: string
+        description: UUID of the organization job that owns the service.
+        required: true
+      - in: path
+        name: organization_uuid
+        schema:
+          type: string
+        description: UUID of the organization that owns the nested resource.
+        required: true
+      tags:
+      - organizations
       requestBody:
         content:
           application/json:
@@ -1185,27 +1920,33 @@ paths:
               schema:
                 $ref: '#/components/schemas/Service'
           description: ''
-  /api/organization/{organization_uuid}/services/{uuid}/:
+  /api/organizations/{organization_uuid}/jobs/{job_uuid}/services/{service_uuid}/:
     get:
-      operationId: organization_services_retrieve
+      operationId: organizations_jobs_services_retrieve
       description: Returns the details of a service belonging to the organization
-        specified in the URL.
+        job specified in the URL.
       summary: Get service
       parameters:
+      - in: path
+        name: job_uuid
+        schema:
+          type: string
+        description: UUID of the organization job that owns the service.
+        required: true
       - in: path
         name: organization_uuid
         schema:
           type: string
-        description: UUID of the organization that owns the service.
+        description: UUID of the organization that owns the nested resource.
         required: true
       - in: path
-        name: uuid
+        name: service_uuid
         schema:
           type: string
-          format: uuid
+        description: UUID of the service that owns the nested subservice.
         required: true
       tags:
-      - organization
+      - organizations
       security:
       - jwtAuth: []
       - {}
@@ -1217,24 +1958,31 @@ paths:
                 $ref: '#/components/schemas/Service'
           description: ''
     put:
-      operationId: organization_services_update
-      description: Fully replaces a service in the organization specified in the URL.
+      operationId: organizations_jobs_services_update
+      description: Fully replaces a service in the organization job specified in the
+        URL.
       summary: Replace service
       parameters:
+      - in: path
+        name: job_uuid
+        schema:
+          type: string
+        description: UUID of the organization job that owns the service.
+        required: true
       - in: path
         name: organization_uuid
         schema:
           type: string
-        description: UUID of the organization that owns the service.
+        description: UUID of the organization that owns the nested resource.
         required: true
       - in: path
-        name: uuid
+        name: service_uuid
         schema:
           type: string
-          format: uuid
+        description: UUID of the service that owns the nested subservice.
         required: true
       tags:
-      - organization
+      - organizations
       requestBody:
         content:
           application/json:
@@ -1257,25 +2005,31 @@ paths:
                 $ref: '#/components/schemas/Service'
           description: ''
     patch:
-      operationId: organization_services_partial_update
-      description: Partially updates a service in the organization specified in the
-        URL.
+      operationId: organizations_jobs_services_partial_update
+      description: Partially updates a service in the organization job specified in
+        the URL.
       summary: Update service
       parameters:
+      - in: path
+        name: job_uuid
+        schema:
+          type: string
+        description: UUID of the organization job that owns the service.
+        required: true
       - in: path
         name: organization_uuid
         schema:
           type: string
-        description: UUID of the organization that owns the service.
+        description: UUID of the organization that owns the nested resource.
         required: true
       - in: path
-        name: uuid
+        name: service_uuid
         schema:
           type: string
-          format: uuid
+        description: UUID of the service that owns the nested subservice.
         required: true
       tags:
-      - organization
+      - organizations
       requestBody:
         content:
           application/json:
@@ -1297,15 +2051,153 @@ paths:
                 $ref: '#/components/schemas/Service'
           description: ''
     delete:
-      operationId: organization_services_destroy
-      description: Deletes a service in the organization specified in the URL.
+      operationId: organizations_jobs_services_destroy
+      description: Deletes a service in the organization job specified in the URL.
       summary: Delete service
       parameters:
+      - in: path
+        name: job_uuid
+        schema:
+          type: string
+        description: UUID of the organization job that owns the service.
+        required: true
       - in: path
         name: organization_uuid
         schema:
           type: string
-        description: UUID of the organization that owns the service.
+        description: UUID of the organization that owns the nested resource.
+        required: true
+      - in: path
+        name: service_uuid
+        schema:
+          type: string
+        description: UUID of the service that owns the nested subservice.
+        required: true
+      tags:
+      - organizations
+      security:
+      - jwtAuth: []
+      responses:
+        '204':
+          description: No response body
+  /api/organizations/{organization_uuid}/jobs/{job_uuid}/services/{service_uuid}/subservices/:
+    get:
+      operationId: organizations_jobs_services_subservices_list
+      description: Lists the subservices of the service specified in the URL.
+      summary: List subservices
+      parameters:
+      - in: path
+        name: job_uuid
+        schema:
+          type: string
+        description: UUID of the organization job that owns the service.
+        required: true
+      - in: path
+        name: organization_uuid
+        schema:
+          type: string
+        description: UUID of the organization that owns the nested resource.
+        required: true
+      - name: page
+        required: false
+        in: query
+        description: A page number within the paginated result set.
+        schema:
+          type: integer
+      - name: page_size
+        required: false
+        in: query
+        description: Number of results to return per page.
+        schema:
+          type: integer
+      - in: path
+        name: service_uuid
+        schema:
+          type: string
+        description: UUID of the service that owns the nested subservice.
+        required: true
+      tags:
+      - organizations
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedSubserviceList'
+          description: ''
+    post:
+      operationId: organizations_jobs_services_subservices_create
+      description: Creates a subservice associated with the service specified in the
+        URL.
+      summary: Create subservice
+      parameters:
+      - in: path
+        name: job_uuid
+        schema:
+          type: string
+        description: UUID of the organization job that owns the service.
+        required: true
+      - in: path
+        name: organization_uuid
+        schema:
+          type: string
+        description: UUID of the organization that owns the nested resource.
+        required: true
+      - in: path
+        name: service_uuid
+        schema:
+          type: string
+        description: UUID of the service that owns the nested subservice.
+        required: true
+      tags:
+      - organizations
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Subservice'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/Subservice'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/Subservice'
+        required: true
+      security:
+      - jwtAuth: []
+      responses:
+        '201':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Subservice'
+          description: ''
+  /api/organizations/{organization_uuid}/jobs/{job_uuid}/services/{service_uuid}/subservices/{uuid}/:
+    get:
+      operationId: organizations_jobs_services_subservices_retrieve
+      description: Returns the details of a subservice belonging to the service specified
+        in the URL.
+      summary: Get subservice
+      parameters:
+      - in: path
+        name: job_uuid
+        schema:
+          type: string
+        description: UUID of the organization job that owns the service.
+        required: true
+      - in: path
+        name: organization_uuid
+        schema:
+          type: string
+        description: UUID of the organization that owns the nested resource.
+        required: true
+      - in: path
+        name: service_uuid
+        schema:
+          type: string
+        description: UUID of the service that owns the nested subservice.
         required: true
       - in: path
         name: uuid
@@ -1314,15 +2206,159 @@ paths:
           format: uuid
         required: true
       tags:
-      - organization
+      - organizations
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Subservice'
+          description: ''
+    put:
+      operationId: organizations_jobs_services_subservices_update
+      description: Fully replaces a subservice of the service specified in the URL.
+      summary: Replace subservice
+      parameters:
+      - in: path
+        name: job_uuid
+        schema:
+          type: string
+        description: UUID of the organization job that owns the service.
+        required: true
+      - in: path
+        name: organization_uuid
+        schema:
+          type: string
+        description: UUID of the organization that owns the nested resource.
+        required: true
+      - in: path
+        name: service_uuid
+        schema:
+          type: string
+        description: UUID of the service that owns the nested subservice.
+        required: true
+      - in: path
+        name: uuid
+        schema:
+          type: string
+          format: uuid
+        required: true
+      tags:
+      - organizations
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Subservice'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/Subservice'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/Subservice'
+        required: true
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Subservice'
+          description: ''
+    patch:
+      operationId: organizations_jobs_services_subservices_partial_update
+      description: Partially updates a subservice of the service specified in the
+        URL.
+      summary: Update subservice
+      parameters:
+      - in: path
+        name: job_uuid
+        schema:
+          type: string
+        description: UUID of the organization job that owns the service.
+        required: true
+      - in: path
+        name: organization_uuid
+        schema:
+          type: string
+        description: UUID of the organization that owns the nested resource.
+        required: true
+      - in: path
+        name: service_uuid
+        schema:
+          type: string
+        description: UUID of the service that owns the nested subservice.
+        required: true
+      - in: path
+        name: uuid
+        schema:
+          type: string
+          format: uuid
+        required: true
+      tags:
+      - organizations
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PatchedSubservice'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/PatchedSubservice'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/PatchedSubservice'
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Subservice'
+          description: ''
+    delete:
+      operationId: organizations_jobs_services_subservices_destroy
+      description: Deletes a subservice of the service specified in the URL.
+      summary: Delete subservice
+      parameters:
+      - in: path
+        name: job_uuid
+        schema:
+          type: string
+        description: UUID of the organization job that owns the service.
+        required: true
+      - in: path
+        name: organization_uuid
+        schema:
+          type: string
+        description: UUID of the organization that owns the nested resource.
+        required: true
+      - in: path
+        name: service_uuid
+        schema:
+          type: string
+        description: UUID of the service that owns the nested subservice.
+        required: true
+      - in: path
+        name: uuid
+        schema:
+          type: string
+          format: uuid
+        required: true
+      tags:
+      - organizations
       security:
       - jwtAuth: []
       responses:
         '204':
           description: No response body
-  /api/organization/{uuid}/:
+  /api/organizations/{uuid}/:
     get:
-      operationId: organization_retrieve
+      operationId: organizations_retrieve
       description: Returns the public details of an organization identified by UUID.
       summary: Get organization
       parameters:
@@ -1333,7 +2369,7 @@ paths:
           format: uuid
         required: true
       tags:
-      - organization
+      - organizations
       security:
       - jwtAuth: []
       - {}
@@ -1345,7 +2381,7 @@ paths:
                 $ref: '#/components/schemas/OrganizationPublic'
           description: ''
     patch:
-      operationId: organization_partial_update
+      operationId: organizations_partial_update
       description: Partially updates an organization. Only allowed for its authenticated
         owner.
       summary: Update organization
@@ -1357,7 +2393,7 @@ paths:
           format: uuid
         required: true
       tags:
-      - organization
+      - organizations
       requestBody:
         content:
           application/json:
@@ -1379,7 +2415,7 @@ paths:
                 $ref: '#/components/schemas/Organization'
           description: ''
     delete:
-      operationId: organization_destroy
+      operationId: organizations_destroy
       description: Deletes an organization. Only allowed for its authenticated owner.
       summary: Delete organization
       parameters:
@@ -1390,19 +2426,84 @@ paths:
           format: uuid
         required: true
       tags:
-      - organization
+      - organizations
       security:
       - jwtAuth: []
       responses:
         '204':
           description: No response body
-  /api/organization/categories/:
+  /api/organizations/announcements/:
     get:
-      operationId: organization_categories_list
+      operationId: organizations_announcements_list
+      description: Lists active announcements. Supports optional filtering by category
+        UUIDs and plain text search.
+      summary: List public announcements
+      parameters:
+      - in: query
+        name: categories
+        schema:
+          type: array
+          items:
+            type: string
+            format: uuid
+        description: Optional list of category UUIDs used to filter announcements.
+        explode: true
+        style: form
+      - in: query
+        name: category
+        schema:
+          type: string
+        description: Single category UUID filter kept for backwards compatibility.
+      - name: page
+        required: false
+        in: query
+        description: A page number within the paginated result set.
+        schema:
+          type: integer
+      - name: page_size
+        required: false
+        in: query
+        description: Number of results to return per page.
+        schema:
+          type: integer
+      - in: query
+        name: search
+        schema:
+          type: string
+        description: Optional text used to filter announcements by their visible text
+          fields.
+      tags:
+      - organizations
+      security:
+      - jwtAuth: []
+      - {}
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedAnnouncementList'
+          description: ''
+  /api/organizations/categories/:
+    get:
+      operationId: organizations_categories_list
       description: Returns the categories catalog available to authenticated users.
       summary: List categories
+      parameters:
+      - name: page
+        required: false
+        in: query
+        description: A page number within the paginated result set.
+        schema:
+          type: integer
+      - name: page_size
+        required: false
+        in: query
+        description: Number of results to return per page.
+        schema:
+          type: integer
       tags:
-      - organization
+      - organizations
       security:
       - jwtAuth: []
       responses:
@@ -1410,13 +2511,11 @@ paths:
           content:
             application/json:
               schema:
-                type: array
-                items:
-                  $ref: '#/components/schemas/Category'
+                $ref: '#/components/schemas/PaginatedCategoryList'
           description: ''
-  /api/organization/categories/{uuid}/:
+  /api/organizations/categories/{uuid}/:
     get:
-      operationId: organization_categories_retrieve
+      operationId: organizations_categories_retrieve
       description: Returns the details of a category identified by UUID.
       summary: Get category
       parameters:
@@ -1427,7 +2526,7 @@ paths:
           format: uuid
         required: true
       tags:
-      - organization
+      - organizations
       security:
       - jwtAuth: []
       responses:
@@ -1437,13 +2536,13 @@ paths:
               schema:
                 $ref: '#/components/schemas/Category'
           description: ''
-  /api/organization/me/:
+  /api/organizations/me/:
     get:
-      operationId: organization_me_retrieve
+      operationId: organizations_me_retrieve
       description: Returns the organization associated with the authenticated user.
       summary: Get my organization
       tags:
-      - organization
+      - organizations
       security:
       - jwtAuth: []
       responses:
@@ -1454,12 +2553,12 @@ paths:
                 $ref: '#/components/schemas/Organization'
           description: ''
     patch:
-      operationId: organization_me_partial_update
+      operationId: organizations_me_partial_update
       description: Partially updates the organization associated with the authenticated
         user.
       summary: Update my organization
       tags:
-      - organization
+      - organizations
       requestBody:
         content:
           application/json:
@@ -1480,14 +2579,31 @@ paths:
               schema:
                 $ref: '#/components/schemas/Organization'
           description: ''
-  /api/organization/service-prices/:
+  /api/organizations/search/:
     get:
-      operationId: organization_service_prices_list
-      description: Lists configured prices for subservices in the authenticated user's
-        organization.
-      summary: List service prices
+      operationId: organizations_search_list
+      description: Searches organizations. Only available to admin users.
+      summary: Search organizations
+      parameters:
+      - name: page
+        required: false
+        in: query
+        description: A page number within the paginated result set.
+        schema:
+          type: integer
+      - name: page_size
+        required: false
+        in: query
+        description: Number of results to return per page.
+        schema:
+          type: integer
+      - in: query
+        name: search
+        schema:
+          type: string
+        description: Search term with at least 3 characters to filter organizations.
       tags:
-      - organization
+      - organizations
       security:
       - jwtAuth: []
       responses:
@@ -1495,27 +2611,54 @@ paths:
           content:
             application/json:
               schema:
-                type: array
-                items:
-                  $ref: '#/components/schemas/ServicePrice'
+                $ref: '#/components/schemas/PaginatedOrganizationList'
+          description: ''
+  /api/organizations/user/:
+    get:
+      operationId: organizations_user_list
+      description: Returns the organization associated with the authenticated user.
+      summary: Get authenticated user organization
+      parameters:
+      - name: page
+        required: false
+        in: query
+        description: A page number within the paginated result set.
+        schema:
+          type: integer
+      - name: page_size
+        required: false
+        in: query
+        description: Number of results to return per page.
+        schema:
+          type: integer
+      tags:
+      - organizations
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedOrganizationList'
           description: ''
     post:
-      operationId: organization_service_prices_create
-      description: Creates a price for a subservice in the authenticated user's organization.
-      summary: Create service price
+      operationId: organizations_user_create
+      description: Creates an organization associated with the authenticated user.
+      summary: Create authenticated user organization
       tags:
-      - organization
+      - organizations
       requestBody:
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/ServicePrice'
+              $ref: '#/components/schemas/Organization'
           application/x-www-form-urlencoded:
             schema:
-              $ref: '#/components/schemas/ServicePrice'
+              $ref: '#/components/schemas/Organization'
           multipart/form-data:
             schema:
-              $ref: '#/components/schemas/ServicePrice'
+              $ref: '#/components/schemas/Organization'
         required: true
       security:
       - jwtAuth: []
@@ -1524,58 +2667,28 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/ServicePrice'
+                $ref: '#/components/schemas/Organization'
           description: ''
-  /api/organization/service-prices/{uuid}/:
-    get:
-      operationId: organization_service_prices_retrieve
-      description: Returns the details of a service price accessible by the authenticated
+        '400':
+          description: Authenticated user already has an organization.
+    patch:
+      operationId: organizations_user_partial_update
+      description: Partially updates the organization associated with the authenticated
         user.
-      summary: Get service price
-      parameters:
-      - in: path
-        name: uuid
-        schema:
-          type: string
-        description: Service price identifier.
-        required: true
+      summary: Update authenticated user organization
       tags:
-      - organization
-      security:
-      - jwtAuth: []
-      responses:
-        '200':
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ServicePrice'
-          description: ''
-    put:
-      operationId: organization_service_prices_update
-      description: Fully replaces a service price for a subservice in the authenticated
-        user's organization.
-      summary: Replace service price
-      parameters:
-      - in: path
-        name: uuid
-        schema:
-          type: string
-        description: Service price identifier.
-        required: true
-      tags:
-      - organization
+      - organizations
       requestBody:
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/ServicePrice'
+              $ref: '#/components/schemas/PatchedOrganization'
           application/x-www-form-urlencoded:
             schema:
-              $ref: '#/components/schemas/ServicePrice'
+              $ref: '#/components/schemas/PatchedOrganization'
           multipart/form-data:
             schema:
-              $ref: '#/components/schemas/ServicePrice'
-        required: true
+              $ref: '#/components/schemas/PatchedOrganization'
       security:
       - jwtAuth: []
       responses:
@@ -1583,356 +2696,7 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/ServicePrice'
-          description: ''
-    patch:
-      operationId: organization_service_prices_partial_update
-      description: Partially updates a service price for a subservice in the authenticated
-        user's organization.
-      summary: Update service price
-      parameters:
-      - in: path
-        name: uuid
-        schema:
-          type: string
-        description: Service price identifier.
-        required: true
-      tags:
-      - organization
-      requestBody:
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/PatchedServicePrice'
-          application/x-www-form-urlencoded:
-            schema:
-              $ref: '#/components/schemas/PatchedServicePrice'
-          multipart/form-data:
-            schema:
-              $ref: '#/components/schemas/PatchedServicePrice'
-      security:
-      - jwtAuth: []
-      responses:
-        '200':
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ServicePrice'
-          description: ''
-    delete:
-      operationId: organization_service_prices_destroy
-      description: Deletes a service price in the authenticated user's organization.
-      summary: Delete service price
-      parameters:
-      - in: path
-        name: uuid
-        schema:
-          type: string
-        description: Service price identifier.
-        required: true
-      tags:
-      - organization
-      security:
-      - jwtAuth: []
-      responses:
-        '204':
-          description: No response body
-  /api/organization/services/{service_uuid}/subservices/:
-    get:
-      operationId: organization_services_subservices_list
-      description: Lists the subservices of the service specified in the URL.
-      summary: List subservices
-      parameters:
-      - in: path
-        name: service_uuid
-        schema:
-          type: string
-        description: UUID of the service that owns the subservice.
-        required: true
-      tags:
-      - organization
-      security:
-      - jwtAuth: []
-      responses:
-        '200':
-          content:
-            application/json:
-              schema:
-                type: array
-                items:
-                  $ref: '#/components/schemas/Subservice'
-          description: ''
-    post:
-      operationId: organization_services_subservices_create
-      description: Creates a subservice associated with the service specified in the
-        URL.
-      summary: Create subservice
-      parameters:
-      - in: path
-        name: service_uuid
-        schema:
-          type: string
-        description: UUID of the service that owns the subservice.
-        required: true
-      tags:
-      - organization
-      requestBody:
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/Subservice'
-          application/x-www-form-urlencoded:
-            schema:
-              $ref: '#/components/schemas/Subservice'
-          multipart/form-data:
-            schema:
-              $ref: '#/components/schemas/Subservice'
-        required: true
-      security:
-      - jwtAuth: []
-      responses:
-        '201':
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Subservice'
-          description: ''
-  /api/organization/services/{service_uuid}/subservices/{uuid}/:
-    get:
-      operationId: organization_services_subservices_retrieve
-      description: Returns the details of a subservice belonging to the service specified
-        in the URL.
-      summary: Get subservice
-      parameters:
-      - in: path
-        name: service_uuid
-        schema:
-          type: string
-        description: UUID of the service that owns the subservice.
-        required: true
-      - in: path
-        name: uuid
-        schema:
-          type: string
-          format: uuid
-        required: true
-      tags:
-      - organization
-      security:
-      - jwtAuth: []
-      responses:
-        '200':
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Subservice'
-          description: ''
-    put:
-      operationId: organization_services_subservices_update
-      description: Fully replaces a subservice of the service specified in the URL.
-      summary: Replace subservice
-      parameters:
-      - in: path
-        name: service_uuid
-        schema:
-          type: string
-        description: UUID of the service that owns the subservice.
-        required: true
-      - in: path
-        name: uuid
-        schema:
-          type: string
-          format: uuid
-        required: true
-      tags:
-      - organization
-      requestBody:
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/Subservice'
-          application/x-www-form-urlencoded:
-            schema:
-              $ref: '#/components/schemas/Subservice'
-          multipart/form-data:
-            schema:
-              $ref: '#/components/schemas/Subservice'
-        required: true
-      security:
-      - jwtAuth: []
-      responses:
-        '200':
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Subservice'
-          description: ''
-    patch:
-      operationId: organization_services_subservices_partial_update
-      description: Partially updates a subservice of the service specified in the
-        URL.
-      summary: Update subservice
-      parameters:
-      - in: path
-        name: service_uuid
-        schema:
-          type: string
-        description: UUID of the service that owns the subservice.
-        required: true
-      - in: path
-        name: uuid
-        schema:
-          type: string
-          format: uuid
-        required: true
-      tags:
-      - organization
-      requestBody:
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/PatchedSubservice'
-          application/x-www-form-urlencoded:
-            schema:
-              $ref: '#/components/schemas/PatchedSubservice'
-          multipart/form-data:
-            schema:
-              $ref: '#/components/schemas/PatchedSubservice'
-      security:
-      - jwtAuth: []
-      responses:
-        '200':
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Subservice'
-          description: ''
-    delete:
-      operationId: organization_services_subservices_destroy
-      description: Deletes a subservice of the service specified in the URL.
-      summary: Delete subservice
-      parameters:
-      - in: path
-        name: service_uuid
-        schema:
-          type: string
-        description: UUID of the service that owns the subservice.
-        required: true
-      - in: path
-        name: uuid
-        schema:
-          type: string
-          format: uuid
-        required: true
-      tags:
-      - organization
-      security:
-      - jwtAuth: []
-      responses:
-        '204':
-          description: No response body
-  /api/rgpd/anonymous/:
-    post:
-      operationId: rgpd_anonymous_create
-      description: Creates an anonymous GDPR consent with server-generated identifier
-        and write token, or updates an existing one when both are provided.
-      summary: Register anonymous GDPR consent
-      tags:
-      - RGPD
-      requestBody:
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/RgpdAnonymousConsentUpsert'
-          application/x-www-form-urlencoded:
-            schema:
-              $ref: '#/components/schemas/RgpdAnonymousConsentUpsert'
-          multipart/form-data:
-            schema:
-              $ref: '#/components/schemas/RgpdAnonymousConsentUpsert'
-      security:
-      - jwtAuth: []
-      - {}
-      responses:
-        '200':
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/RgpdAnonymousConsent'
-          description: ''
-        '201':
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/RgpdAnonymousConsent'
-          description: ''
-  /api/rgpd/me/:
-    get:
-      operationId: rgpd_me_retrieve
-      tags:
-      - rgpd
-      security:
-      - jwtAuth: []
-      responses:
-        '200':
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/RgpdConsent'
-          description: ''
-    post:
-      operationId: rgpd_me_create
-      description: Creates or replaces the GDPR consent state of the authenticated
-        user and records traceability metadata.
-      summary: Register GDPR consents
-      tags:
-      - RGPD
-      requestBody:
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/RgpdConsentUpsert'
-          application/x-www-form-urlencoded:
-            schema:
-              $ref: '#/components/schemas/RgpdConsentUpsert'
-          multipart/form-data:
-            schema:
-              $ref: '#/components/schemas/RgpdConsentUpsert'
-      security:
-      - jwtAuth: []
-      responses:
-        '200':
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/RgpdConsent'
-          description: ''
-    patch:
-      operationId: rgpd_me_partial_update
-      description: Partially updates the GDPR consent state of the authenticated user
-        and refreshes submitted metadata.
-      summary: Update GDPR consents
-      tags:
-      - RGPD
-      requestBody:
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/PatchedRgpdConsentUpsert'
-          application/x-www-form-urlencoded:
-            schema:
-              $ref: '#/components/schemas/PatchedRgpdConsentUpsert'
-          multipart/form-data:
-            schema:
-              $ref: '#/components/schemas/PatchedRgpdConsentUpsert'
-      security:
-      - jwtAuth: []
-      responses:
-        '200':
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/RgpdConsent'
+                $ref: '#/components/schemas/Organization'
           description: ''
   /api/schema/:
     get:
@@ -2091,6 +2855,81 @@ components:
         * `active` - Active
         * `inactive` - Inactive
         * `suspended` - Suspended
+    Announcement:
+      type: object
+      properties:
+        uuid:
+          type: string
+          format: uuid
+          readOnly: true
+        organization:
+          type: string
+          format: uuid
+          readOnly: true
+        category:
+          type: string
+          format: uuid
+        services:
+          type: array
+          items:
+            type: string
+            format: uuid
+        name:
+          type: string
+          maxLength: 255
+        location:
+          type: string
+          maxLength: 255
+        announcement:
+          type: string
+          maxLength: 255
+        status:
+          $ref: '#/components/schemas/AnnouncementStatusEnum'
+        description:
+          type: string
+        free_text:
+          type: string
+        latitude:
+          type: string
+          format: decimal
+          pattern: ^-?\d{0,3}(?:\.\d{0,6})?$
+          nullable: true
+        longitude:
+          type: string
+          format: decimal
+          pattern: ^-?\d{0,3}(?:\.\d{0,6})?$
+          nullable: true
+        view_count:
+          type: integer
+          readOnly: true
+        created_at:
+          type: string
+          format: date-time
+          readOnly: true
+        updated_at:
+          type: string
+          format: date-time
+          readOnly: true
+      required:
+      - announcement
+      - category
+      - created_at
+      - location
+      - name
+      - organization
+      - updated_at
+      - uuid
+      - view_count
+    AnnouncementStatusEnum:
+      enum:
+      - closed
+      - suspended
+      - active
+      type: string
+      description: |-
+        * `closed` - Closed
+        * `suspended` - Suspended
+        * `active` - Active
     Category:
       type: object
       properties:
@@ -2101,9 +2940,23 @@ components:
         name:
           type: string
           maxLength: 120
+        description:
+          type: string
       required:
       - name
       - uuid
+    ChargingTypeEnum:
+      enum:
+      - per_day
+      - per_hour
+      - per_square_meter
+      - per_project
+      type: string
+      description: |-
+        * `per_day` - Per day
+        * `per_hour` - Per hour
+        * `per_square_meter` - Per square meter
+        * `per_project` - Per project
     EmailTokenObtainPair:
       type: object
       properties:
@@ -2129,12 +2982,46 @@ components:
         user:
           type: integer
           readOnly: true
-        organization:
+        announcement:
           type: integer
         plan_price:
           type: integer
         status:
           $ref: '#/components/schemas/JobStatusEnum'
+        organization_rating:
+          type: string
+          format: decimal
+          pattern: ^-?\d{0,2}(?:\.\d{0,2})?$
+          nullable: true
+        created_at:
+          type: string
+          format: date-time
+          readOnly: true
+        updated_at:
+          type: string
+          format: date-time
+          readOnly: true
+      required:
+      - announcement
+      - created_at
+      - id
+      - plan_price
+      - updated_at
+      - user
+      - uuid
+    JobChat:
+      type: object
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        uuid:
+          type: string
+          format: uuid
+          readOnly: true
+        job:
+          type: integer
+          readOnly: true
         created_at:
           type: string
           format: date-time
@@ -2146,10 +3033,8 @@ components:
       required:
       - created_at
       - id
-      - organization
-      - plan_price
+      - job
       - updated_at
-      - user
       - uuid
     JobStatusEnum:
       enum:
@@ -2167,6 +3052,38 @@ components:
         * `suspended` - Suspended
         * `completed` - Completed
         * `rejected` - Rejected
+    ManagementFeatureFlag:
+      type: object
+      properties:
+        uuid:
+          type: string
+          format: uuid
+          readOnly: true
+        key:
+          type: string
+          maxLength: 100
+          pattern: ^[-a-zA-Z0-9_]+$
+        name:
+          type: string
+          maxLength: 120
+        description:
+          type: string
+        is_active:
+          type: boolean
+        created_at:
+          type: string
+          format: date-time
+          readOnly: true
+        updated_at:
+          type: string
+          format: date-time
+          readOnly: true
+      required:
+      - created_at
+      - key
+      - name
+      - updated_at
+      - uuid
     ManagementJob:
       type: object
       properties:
@@ -2180,13 +3097,18 @@ components:
         user:
           type: string
           format: uuid
-        organization:
+        announcement:
           type: string
           format: uuid
         plan_price:
           type: integer
         status:
           $ref: '#/components/schemas/JobStatusEnum'
+        organization_rating:
+          type: string
+          format: decimal
+          pattern: ^-?\d{0,2}(?:\.\d{0,2})?$
+          nullable: true
         created_at:
           type: string
           format: date-time
@@ -2196,9 +3118,9 @@ components:
           format: date-time
           readOnly: true
       required:
+      - announcement
       - created_at
       - id
-      - organization
       - plan_price
       - updated_at
       - user
@@ -2238,6 +3160,13 @@ components:
         billing_postal_code:
           type: string
           maxLength: 20
+        verification_level:
+          type: integer
+          maximum: 2147483647
+          minimum: 0
+        rating:
+          type: string
+          readOnly: true
         status:
           $ref: '#/components/schemas/AccountStatusEnum'
         created_at:
@@ -2257,6 +3186,7 @@ components:
       - created_at
       - legal_name
       - name
+      - rating
       - tax_id
       - updated_at
       - user
@@ -2341,6 +3271,12 @@ components:
         billing_postal_code:
           type: string
           maxLength: 20
+        verification_level:
+          type: integer
+          readOnly: true
+        rating:
+          type: string
+          readOnly: true
         created_at:
           type: string
           format: date-time
@@ -2358,7 +3294,39 @@ components:
       - created_at
       - legal_name
       - name
+      - rating
       - tax_id
+      - updated_at
+      - uuid
+      - verification_level
+    OrganizationJob:
+      type: object
+      properties:
+        uuid:
+          type: string
+          format: uuid
+          readOnly: true
+        organization:
+          type: string
+          format: uuid
+          readOnly: true
+        name:
+          type: string
+          maxLength: 120
+        description:
+          type: string
+        created_at:
+          type: string
+          format: date-time
+          readOnly: true
+        updated_at:
+          type: string
+          format: date-time
+          readOnly: true
+      required:
+      - created_at
+      - name
+      - organization
       - updated_at
       - uuid
     OrganizationPublic:
@@ -2371,9 +3339,325 @@ components:
         name:
           type: string
           maxLength: 255
+        verification_level:
+          type: integer
+          maximum: 2147483647
+          minimum: 0
+        rating:
+          type: string
+          readOnly: true
       required:
       - name
+      - rating
       - uuid
+    PaginatedAnnouncementList:
+      type: object
+      required:
+      - count
+      - results
+      properties:
+        count:
+          type: integer
+          example: 123
+        next:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=4
+        previous:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=2
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/Announcement'
+    PaginatedCategoryList:
+      type: object
+      required:
+      - count
+      - results
+      properties:
+        count:
+          type: integer
+          example: 123
+        next:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=4
+        previous:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=2
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/Category'
+    PaginatedJobList:
+      type: object
+      required:
+      - count
+      - results
+      properties:
+        count:
+          type: integer
+          example: 123
+        next:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=4
+        previous:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=2
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/Job'
+    PaginatedManagementFeatureFlagList:
+      type: object
+      required:
+      - count
+      - results
+      properties:
+        count:
+          type: integer
+          example: 123
+        next:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=4
+        previous:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=2
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/ManagementFeatureFlag'
+    PaginatedManagementJobList:
+      type: object
+      required:
+      - count
+      - results
+      properties:
+        count:
+          type: integer
+          example: 123
+        next:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=4
+        previous:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=2
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/ManagementJob'
+    PaginatedManagementOrganizationList:
+      type: object
+      required:
+      - count
+      - results
+      properties:
+        count:
+          type: integer
+          example: 123
+        next:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=4
+        previous:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=2
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/ManagementOrganization'
+    PaginatedManagementUserList:
+      type: object
+      required:
+      - count
+      - results
+      properties:
+        count:
+          type: integer
+          example: 123
+        next:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=4
+        previous:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=2
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/ManagementUser'
+    PaginatedOrganizationJobList:
+      type: object
+      required:
+      - count
+      - results
+      properties:
+        count:
+          type: integer
+          example: 123
+        next:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=4
+        previous:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=2
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/OrganizationJob'
+    PaginatedOrganizationList:
+      type: object
+      required:
+      - count
+      - results
+      properties:
+        count:
+          type: integer
+          example: 123
+        next:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=4
+        previous:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=2
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/Organization'
+    PaginatedServiceList:
+      type: object
+      required:
+      - count
+      - results
+      properties:
+        count:
+          type: integer
+          example: 123
+        next:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=4
+        previous:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=2
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/Service'
+    PaginatedSubserviceList:
+      type: object
+      required:
+      - count
+      - results
+      properties:
+        count:
+          type: integer
+          example: 123
+        next:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=4
+        previous:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=2
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/Subservice'
+    PatchedAnnouncement:
+      type: object
+      properties:
+        uuid:
+          type: string
+          format: uuid
+          readOnly: true
+        organization:
+          type: string
+          format: uuid
+          readOnly: true
+        category:
+          type: string
+          format: uuid
+        services:
+          type: array
+          items:
+            type: string
+            format: uuid
+        name:
+          type: string
+          maxLength: 255
+        location:
+          type: string
+          maxLength: 255
+        announcement:
+          type: string
+          maxLength: 255
+        status:
+          $ref: '#/components/schemas/AnnouncementStatusEnum'
+        description:
+          type: string
+        free_text:
+          type: string
+        latitude:
+          type: string
+          format: decimal
+          pattern: ^-?\d{0,3}(?:\.\d{0,6})?$
+          nullable: true
+        longitude:
+          type: string
+          format: decimal
+          pattern: ^-?\d{0,3}(?:\.\d{0,6})?$
+          nullable: true
+        view_count:
+          type: integer
+          readOnly: true
+        created_at:
+          type: string
+          format: date-time
+          readOnly: true
+        updated_at:
+          type: string
+          format: date-time
+          readOnly: true
     PatchedJob:
       type: object
       properties:
@@ -2387,12 +3671,43 @@ components:
         user:
           type: integer
           readOnly: true
-        organization:
+        announcement:
           type: integer
         plan_price:
           type: integer
         status:
           $ref: '#/components/schemas/JobStatusEnum'
+        organization_rating:
+          type: string
+          format: decimal
+          pattern: ^-?\d{0,2}(?:\.\d{0,2})?$
+          nullable: true
+        created_at:
+          type: string
+          format: date-time
+          readOnly: true
+        updated_at:
+          type: string
+          format: date-time
+          readOnly: true
+    PatchedManagementFeatureFlag:
+      type: object
+      properties:
+        uuid:
+          type: string
+          format: uuid
+          readOnly: true
+        key:
+          type: string
+          maxLength: 100
+          pattern: ^[-a-zA-Z0-9_]+$
+        name:
+          type: string
+          maxLength: 120
+        description:
+          type: string
+        is_active:
+          type: boolean
         created_at:
           type: string
           format: date-time
@@ -2414,13 +3729,18 @@ components:
         user:
           type: string
           format: uuid
-        organization:
+        announcement:
           type: string
           format: uuid
         plan_price:
           type: integer
         status:
           $ref: '#/components/schemas/JobStatusEnum'
+        organization_rating:
+          type: string
+          format: decimal
+          pattern: ^-?\d{0,2}(?:\.\d{0,2})?$
+          nullable: true
         created_at:
           type: string
           format: date-time
@@ -2464,6 +3784,13 @@ components:
         billing_postal_code:
           type: string
           maxLength: 20
+        verification_level:
+          type: integer
+          maximum: 2147483647
+          minimum: 0
+        rating:
+          type: string
+          readOnly: true
         status:
           $ref: '#/components/schemas/AccountStatusEnum'
         created_at:
@@ -2549,6 +3876,12 @@ components:
         billing_postal_code:
           type: string
           maxLength: 20
+        verification_level:
+          type: integer
+          readOnly: true
+        rating:
+          type: string
+          readOnly: true
         created_at:
           type: string
           format: date-time
@@ -2557,28 +3890,7 @@ components:
           type: string
           format: date-time
           readOnly: true
-    PatchedRgpdConsentUpsert:
-      type: object
-      properties:
-        cookies_accepted:
-          type: boolean
-        cookies_version:
-          type: string
-          maxLength: 64
-        privacy_policy_accepted:
-          type: boolean
-        privacy_policy_version:
-          type: string
-          maxLength: 64
-        terms_and_conditions_accepted:
-          type: boolean
-        terms_and_conditions_version:
-          type: string
-          maxLength: 64
-        source:
-          type: string
-          maxLength: 64
-    PatchedService:
+    PatchedOrganizationJob:
       type: object
       properties:
         uuid:
@@ -2602,31 +3914,29 @@ components:
           type: string
           format: date-time
           readOnly: true
-    PatchedServicePrice:
+    PatchedService:
       type: object
       properties:
         uuid:
           type: string
           format: uuid
           readOnly: true
-        subservice:
+        organization:
           type: string
           format: uuid
-        amount:
+          readOnly: true
+        job:
           type: string
-          format: decimal
-          pattern: ^-?\d{0,8}(?:\.\d{0,2})?$
-        currency:
+          format: uuid
+          readOnly: true
+        category:
           type: string
-          default: EUR
-          maxLength: 3
-        effective_from:
+          format: uuid
+        name:
           type: string
-          format: date
-        effective_to:
+          maxLength: 120
+        description:
           type: string
-          format: date
-          nullable: true
         created_at:
           type: string
           format: date-time
@@ -2642,9 +3952,14 @@ components:
           type: string
           format: uuid
           readOnly: true
-        subservice:
+        service:
           type: string
           format: uuid
+        service_prices:
+          type: array
+          items:
+            $ref: '#/components/schemas/ServicePrice'
+          readOnly: true
         name:
           type: string
           maxLength: 120
@@ -2685,158 +4000,6 @@ components:
       - email
       - password
       - username
-    RgpdAnonymousConsent:
-      type: object
-      properties:
-        identifier:
-          type: string
-          maxLength: 128
-        cookies_accepted:
-          type: boolean
-        cookies_accepted_at:
-          type: string
-          format: date-time
-          readOnly: true
-          nullable: true
-        cookies_version:
-          type: string
-          maxLength: 64
-        privacy_policy_accepted:
-          type: boolean
-        privacy_policy_accepted_at:
-          type: string
-          format: date-time
-          readOnly: true
-          nullable: true
-        privacy_policy_version:
-          type: string
-          maxLength: 64
-        terms_and_conditions_accepted:
-          type: boolean
-        terms_and_conditions_accepted_at:
-          type: string
-          format: date-time
-          readOnly: true
-          nullable: true
-        terms_and_conditions_version:
-          type: string
-          maxLength: 64
-        source:
-          type: string
-          maxLength: 64
-        created_at:
-          type: string
-          format: date-time
-          readOnly: true
-        updated_at:
-          type: string
-          format: date-time
-          readOnly: true
-      required:
-      - cookies_accepted_at
-      - created_at
-      - identifier
-      - privacy_policy_accepted_at
-      - terms_and_conditions_accepted_at
-      - updated_at
-    RgpdAnonymousConsentUpsert:
-      type: object
-      properties:
-        identifier:
-          type: string
-          maxLength: 128
-        write_token:
-          type: string
-          maxLength: 128
-        cookies_accepted:
-          type: boolean
-        cookies_version:
-          type: string
-          maxLength: 64
-        privacy_policy_accepted:
-          type: boolean
-        privacy_policy_version:
-          type: string
-          maxLength: 64
-        terms_and_conditions_accepted:
-          type: boolean
-        terms_and_conditions_version:
-          type: string
-          maxLength: 64
-        source:
-          type: string
-          maxLength: 64
-    RgpdConsent:
-      type: object
-      properties:
-        cookies_accepted:
-          type: boolean
-        cookies_accepted_at:
-          type: string
-          format: date-time
-          readOnly: true
-          nullable: true
-        cookies_version:
-          type: string
-          maxLength: 64
-        privacy_policy_accepted:
-          type: boolean
-        privacy_policy_accepted_at:
-          type: string
-          format: date-time
-          readOnly: true
-          nullable: true
-        privacy_policy_version:
-          type: string
-          maxLength: 64
-        terms_and_conditions_accepted:
-          type: boolean
-        terms_and_conditions_accepted_at:
-          type: string
-          format: date-time
-          readOnly: true
-          nullable: true
-        terms_and_conditions_version:
-          type: string
-          maxLength: 64
-        source:
-          type: string
-          maxLength: 64
-        created_at:
-          type: string
-          format: date-time
-          readOnly: true
-        updated_at:
-          type: string
-          format: date-time
-          readOnly: true
-      required:
-      - cookies_accepted_at
-      - created_at
-      - privacy_policy_accepted_at
-      - terms_and_conditions_accepted_at
-      - updated_at
-    RgpdConsentUpsert:
-      type: object
-      properties:
-        cookies_accepted:
-          type: boolean
-        cookies_version:
-          type: string
-          maxLength: 64
-        privacy_policy_accepted:
-          type: boolean
-        privacy_policy_version:
-          type: string
-          maxLength: 64
-        terms_and_conditions_accepted:
-          type: boolean
-        terms_and_conditions_version:
-          type: string
-          maxLength: 64
-        source:
-          type: string
-          maxLength: 64
     Service:
       type: object
       properties:
@@ -2848,6 +4011,13 @@ components:
           type: string
           format: uuid
           readOnly: true
+        job:
+          type: string
+          format: uuid
+          readOnly: true
+        category:
+          type: string
+          format: uuid
         name:
           type: string
           maxLength: 120
@@ -2862,7 +4032,9 @@ components:
           format: date-time
           readOnly: true
       required:
+      - category
       - created_at
+      - job
       - name
       - organization
       - updated_at
@@ -2874,23 +4046,26 @@ components:
           type: string
           format: uuid
           readOnly: true
-        service:
-          type: string
-          format: uuid
         amount:
           type: string
           format: decimal
           pattern: ^-?\d{0,8}(?:\.\d{0,2})?$
+          readOnly: true
         currency:
           type: string
-          default: EUR
-          maxLength: 3
+          readOnly: true
+        charging_type:
+          allOf:
+          - $ref: '#/components/schemas/ChargingTypeEnum'
+          readOnly: true
         effective_from:
           type: string
           format: date
+          readOnly: true
         effective_to:
           type: string
           format: date
+          readOnly: true
           nullable: true
         created_at:
           type: string
@@ -2902,9 +4077,11 @@ components:
           readOnly: true
       required:
       - amount
+      - charging_type
       - created_at
+      - currency
       - effective_from
-      - subservice
+      - effective_to
       - updated_at
       - uuid
     Subservice:
@@ -2917,6 +4094,11 @@ components:
         service:
           type: string
           format: uuid
+        service_prices:
+          type: array
+          items:
+            $ref: '#/components/schemas/ServicePrice'
+          readOnly: true
         name:
           type: string
           maxLength: 120
@@ -2934,6 +4116,7 @@ components:
       - created_at
       - name
       - service
+      - service_prices
       - updated_at
       - uuid
     TokenRefresh:
@@ -2977,9 +4160,20 @@ components:
           maxLength: 150
         status:
           $ref: '#/components/schemas/AccountStatusEnum'
+        preferencias:
+          type: object
+          additionalProperties: {}
+          readOnly: true
+        permissions:
+          type: array
+          items:
+            type: string
+          readOnly: true
       required:
       - email
       - id
+      - permissions
+      - preferencias
       - username
       - uuid
     VerifyEmail:
