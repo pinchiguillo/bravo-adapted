@@ -2,7 +2,7 @@ name: Docker CI/CD
 
 on:
   pull_request:
-    branches: [ "develop", "main" ]
+    branches: [ "develop", "master" ]
   push:
     branches: [ "develop" ]
     tags:
@@ -77,7 +77,7 @@ jobs:
           cache-to: type=gha,mode=max
 
   publish-prod:
-    if: ${{ github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v') }}
+    if: ${{ github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v') && !contains(github.ref_name, '-dev.') }}
     runs-on: ubuntu-latest
     # Opcional:
     # environment: production

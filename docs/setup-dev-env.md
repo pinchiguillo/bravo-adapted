@@ -14,6 +14,20 @@ cp example.env .env
 docker compose -f compose.yml up --build
 ```
 
+También puedes usar el script de bootstrap:
+
+```bash
+./setup_dev.sh
+```
+
+El script realiza este flujo:
+
+1. Copia `example.env` a `.env` solo si `.env` no existe.
+2. Levanta el stack completo (`docker compose up -d --build`).
+3. Espera a que `app` esté healthy.
+4. Ejecuta `python manage.py test`.
+5. Pregunta si se desean ejecutar seeds de base de datos (`seed_demo_data` y `create_admin_user`).
+
 El backend queda disponible en `http://localhost:8000`.
 
 ## Servicios del entorno local
@@ -33,7 +47,7 @@ docker compose -f compose.yml up --build
 docker compose -f compose.yml exec -T app python manage.py test
 
 # Lint
-docker compose -f compose.yml exec -T app ruff check Core auth organization jobs management rgpd manage.py
+docker compose -f compose.yml exec -T app ruff check --config .github/ruff.toml Core apps manage.py
 
 # Generar migraciones
 docker compose -f compose.yml exec -T app python manage.py makemigrations

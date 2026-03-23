@@ -13,7 +13,7 @@ docker compose -f compose.yml logs -f app
 docker compose -f compose.yml run --rm --no-deps app python manage.py showmigrations
 docker compose -f compose.yml run --rm --no-deps app python manage.py test
 docker compose -f compose.yml run --rm --no-deps -e APP_MODE=production -e DEBUG=0 -e ALLOWED_HOSTS=api.example.com -e CSRF_TRUSTED_ORIGINS=https://api.example.com -e SECRET_KEY=production-secret-key-with-enough-entropy-1234567890 app python manage.py check --deploy
-docker compose -f compose.yml run --rm --no-deps app ruff check Core auth organization jobs manage.py
+docker compose -f compose.yml run --rm --no-deps app ruff check --config .github/ruff.toml Core apps manage.py
 ```
 
 ## Comprobaciones rápidas
@@ -187,8 +187,8 @@ Causa:
 
 Acción:
 
-- Ejecutar `docker compose -f compose.yml run --rm --no-deps app ruff check Core auth organization jobs manage.py`.
-- Si aplica, corregir automaticamente con `docker compose -f compose.yml run --rm --no-deps app ruff check Core auth organization jobs manage.py --fix`.
+- Ejecutar `docker compose -f compose.yml run --rm --no-deps app ruff check --config .github/ruff.toml Core apps manage.py`.
+- Si aplica, corregir automaticamente con `docker compose -f compose.yml run --rm --no-deps app ruff check --config .github/ruff.toml Core apps manage.py --fix`.
 
 ### Errores al enviar email con SES
 
@@ -210,10 +210,10 @@ Para evitar inconsistencias de entorno:
 
 ## CI
 
-El pipeline automático está en `.github/workflows/backend-ci.yml` y ejecuta:
+El pipeline automático está en `.github/workflows/ci.yml` y ejecuta:
 
 - build de imagen `app`
-- lint (`ruff check Core auth organization jobs manage.py`)
+- lint (`ruff check --config .github/ruff.toml Core apps manage.py`)
 - tests (`manage.py test`)
 - `check --deploy` en modo producción
 
@@ -221,4 +221,4 @@ El pipeline automático está en `.github/workflows/backend-ci.yml` y ejecuta:
 
 Para la estructura recomendada del repo, estrategia de ramas y validaciones pre-merge:
 
-- `docs/repositorio-ramas-validaciones.md`
+- `docs/workflow.md`

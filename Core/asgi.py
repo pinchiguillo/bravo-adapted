@@ -19,9 +19,9 @@ django_asgi_app = get_asgi_application()
 
 
 def build_websocket_application():
-    from job_chat.routing import websocket_urlpatterns as job_chat_websocket_urlpatterns
-    from job_chat.ws_auth import JWTAuthMiddlewareStack
-    from organization.routing import websocket_urlpatterns as organization_websocket_urlpatterns
+    from apps.job_chat.routing import websocket_urlpatterns as job_chat_websocket_urlpatterns
+    from apps.job_chat.ws_auth import JWTAuthMiddlewareStack
+    from apps.organization.routing import websocket_urlpatterns as organization_websocket_urlpatterns
 
     return AllowedHostsOriginValidator(
         JWTAuthMiddlewareStack(
