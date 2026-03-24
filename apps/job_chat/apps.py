@@ -7,4 +7,3 @@ class JobChatConfig(AppConfig):
 
     def ready(self):
         from . import signals  # noqa: F401
-
