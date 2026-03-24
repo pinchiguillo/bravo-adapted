@@ -64,7 +64,7 @@ class AuthViewSet(viewsets.GenericViewSet):
         serializer = self.get_serializer(data=request.data)
         serializer.is_valid(raise_exception=True)
         user = serializer.save()
-        if user.email_verified:
+        if user.is_email_verified:
             response_data = self._build_authenticated_user_response_data(user)
         else:
             response_data = UserSerializer(

@@ -1,5 +1,6 @@
 import uuid
 
+from django.conf import settings
 from django.contrib.auth.models import AbstractUser
 from django.db import models
 
@@ -22,3 +23,17 @@ class CustomUser(AbstractUser):
 
     USERNAME_FIELD = "email"
     REQUIRED_FIELDS = ["username"]
+
+    @classmethod
+    def email_verification_bypassed(cls):
+        return settings.AUTH_BYPASS_EMAIL_VERIFICATION
+
+    @property
+    def is_email_verified(self):
+        return self.email_verification_bypassed() or self.email_verified
+
+    def mark_email_verified(self):
+        if self.email_verified:
+            return
+        self.email_verified = True
+        self.save(update_fields=["email_verified"])

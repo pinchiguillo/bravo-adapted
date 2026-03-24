@@ -1,7 +1,7 @@
 openapi: 3.0.3
 info:
   title: Bravo API
-  version: 1.0.0
+  version: 0.0.2
   description: OpenAPI documentation for the Bravo backend.
 paths:
   /api/announcements/:
@@ -100,8 +100,8 @@ paths:
   /api/auth/register/:
     post:
       operationId: auth_register_create
-      description: Creates a new user account and returns the registered profile along
-        with JWT tokens.
+      description: Creates a new user account. When email verification is bypassed,
+        the response also includes JWT tokens.
       summary: Register user
       tags:
       - auth
@@ -153,8 +153,8 @@ paths:
   /api/auth/verify-email/:
     post:
       operationId: auth_verify_email_create
-      description: Validates the verification token and marks the user's email as
-        verified.
+      description: Validates the verification token, marks the user's email as verified
+        and returns JWT tokens.
       summary: Verify email
       tags:
       - auth
@@ -176,345 +176,6 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/VerifyEmail'
-          description: ''
-  /api/jobs/:
-    get:
-      operationId: jobs_list
-      description: Lists the jobs where the authenticated user participates as a client
-        or organization. Supports optional filtering by category UUIDs and plain text
-        search.
-      summary: Search jobs
-      parameters:
-      - in: query
-        name: categories
-        schema:
-          type: array
-          items:
-            type: string
-            format: uuid
-        description: Optional list of category UUIDs used to filter accessible jobs.
-        explode: true
-        style: form
-      - in: query
-        name: category
-        schema:
-          type: string
-        description: Single category UUID filter kept for backwards compatibility.
-      - name: page
-        required: false
-        in: query
-        description: A page number within the paginated result set.
-        schema:
-          type: integer
-      - name: page_size
-        required: false
-        in: query
-        description: Number of results to return per page.
-        schema:
-          type: integer
-      - in: query
-        name: search
-        schema:
-          type: string
-        description: Search term with at least 3 characters to filter accessible jobs.
-      tags:
-      - jobs
-      security:
-      - jwtAuth: []
-      responses:
-        '200':
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/PaginatedJobList'
-          description: ''
-    post:
-      operationId: jobs_create
-      description: Creates a new job associated with the authenticated user.
-      summary: Create job
-      tags:
-      - jobs
-      requestBody:
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/Job'
-          application/x-www-form-urlencoded:
-            schema:
-              $ref: '#/components/schemas/Job'
-          multipart/form-data:
-            schema:
-              $ref: '#/components/schemas/Job'
-        required: true
-      security:
-      - jwtAuth: []
-      responses:
-        '201':
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Job'
-          description: ''
-  /api/jobs/{uuid}/:
-    get:
-      operationId: jobs_retrieve
-      description: Returns the details of a job accessible to the authenticated user.
-      summary: Get job
-      parameters:
-      - in: path
-        name: uuid
-        schema:
-          type: string
-          format: uuid
-        required: true
-      tags:
-      - jobs
-      security:
-      - jwtAuth: []
-      responses:
-        '200':
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Job'
-          description: ''
-    put:
-      operationId: jobs_update
-      description: Fully replaces a job accessible to the authenticated user.
-      summary: Replace job
-      parameters:
-      - in: path
-        name: uuid
-        schema:
-          type: string
-          format: uuid
-        required: true
-      tags:
-      - jobs
-      requestBody:
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/Job'
-          application/x-www-form-urlencoded:
-            schema:
-              $ref: '#/components/schemas/Job'
-          multipart/form-data:
-            schema:
-              $ref: '#/components/schemas/Job'
-        required: true
-      security:
-      - jwtAuth: []
-      responses:
-        '200':
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Job'
-          description: ''
-    patch:
-      operationId: jobs_partial_update
-      description: Partially updates a job accessible to the authenticated user.
-      summary: Update job
-      parameters:
-      - in: path
-        name: uuid
-        schema:
-          type: string
-          format: uuid
-        required: true
-      tags:
-      - jobs
-      requestBody:
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/PatchedJob'
-          application/x-www-form-urlencoded:
-            schema:
-              $ref: '#/components/schemas/PatchedJob'
-          multipart/form-data:
-            schema:
-              $ref: '#/components/schemas/PatchedJob'
-      security:
-      - jwtAuth: []
-      responses:
-        '200':
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Job'
-          description: ''
-    delete:
-      operationId: jobs_destroy
-      description: Deletes a job accessible to the authenticated user.
-      summary: Delete job
-      parameters:
-      - in: path
-        name: uuid
-        schema:
-          type: string
-          format: uuid
-        required: true
-      tags:
-      - jobs
-      security:
-      - jwtAuth: []
-      responses:
-        '204':
-          description: No response body
-  /api/jobs/chats/{uuid}/:
-    get:
-      operationId: jobs_chats_retrieve
-      description: Returns the chat associated with an accessible job.
-      summary: Get job chat
-      parameters:
-      - in: path
-        name: uuid
-        schema:
-          type: string
-          format: uuid
-        required: true
-      tags:
-      - jobs
-      security:
-      - jwtAuth: []
-      responses:
-        '200':
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/JobChat'
-          description: ''
-  /api/jobs/chats/{uuid}/messages/:
-    get:
-      operationId: jobs_chats_messages_retrieve
-      description: Gets messages or creates a new message in the selected chat.
-      summary: Manage chat messages
-      parameters:
-      - in: path
-        name: uuid
-        schema:
-          type: string
-          format: uuid
-        required: true
-      tags:
-      - jobs
-      security:
-      - jwtAuth: []
-      responses:
-        '200':
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/JobChat'
-          description: ''
-    post:
-      operationId: jobs_chats_messages_create
-      description: Gets messages or creates a new message in the selected chat.
-      summary: Manage chat messages
-      parameters:
-      - in: path
-        name: uuid
-        schema:
-          type: string
-          format: uuid
-        required: true
-      tags:
-      - jobs
-      requestBody:
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/JobChat'
-          application/x-www-form-urlencoded:
-            schema:
-              $ref: '#/components/schemas/JobChat'
-          multipart/form-data:
-            schema:
-              $ref: '#/components/schemas/JobChat'
-      security:
-      - jwtAuth: []
-      responses:
-        '200':
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/JobChat'
-          description: ''
-  /api/jobs/chats/{uuid}/messages/{message_id}/attachments/:
-    post:
-      operationId: jobs_chats_messages_attachments_create
-      description: Uploads a file and links it to an existing message in the selected
-        chat.
-      summary: Attach file to message
-      parameters:
-      - in: path
-        name: message_id
-        schema:
-          type: string
-          pattern: ^\d+$
-        required: true
-      - in: path
-        name: uuid
-        schema:
-          type: string
-          format: uuid
-        required: true
-      tags:
-      - jobs
-      requestBody:
-        content:
-          multipart/form-data:
-            schema:
-              $ref: '#/components/schemas/JobChat'
-          application/x-www-form-urlencoded:
-            schema:
-              $ref: '#/components/schemas/JobChat'
-      security:
-      - jwtAuth: []
-      responses:
-        '200':
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/JobChat'
-          description: ''
-  /api/jobs/chats/{uuid}/messages/{message_id}/attachments/{attachment_id}/download/:
-    get:
-      operationId: jobs_chats_messages_attachments_download_retrieve
-      description: Returns a temporary signed URL to download the chat attachment
-        if the authorized user still has access to the chat.
-      summary: Get temporary attachment URL
-      parameters:
-      - in: path
-        name: attachment_id
-        schema:
-          type: string
-          pattern: ^\d+$
-        required: true
-      - in: path
-        name: message_id
-        schema:
-          type: string
-          pattern: ^\d+$
-        required: true
-      - in: path
-        name: uuid
-        schema:
-          type: string
-          format: uuid
-        required: true
-      tags:
-      - jobs
-      security:
-      - jwtAuth: []
-      responses:
-        '200':
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/JobChat'
           description: ''
   /api/management/feature-flags/:
     get:
@@ -719,244 +380,6 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ManagementFeatureFlag'
-          description: ''
-  /api/management/jobs/:
-    get:
-      operationId: management_jobs_list
-      parameters:
-      - name: page
-        required: false
-        in: query
-        description: A page number within the paginated result set.
-        schema:
-          type: integer
-      - name: page_size
-        required: false
-        in: query
-        description: Number of results to return per page.
-        schema:
-          type: integer
-      tags:
-      - management
-      security:
-      - jwtAuth: []
-      responses:
-        '200':
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/PaginatedManagementJobList'
-          description: ''
-    post:
-      operationId: management_jobs_create
-      tags:
-      - management
-      requestBody:
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/ManagementJob'
-          application/x-www-form-urlencoded:
-            schema:
-              $ref: '#/components/schemas/ManagementJob'
-          multipart/form-data:
-            schema:
-              $ref: '#/components/schemas/ManagementJob'
-        required: true
-      security:
-      - jwtAuth: []
-      responses:
-        '201':
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ManagementJob'
-          description: ''
-  /api/management/jobs/{uuid}/:
-    get:
-      operationId: management_jobs_retrieve
-      parameters:
-      - in: path
-        name: uuid
-        schema:
-          type: string
-          format: uuid
-        required: true
-      tags:
-      - management
-      security:
-      - jwtAuth: []
-      responses:
-        '200':
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ManagementJob'
-          description: ''
-    put:
-      operationId: management_jobs_update
-      parameters:
-      - in: path
-        name: uuid
-        schema:
-          type: string
-          format: uuid
-        required: true
-      tags:
-      - management
-      requestBody:
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/ManagementJob'
-          application/x-www-form-urlencoded:
-            schema:
-              $ref: '#/components/schemas/ManagementJob'
-          multipart/form-data:
-            schema:
-              $ref: '#/components/schemas/ManagementJob'
-        required: true
-      security:
-      - jwtAuth: []
-      responses:
-        '200':
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ManagementJob'
-          description: ''
-    patch:
-      operationId: management_jobs_partial_update
-      parameters:
-      - in: path
-        name: uuid
-        schema:
-          type: string
-          format: uuid
-        required: true
-      tags:
-      - management
-      requestBody:
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/PatchedManagementJob'
-          application/x-www-form-urlencoded:
-            schema:
-              $ref: '#/components/schemas/PatchedManagementJob'
-          multipart/form-data:
-            schema:
-              $ref: '#/components/schemas/PatchedManagementJob'
-      security:
-      - jwtAuth: []
-      responses:
-        '200':
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ManagementJob'
-          description: ''
-  /api/management/jobs/{uuid}/activate/:
-    post:
-      operationId: management_jobs_activate_create
-      summary: Activate managed resource
-      parameters:
-      - in: path
-        name: uuid
-        schema:
-          type: string
-          format: uuid
-        required: true
-      tags:
-      - management
-      requestBody:
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/ManagementJob'
-          application/x-www-form-urlencoded:
-            schema:
-              $ref: '#/components/schemas/ManagementJob'
-          multipart/form-data:
-            schema:
-              $ref: '#/components/schemas/ManagementJob'
-        required: true
-      security:
-      - jwtAuth: []
-      responses:
-        '200':
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ManagementJob'
-          description: ''
-  /api/management/jobs/{uuid}/deactivate/:
-    post:
-      operationId: management_jobs_deactivate_create
-      summary: Deactivate managed resource
-      parameters:
-      - in: path
-        name: uuid
-        schema:
-          type: string
-          format: uuid
-        required: true
-      tags:
-      - management
-      requestBody:
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/ManagementJob'
-          application/x-www-form-urlencoded:
-            schema:
-              $ref: '#/components/schemas/ManagementJob'
-          multipart/form-data:
-            schema:
-              $ref: '#/components/schemas/ManagementJob'
-        required: true
-      security:
-      - jwtAuth: []
-      responses:
-        '200':
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ManagementJob'
-          description: ''
-  /api/management/jobs/{uuid}/suspend/:
-    post:
-      operationId: management_jobs_suspend_create
-      summary: Suspend managed resource
-      parameters:
-      - in: path
-        name: uuid
-        schema:
-          type: string
-          format: uuid
-        required: true
-      tags:
-      - management
-      requestBody:
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/ManagementJob'
-          application/x-www-form-urlencoded:
-            schema:
-              $ref: '#/components/schemas/ManagementJob'
-          multipart/form-data:
-            schema:
-              $ref: '#/components/schemas/ManagementJob'
-        required: true
-      security:
-      - jwtAuth: []
-      responses:
-        '200':
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ManagementJob'
           description: ''
   /api/management/organizations/:
     get:
@@ -2599,91 +2022,6 @@ paths:
               schema:
                 $ref: '#/components/schemas/PaginatedOrganizationList'
           description: ''
-  /api/organizations/user/:
-    get:
-      operationId: organizations_user_list
-      description: Returns the organization associated with the authenticated user.
-      summary: Get authenticated user organization
-      parameters:
-      - name: page
-        required: false
-        in: query
-        description: A page number within the paginated result set.
-        schema:
-          type: integer
-      - name: page_size
-        required: false
-        in: query
-        description: Number of results to return per page.
-        schema:
-          type: integer
-      tags:
-      - organizations
-      security:
-      - jwtAuth: []
-      responses:
-        '200':
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/PaginatedOrganizationList'
-          description: ''
-    post:
-      operationId: organizations_user_create
-      description: Creates an organization associated with the authenticated user.
-      summary: Create authenticated user organization
-      tags:
-      - organizations
-      requestBody:
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/Organization'
-          application/x-www-form-urlencoded:
-            schema:
-              $ref: '#/components/schemas/Organization'
-          multipart/form-data:
-            schema:
-              $ref: '#/components/schemas/Organization'
-        required: true
-      security:
-      - jwtAuth: []
-      responses:
-        '201':
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Organization'
-          description: ''
-        '400':
-          description: Authenticated user already has an organization.
-    patch:
-      operationId: organizations_user_partial_update
-      description: Partially updates the organization associated with the authenticated
-        user.
-      summary: Update authenticated user organization
-      tags:
-      - organizations
-      requestBody:
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/PatchedOrganization'
-          application/x-www-form-urlencoded:
-            schema:
-              $ref: '#/components/schemas/PatchedOrganization'
-          multipart/form-data:
-            schema:
-              $ref: '#/components/schemas/PatchedOrganization'
-      security:
-      - jwtAuth: []
-      responses:
-        '200':
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Organization'
-          description: ''
   /api/schema/:
     get:
       operationId: schema_retrieve
@@ -2955,94 +2293,6 @@ components:
       required:
       - email
       - password
-    Job:
-      type: object
-      properties:
-        id:
-          type: integer
-          readOnly: true
-        uuid:
-          type: string
-          format: uuid
-          readOnly: true
-        user:
-          type: integer
-          readOnly: true
-        announcement:
-          type: integer
-        plan_price:
-          type: integer
-        chat_uuid:
-          type: string
-          nullable: true
-          readOnly: true
-        status:
-          $ref: '#/components/schemas/JobStatusEnum'
-        organization_rating:
-          type: string
-          format: decimal
-          pattern: ^-?\d{0,2}(?:\.\d{0,2})?$
-          nullable: true
-        created_at:
-          type: string
-          format: date-time
-          readOnly: true
-        updated_at:
-          type: string
-          format: date-time
-          readOnly: true
-      required:
-      - announcement
-      - chat_uuid
-      - created_at
-      - id
-      - plan_price
-      - updated_at
-      - user
-      - uuid
-    JobChat:
-      type: object
-      properties:
-        id:
-          type: integer
-          readOnly: true
-        uuid:
-          type: string
-          format: uuid
-          readOnly: true
-        job:
-          type: integer
-          readOnly: true
-        created_at:
-          type: string
-          format: date-time
-          readOnly: true
-        updated_at:
-          type: string
-          format: date-time
-          readOnly: true
-      required:
-      - created_at
-      - id
-      - job
-      - updated_at
-      - uuid
-    JobStatusEnum:
-      enum:
-      - pending
-      - active
-      - inactive
-      - suspended
-      - completed
-      - rejected
-      type: string
-      description: |-
-        * `pending` - Pending
-        * `active` - Active
-        * `inactive` - Inactive
-        * `suspended` - Suspended
-        * `completed` - Completed
-        * `rejected` - Rejected
     ManagementFeatureFlag:
       type: object
       properties:
@@ -3074,47 +2324,6 @@ components:
       - key
       - name
       - updated_at
-      - uuid
-    ManagementJob:
-      type: object
-      properties:
-        id:
-          type: integer
-          readOnly: true
-        uuid:
-          type: string
-          format: uuid
-          readOnly: true
-        user:
-          type: string
-          format: uuid
-        announcement:
-          type: string
-          format: uuid
-        plan_price:
-          type: integer
-        status:
-          $ref: '#/components/schemas/JobStatusEnum'
-        organization_rating:
-          type: string
-          format: decimal
-          pattern: ^-?\d{0,2}(?:\.\d{0,2})?$
-          nullable: true
-        created_at:
-          type: string
-          format: date-time
-          readOnly: true
-        updated_at:
-          type: string
-          format: date-time
-          readOnly: true
-      required:
-      - announcement
-      - created_at
-      - id
-      - plan_price
-      - updated_at
-      - user
       - uuid
     ManagementOrganization:
       type: object
@@ -3157,6 +2366,7 @@ components:
           minimum: 0
         rating:
           type: string
+          nullable: true
           readOnly: true
         status:
           $ref: '#/components/schemas/AccountStatusEnum'
@@ -3265,8 +2475,12 @@ components:
         verification_level:
           type: integer
           readOnly: true
+        is_approved:
+          type: boolean
+          readOnly: true
         rating:
           type: string
+          nullable: true
           readOnly: true
         created_at:
           type: string
@@ -3283,6 +2497,7 @@ components:
       - billing_email
       - billing_postal_code
       - created_at
+      - is_approved
       - legal_name
       - name
       - rating
@@ -3334,10 +2549,15 @@ components:
           type: integer
           maximum: 2147483647
           minimum: 0
+        is_approved:
+          type: boolean
+          readOnly: true
         rating:
           type: string
+          nullable: true
           readOnly: true
       required:
+      - is_approved
       - name
       - rating
       - uuid
@@ -3387,29 +2607,6 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/Category'
-    PaginatedJobList:
-      type: object
-      required:
-      - count
-      - results
-      properties:
-        count:
-          type: integer
-          example: 123
-        next:
-          type: string
-          nullable: true
-          format: uri
-          example: http://api.example.org/accounts/?page=4
-        previous:
-          type: string
-          nullable: true
-          format: uri
-          example: http://api.example.org/accounts/?page=2
-        results:
-          type: array
-          items:
-            $ref: '#/components/schemas/Job'
     PaginatedManagementFeatureFlagList:
       type: object
       required:
@@ -3433,29 +2630,6 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/ManagementFeatureFlag'
-    PaginatedManagementJobList:
-      type: object
-      required:
-      - count
-      - results
-      properties:
-        count:
-          type: integer
-          example: 123
-        next:
-          type: string
-          nullable: true
-          format: uri
-          example: http://api.example.org/accounts/?page=4
-        previous:
-          type: string
-          nullable: true
-          format: uri
-          example: http://api.example.org/accounts/?page=2
-        results:
-          type: array
-          items:
-            $ref: '#/components/schemas/ManagementJob'
     PaginatedManagementOrganizationList:
       type: object
       required:
@@ -3649,42 +2823,6 @@ components:
           type: string
           format: date-time
           readOnly: true
-    PatchedJob:
-      type: object
-      properties:
-        id:
-          type: integer
-          readOnly: true
-        uuid:
-          type: string
-          format: uuid
-          readOnly: true
-        user:
-          type: integer
-          readOnly: true
-        announcement:
-          type: integer
-        plan_price:
-          type: integer
-        chat_uuid:
-          type: string
-          nullable: true
-          readOnly: true
-        status:
-          $ref: '#/components/schemas/JobStatusEnum'
-        organization_rating:
-          type: string
-          format: decimal
-          pattern: ^-?\d{0,2}(?:\.\d{0,2})?$
-          nullable: true
-        created_at:
-          type: string
-          format: date-time
-          readOnly: true
-        updated_at:
-          type: string
-          format: date-time
-          readOnly: true
     PatchedManagementFeatureFlag:
       type: object
       properties:
@@ -3703,39 +2841,6 @@ components:
           type: string
         is_active:
           type: boolean
-        created_at:
-          type: string
-          format: date-time
-          readOnly: true
-        updated_at:
-          type: string
-          format: date-time
-          readOnly: true
-    PatchedManagementJob:
-      type: object
-      properties:
-        id:
-          type: integer
-          readOnly: true
-        uuid:
-          type: string
-          format: uuid
-          readOnly: true
-        user:
-          type: string
-          format: uuid
-        announcement:
-          type: string
-          format: uuid
-        plan_price:
-          type: integer
-        status:
-          $ref: '#/components/schemas/JobStatusEnum'
-        organization_rating:
-          type: string
-          format: decimal
-          pattern: ^-?\d{0,2}(?:\.\d{0,2})?$
-          nullable: true
         created_at:
           type: string
           format: date-time
@@ -3785,6 +2890,7 @@ components:
           minimum: 0
         rating:
           type: string
+          nullable: true
           readOnly: true
         status:
           $ref: '#/components/schemas/AccountStatusEnum'
@@ -3874,8 +2980,12 @@ components:
         verification_level:
           type: integer
           readOnly: true
+        is_approved:
+          type: boolean
+          readOnly: true
         rating:
           type: string
+          nullable: true
           readOnly: true
         created_at:
           type: string
@@ -4041,26 +3151,26 @@ components:
           type: string
           format: uuid
           readOnly: true
+        subservice:
+          type: string
+          format: uuid
+          writeOnly: true
         amount:
           type: string
           format: decimal
           pattern: ^-?\d{0,8}(?:\.\d{0,2})?$
-          readOnly: true
         currency:
           type: string
-          readOnly: true
+          default: EUR
+          maxLength: 3
         charging_type:
-          allOf:
-          - $ref: '#/components/schemas/ChargingTypeEnum'
-          readOnly: true
+          $ref: '#/components/schemas/ChargingTypeEnum'
         effective_from:
           type: string
           format: date
-          readOnly: true
         effective_to:
           type: string
           format: date
-          readOnly: true
           nullable: true
         created_at:
           type: string
@@ -4072,11 +3182,8 @@ components:
           readOnly: true
       required:
       - amount
-      - charging_type
       - created_at
-      - currency
       - effective_from
-      - effective_to
       - updated_at
       - uuid
     Subservice:

@@ -45,6 +45,17 @@ class SettingsEnvHelpersTests(SimpleTestCase):
                 )
             )
 
+    def test_disable_in_production_bool_forces_false_in_production(self):
+        with patch.object(core_settings, "IS_PRODUCTION", True):
+            self.assertFalse(core_settings.disable_in_production_bool(True))
+
+    def test_disable_in_production_bool_keeps_value_outside_production(self):
+        with patch.object(core_settings, "IS_PRODUCTION", False):
+            self.assertTrue(core_settings.disable_in_production_bool(True))
+
+    def test_read_project_version_reads_version_file(self):
+        self.assertEqual(core_settings.read_project_version(), "0.0.2")
+
 
 class OpenApiSecuritySchemaTests(SimpleTestCase):
     @staticmethod
@@ -72,11 +83,14 @@ class OpenApiSecuritySchemaTests(SimpleTestCase):
     def test_private_endpoints_keep_jwt_auth_in_schema(self):
         private_operations = (
             ("/api/auth/me/", "get"),
-            ("/api/jobs/", "get"),
-            ("/api/organizations/user/", "get"),
+            ("/api/organizations/me/", "get"),
         )
 
         for path, method in private_operations:
             with self.subTest(path=path, method=method):
                 operation = self._get_operation(path, method)
                 self.assertEqual(operation.get("security"), [{"jwtAuth": []}])
+
+    def test_schema_uses_project_version_from_version_file(self):
+        schema = SchemaGenerator().get_schema(request=None, public=True)
+        self.assertEqual(schema["info"]["version"], "0.0.2")
