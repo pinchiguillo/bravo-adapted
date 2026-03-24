@@ -152,6 +152,14 @@ AUTH_VERIFY_EMAIL_URL_TEMPLATE = os.getenv(
     "AUTH_VERIFY_EMAIL_URL_TEMPLATE",
     "http://localhost:3000/verify-email?token={token}",
 )
+AUTH_VERIFY_EMAIL_SALT = os.getenv(
+    "AUTH_VERIFY_EMAIL_SALT",
+    "auth.verify_email",
+)
+AUTH_VERIFY_EMAIL_MAX_AGE_SECONDS = env_int(
+    "AUTH_VERIFY_EMAIL_MAX_AGE_SECONDS",
+    60 * 60 * 24,
+)
 AUTH_BYPASS_EMAIL_VERIFICATION = env_bool(
     "AUTH_BYPASS_EMAIL_VERIFICATION",
     default=not IS_PRODUCTION,
