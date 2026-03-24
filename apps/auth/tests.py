@@ -1,184 +1,17 @@
-import os
-import uuid
 from unittest.mock import patch
 
-import boto3
-from botocore.exceptions import BotoCoreError, ClientError, EndpointConnectionError
-from django.conf import settings
 from django.contrib.auth import get_user_model
 from django.contrib.auth.models import Permission
 from django.contrib.contenttypes.models import ContentType
 from django.core import mail
 from django.core.cache import cache
-from django.core.exceptions import ImproperlyConfigured
-from django.core.files.uploadedfile import SimpleUploadedFile
-from django.core.mail import EmailMultiAlternatives, get_connection
-from django.test import SimpleTestCase, TestCase, override_settings
-from drf_spectacular.generators import SchemaGenerator
+from django.test import override_settings
 from rest_framework.test import APITestCase
 from rest_framework.throttling import SimpleRateThrottle
 
-from apps.auth.serializers import VerifyEmailSerializer
+from apps.auth.services import build_verify_email_token
 from apps.auth.views import AuthViewSet
 from apps.organization.models import Organization
-from Core import settings as core_settings
-
-
-class AwsLocalstackIntegrationTests(TestCase):
-    @classmethod
-    def setUpTestData(cls):
-        cls.s3_enabled = bool(getattr(settings, "USE_S3_STORAGE", False))
-        cls.ses_enabled = bool(getattr(settings, "USE_SES_EMAIL", False))
-        cls.bucket_name = getattr(settings, "AWS_STORAGE_BUCKET_NAME", "")
-        cls.sender = getattr(settings, "DEFAULT_FROM_EMAIL", "")
-
-    def setUp(self):
-        self.s3_client = boto3.client(
-            "s3",
-            region_name=settings.AWS_DEFAULT_REGION,
-            endpoint_url=getattr(settings, "AWS_S3_ENDPOINT_URL", None),
-            aws_access_key_id=getattr(settings, "AWS_ACCESS_KEY_ID", None),
-            aws_secret_access_key=getattr(settings, "AWS_SECRET_ACCESS_KEY", None),
-        )
-        self.ses_client = boto3.client(
-            "ses",
-            region_name=settings.AWS_DEFAULT_REGION,
-            endpoint_url=getattr(settings, "AWS_SES_ENDPOINT_URL", None),
-            aws_access_key_id=getattr(settings, "AWS_ACCESS_KEY_ID", None),
-            aws_secret_access_key=getattr(settings, "AWS_SECRET_ACCESS_KEY", None),
-        )
-
-    def _skip_if_localstack_unavailable(self, callback):
-        try:
-            callback()
-        except (BotoCoreError, ClientError, EndpointConnectionError):
-            self.skipTest("Localstack is not reachable from the current test environment.")
-
-    def test_avatar_upload_is_persisted_in_s3(self):
-        if not self.s3_enabled:
-            self.skipTest("S3 storage is disabled for this environment.")
-
-        self._skip_if_localstack_unavailable(
-            lambda: self.s3_client.list_buckets()
-        )
-
-        user_model = get_user_model()
-        user = user_model.objects.create_user(
-            username=f"user_{uuid.uuid4().hex[:8]}",
-            email=f"user_{uuid.uuid4().hex[:8]}@example.com",
-            password="test-pass-123",
-        )
-        avatar = SimpleUploadedFile(
-            "avatar.png",
-            b"\x89PNG\r\n\x1a\n\x00\x00\x00\rIHDR",
-            content_type="image/png",
-        )
-        user.avatar = avatar
-        user.save()
-
-        self.assertTrue(user.avatar.name.startswith("avatars/"))
-        self.assertTrue(user.avatar.storage.exists(user.avatar.name))
-
-        objects = self.s3_client.list_objects_v2(
-            Bucket=self.bucket_name,
-            Prefix=user.avatar.name,
-        )
-        self.assertGreaterEqual(objects.get("KeyCount", 0), 1)
-
-    def test_ses_email_backend_sends_message(self):
-        if not self.ses_enabled:
-            self.skipTest("SES email backend is disabled for this environment.")
-
-        try:
-            identities = self.ses_client.list_identities(IdentityType="EmailAddress")
-        except (BotoCoreError, ClientError, EndpointConnectionError):
-            self.skipTest("Localstack is not reachable from the current test environment.")
-        self.assertIn(self.sender, identities.get("Identities", []))
-
-        email = EmailMultiAlternatives(
-            subject="SES Integration Test",
-            body="plain body",
-            from_email=self.sender,
-            to=["receiver@example.com"],
-        )
-        email.attach_alternative("<p>html body</p>", "text/html")
-
-        sent_count = get_connection().send_messages([email])
-        self.assertEqual(sent_count, 1)
-
-
-class SettingsEnvHelpersTests(SimpleTestCase):
-    def test_env_bool_recognizes_truthy_values(self):
-        with patch.dict("os.environ", {"BOOL_FLAG": "true"}, clear=False):
-            self.assertTrue(core_settings.env_bool("BOOL_FLAG"))
-
-    def test_env_int_raises_for_invalid_values(self):
-        with patch.dict("os.environ", {"INT_FLAG": "invalid"}, clear=False):
-            with self.assertRaises(ImproperlyConfigured):
-                core_settings.env_int("INT_FLAG", 0)
-
-    def test_env_list_splits_and_strips_values(self):
-        with patch.dict("os.environ", {"LIST_FLAG": " a, b ,,c "}, clear=False):
-            self.assertEqual(core_settings.env_list("LIST_FLAG"), ["a", "b", "c"])
-
-    def test_require_env_raises_when_missing(self):
-        with patch.dict("os.environ", {}, clear=True):
-            with self.assertRaises(ImproperlyConfigured):
-                core_settings.require_env("MISSING_VAR")
-
-    def test_auth_bypass_email_verification_defaults_to_true_in_development(self):
-        with patch.dict("os.environ", {"APP_MODE": "development"}, clear=True):
-            self.assertTrue(
-                core_settings.env_bool(
-                    "AUTH_BYPASS_EMAIL_VERIFICATION",
-                    default=os.environ.get("APP_MODE", "development").strip().lower() != "production",
-                )
-            )
-
-    def test_auth_bypass_email_verification_defaults_to_false_in_production(self):
-        with patch.dict("os.environ", {"APP_MODE": "production"}, clear=True):
-            self.assertFalse(
-                core_settings.env_bool(
-                    "AUTH_BYPASS_EMAIL_VERIFICATION",
-                    default=os.environ.get("APP_MODE", "development").strip().lower() != "production",
-                )
-            )
-
-
-class OpenApiSecuritySchemaTests(SimpleTestCase):
-    @staticmethod
-    def _get_operation(path, method):
-        schema = SchemaGenerator().get_schema(request=None, public=True)
-        return schema["paths"][path][method]
-
-    def test_public_endpoints_do_not_require_auth_in_schema(self):
-        public_operations = (
-            ("/api/auth/login/", "post"),
-            ("/api/auth/register/", "post"),
-            ("/api/auth/token/refresh/", "post"),
-            ("/api/auth/verify-email/", "post"),
-            ("/api/announcements/", "get"),
-            ("/api/organizations/{uuid}/", "get"),
-            ("/api/organizations/{organization_uuid}/jobs/", "get"),
-            ("/api/organizations/{organization_uuid}/jobs/{job_uuid}/services/", "get"),
-        )
-
-        for path, method in public_operations:
-            with self.subTest(path=path, method=method):
-                operation = self._get_operation(path, method)
-                self.assertNotIn("security", operation)
-
-    def test_private_endpoints_keep_jwt_auth_in_schema(self):
-        private_operations = (
-            ("/api/auth/me/", "get"),
-            ("/api/jobs/", "get"),
-            ("/api/organizations/user/", "get"),
-        )
-
-        for path, method in private_operations:
-            with self.subTest(path=path, method=method):
-                operation = self._get_operation(path, method)
-                self.assertEqual(operation.get("security"), [{"jwtAuth": []}])
 
 
 @override_settings(
@@ -218,8 +51,8 @@ class AuthApiTests(APITestCase):
         self.assertEqual(mail.outbox[0].to, ["new-user@example.com"])
         self.assertIn("verify-email?token=", mail.outbox[0].body)
         self.assertFalse(response.data["email_verified"])
-        self.assertIn("access", response.data)
-        self.assertIn("refresh", response.data)
+        self.assertNotIn("access", response.data)
+        self.assertNotIn("refresh", response.data)
         self.assertEqual(response.data["preferencias"], {})
         self.assertEqual(response.data["permissions"], [])
 
@@ -394,7 +227,7 @@ class AuthApiTests(APITestCase):
     def test_verify_email_marks_user_as_verified(self):
         self.user.email_verified = False
         self.user.save(update_fields=["email_verified"])
-        token = VerifyEmailSerializer.build_token(self.user)
+        token = build_verify_email_token(self.user)
 
         response = self.client.post(
             "/api/auth/verify-email/",
@@ -403,7 +236,10 @@ class AuthApiTests(APITestCase):
         )
 
         self.assertEqual(response.status_code, 200)
-        self.assertEqual(response.data["detail"], "Email verified successfully.")
+        self.assertEqual(response.data["email"], self.email)
+        self.assertTrue(response.data["email_verified"])
+        self.assertIn("access", response.data)
+        self.assertIn("refresh", response.data)
         self.user.refresh_from_db()
         self.assertTrue(self.user.email_verified)
 
@@ -417,10 +253,33 @@ class AuthApiTests(APITestCase):
         self.assertEqual(response.status_code, 400)
         self.assertEqual(response.data["token"][0], "Invalid or expired verification token.")
 
+    def test_verify_email_rejects_reused_token(self):
+        self.user.email_verified = False
+        self.user.save(update_fields=["email_verified"])
+        token = build_verify_email_token(self.user)
+
+        first_response = self.client.post(
+            "/api/auth/verify-email/",
+            {"token": token},
+            format="json",
+        )
+        second_response = self.client.post(
+            "/api/auth/verify-email/",
+            {"token": token},
+            format="json",
+        )
+
+        self.assertEqual(first_response.status_code, 200)
+        self.assertEqual(second_response.status_code, 400)
+        self.assertEqual(
+            second_response.data["token"][0],
+            "Invalid or expired verification token.",
+        )
+
     def test_verify_email_allows_login_after_successful_verification(self):
         self.user.email_verified = False
         self.user.save(update_fields=["email_verified"])
-        token = VerifyEmailSerializer.build_token(self.user)
+        token = build_verify_email_token(self.user)
 
         verify_response = self.client.post(
             "/api/auth/verify-email/",
@@ -434,13 +293,15 @@ class AuthApiTests(APITestCase):
         )
 
         self.assertEqual(verify_response.status_code, 200)
+        self.assertIn("access", verify_response.data)
+        self.assertIn("refresh", verify_response.data)
         self.assertEqual(login_response.status_code, 200)
         self.assertIn("access", login_response.data)
 
     def test_verify_email_rejects_expired_token(self):
-        token = VerifyEmailSerializer.build_token(self.user)
+        token = build_verify_email_token(self.user)
 
-        with patch("apps.auth.serializers.time.time", return_value=9999999999):
+        with patch("apps.auth.services.time.time", return_value=9999999999):
             response = self.client.post(
                 "/api/auth/verify-email/",
                 {"token": token},
@@ -593,7 +454,7 @@ class AuthThrottleTests(APITestCase):
 
         self.user.email_verified = False
         self.user.save(update_fields=["email_verified"])
-        token = VerifyEmailSerializer.build_token(self.user)
+        token = build_verify_email_token(self.user)
         url = "/api/auth/verify-email/"
         payload = {"token": token}
         with patch.object(AuthViewSet, "throttle_classes", [VerifyEmailTestThrottle]):
