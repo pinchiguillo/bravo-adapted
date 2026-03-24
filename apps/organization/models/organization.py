@@ -3,8 +3,7 @@ import uuid
 from django.apps import apps
 from django.conf import settings
 from django.db import models
-from django.db.models import Avg, Q
-from django.db.models import DecimalField, Value
+from django.db.models import Avg, DecimalField, Q, Value
 
 
 class OrganizationQuerySet(models.QuerySet):

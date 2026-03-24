@@ -11,6 +11,7 @@ from rest_framework.exceptions import AuthenticationFailed
 from rest_framework_simplejwt.serializers import TokenObtainPairSerializer
 
 from common.permissions import get_email_verification_denial_message
+
 from .services import load_verify_email_user_id, send_verification_email
 
 

@@ -56,7 +56,10 @@ class AuthViewSet(viewsets.GenericViewSet):
 
     @extend_schema(
         summary="Register user",
-        description="Creates a new user account. When email verification is bypassed, the response also includes JWT tokens.",
+        description=(
+            "Creates a new user account. When email verification is bypassed, "
+            "the response also includes JWT tokens."
+        ),
         auth=[],
     )
     @action(detail=False, methods=["post"], url_path="register")
