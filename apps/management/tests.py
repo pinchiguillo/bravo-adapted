@@ -11,7 +11,6 @@ from django.urls import reverse
 from rest_framework import status
 from rest_framework.test import APITestCase
 
-from apps.jobs.models import Job
 from apps.management.feature_flags import is_feature_enabled
 from apps.management.models import FeatureFlag
 from apps.organization.models import (
@@ -25,7 +24,13 @@ from apps.organization.models import (
     Subservice,
 )
 
+JOBS_INSTALLED = django_apps.is_installed("apps.jobs")
 JOB_CHAT_INSTALLED = django_apps.is_installed("apps.job_chat")
+
+if JOBS_INSTALLED:
+    from apps.jobs.models import Job
+else:
+    Job = None
 
 if JOB_CHAT_INSTALLED:
     from apps.job_chat.models import JobChat, JobChatAttachment, JobChatMessage
@@ -35,6 +40,7 @@ else:
     JobChatMessage = None
 
 
+@skipUnless(JOBS_INSTALLED, "jobs app disabled")
 class ManagementApiTests(APITestCase):
     def setUp(self):
         user_model = get_user_model()
@@ -461,6 +467,7 @@ class FeatureFlagHelperTests(APITestCase):
         self.assertTrue(is_feature_enabled("job_chat_uploads"))
 
 
+@skipUnless(JOBS_INSTALLED, "jobs app disabled")
 @override_settings(
     STORAGES={
         "default": {"BACKEND": "django.core.files.storage.FileSystemStorage"},
@@ -482,6 +489,7 @@ class SeedDemoDataCommandJobChatDisabledTests(APITestCase):
         self.assertIn("job_chat_attachments=0", out.getvalue())
 
 
+@skipUnless(JOBS_INSTALLED, "jobs app disabled")
 @skipUnless(JOB_CHAT_INSTALLED, "job_chat app disabled")
 @override_settings(
     STORAGES={
