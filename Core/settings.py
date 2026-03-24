@@ -52,8 +52,21 @@ def require_env(name: str) -> str:
     raise ImproperlyConfigured(f"Environment variable {name} is required.")
 
 
+def read_project_version(default: str = "0.0.0") -> str:
+    version_path = BASE_DIR / "VERSION"
+    try:
+        version = version_path.read_text(encoding="utf-8").strip()
+    except OSError:
+        return default
+    return version or default
+
+
 def enforce_production_bool(value: bool) -> bool:
     return True if IS_PRODUCTION else value
+
+
+def disable_in_production_bool(value: bool) -> bool:
+    return False if IS_PRODUCTION else value
 
 
 def enforce_production_int(value: int, minimum: int) -> int:
@@ -146,21 +159,40 @@ JOB_CHAT_ATTACHMENT_ALLOWED_CONTENT_TYPES = env_list(
     "JOB_CHAT_ATTACHMENT_ALLOWED_CONTENT_TYPES",
     default=["application/pdf", "image/jpeg", "image/png", "text/plain"],
 )
+ORGANIZATION_ANNOUNCEMENT_VIEW_TTL_SECONDS = env_int(
+    "ORGANIZATION_ANNOUNCEMENT_VIEW_TTL_SECONDS",
+    60 * 60 * 24 * 30,
+)
 JOB_CHAT_WS_RATE_LIMIT = env_int("JOB_CHAT_WS_RATE_LIMIT", 20)
 JOB_CHAT_WS_RATE_WINDOW = env_int("JOB_CHAT_WS_RATE_WINDOW", 60)
 AUTH_VERIFY_EMAIL_URL_TEMPLATE = os.getenv(
     "AUTH_VERIFY_EMAIL_URL_TEMPLATE",
     "http://localhost:3000/verify-email?token={token}",
 )
+AUTH_VERIFY_EMAIL_SALT = os.getenv(
+    "AUTH_VERIFY_EMAIL_SALT",
+    "auth.verify_email",
+)
+AUTH_VERIFY_EMAIL_MAX_AGE_SECONDS = env_int(
+    "AUTH_VERIFY_EMAIL_MAX_AGE_SECONDS",
+    60 * 60 * 24,
+)
 AUTH_BYPASS_EMAIL_VERIFICATION = env_bool(
     "AUTH_BYPASS_EMAIL_VERIFICATION",
     default=not IS_PRODUCTION,
+)
+BYPASS_ORGANIZATION_VALIDATION = env_bool(
+    "BYPASS_ORGANIZATION_VALIDATION",
+    default=False,
 )
 AUTH_ENFORCE_PASSWORD_RESTRICTIONS = env_bool(
     "AUTH_ENFORCE_PASSWORD_RESTRICTIONS",
     default=True,
 )
 RGPD_MODULE_ENABLED = env_bool("RGPD_MODULE_ENABLED", default=False)
+
+AUTH_BYPASS_EMAIL_VERIFICATION = disable_in_production_bool(AUTH_BYPASS_EMAIL_VERIFICATION)
+BYPASS_ORGANIZATION_VALIDATION = disable_in_production_bool(BYPASS_ORGANIZATION_VALIDATION)
 
 if IS_PRODUCTION and USE_S3_STORAGE:
     require_env("AWS_DEFAULT_REGION")
@@ -190,8 +222,6 @@ INSTALLED_APPS = [
     'channels',
     'apps.auth.apps.AuthConfig',
     'apps.organization.apps.OrganizationConfig',
-    'apps.jobs.apps.JobsConfig',
-    'apps.job_chat.apps.JobChatConfig',
     'apps.management.apps.ManagementConfig',
 ]
 
@@ -380,10 +410,9 @@ SIMPLE_JWT = {
 SPECTACULAR_SETTINGS = {
     "TITLE": "Bravo API",
     "DESCRIPTION": "OpenAPI documentation for the Bravo backend.",
-    "VERSION": "1.0.0",
+    "VERSION": read_project_version(),
     "ENUM_NAME_OVERRIDES": {
         "AccountStatusEnum": "apps.auth.models.CustomUser.Status",
-        "JobStatusEnum": "apps.jobs.models.Job.Status",
     },
 }
 

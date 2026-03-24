@@ -46,22 +46,30 @@ class AuthViewSet(viewsets.GenericViewSet):
             return super().get_throttles()
         return []
 
+    def _build_authenticated_user_response_data(self, user):
+        refresh = RefreshToken.for_user(user)
+        return {
+            **UserSerializer(user, context=self.get_serializer_context()).data,
+            "refresh": str(refresh),
+            "access": str(refresh.access_token),
+        }
+
     @extend_schema(
         summary="Register user",
-        description="Creates a new user account and returns the registered profile along with JWT tokens.",
+        description="Creates a new user account. When email verification is bypassed, the response also includes JWT tokens.",
         auth=[],
     )
     @action(detail=False, methods=["post"], url_path="register")
     def register(self, request):
-        serializer = RegisterSerializer(data=request.data)
+        serializer = self.get_serializer(data=request.data)
         serializer.is_valid(raise_exception=True)
         user = serializer.save()
-        refresh = RefreshToken.for_user(user)
-        response_data = {
-            **UserSerializer(user).data,
-            "refresh": str(refresh),
-            "access": str(refresh.access_token),
-        }
+        if user.is_email_verified:
+            response_data = self._build_authenticated_user_response_data(user)
+        else:
+            response_data = UserSerializer(
+                user, context=self.get_serializer_context()
+            ).data
         return Response(response_data, status=status.HTTP_201_CREATED)
 
     @extend_schema(
@@ -71,7 +79,7 @@ class AuthViewSet(viewsets.GenericViewSet):
     )
     @action(detail=False, methods=["post"], url_path="login")
     def login(self, request):
-        serializer = EmailTokenObtainPairSerializer(data=request.data)
+        serializer = self.get_serializer(data=request.data)
         serializer.is_valid(raise_exception=True)
         return Response(serializer.validated_data, status=status.HTTP_200_OK)
 
@@ -82,7 +90,7 @@ class AuthViewSet(viewsets.GenericViewSet):
     )
     @action(detail=False, methods=["post"], url_path="token/refresh")
     def refresh(self, request):
-        serializer = TokenRefreshSerializer(data=request.data)
+        serializer = self.get_serializer(data=request.data)
         try:
             serializer.is_valid(raise_exception=True)
         except TokenError as exc:
@@ -91,18 +99,16 @@ class AuthViewSet(viewsets.GenericViewSet):
 
     @extend_schema(
         summary="Verify email",
-        description="Validates the verification token and marks the user's email as verified.",
+        description="Validates the verification token, marks the user's email as verified and returns JWT tokens.",
         auth=[],
     )
     @action(detail=False, methods=["post"], url_path="verify-email")
     def verify_email(self, request):
-        serializer = VerifyEmailSerializer(data=request.data)
+        serializer = self.get_serializer(data=request.data)
         serializer.is_valid(raise_exception=True)
-        serializer.save()
-        return Response(
-            {"detail": "Email verified successfully."},
-            status=status.HTTP_200_OK,
-        )
+        user = serializer.save()
+        response_data = self._build_authenticated_user_response_data(user)
+        return Response(response_data, status=status.HTTP_200_OK)
 
     @extend_schema(
         summary="Get authenticated user",
@@ -115,4 +121,5 @@ class AuthViewSet(viewsets.GenericViewSet):
         email_verification_denial = get_email_verification_denial_message(request.user)
         if email_verification_denial is not None:
             raise PermissionDenied(email_verification_denial)
-        return Response(UserSerializer(request.user).data, status=status.HTTP_200_OK)
+        serializer = self.get_serializer(request.user)
+        return Response(serializer.data, status=status.HTTP_200_OK)

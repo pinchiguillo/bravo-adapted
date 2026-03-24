@@ -1,16 +1,18 @@
 from datetime import date
 from types import SimpleNamespace
+from unittest import skipUnless
 from unittest.mock import patch
 
 from asgiref.sync import async_to_sync
 from channels.db import database_sync_to_async
 from channels.routing import URLRouter
 from channels.testing import WebsocketCommunicator
+from django.apps import apps as django_apps
 from django.contrib.auth import get_user_model
 from django.core.cache import cache
 from django.core.files.uploadedfile import SimpleUploadedFile
 from django.test import SimpleTestCase, TransactionTestCase, override_settings
-from django.urls import reverse
+from django.urls import NoReverseMatch, reverse
 from rest_framework import status
 from rest_framework.exceptions import ValidationError
 from rest_framework.request import Request
@@ -19,10 +21,6 @@ from rest_framework.throttling import SimpleRateThrottle
 from rest_framework_simplejwt.exceptions import InvalidToken
 from rest_framework_simplejwt.tokens import RefreshToken
 
-from apps.job_chat.models import JobChatAttachment, JobChatMessage
-from apps.job_chat.routing import websocket_urlpatterns
-from apps.job_chat.views import JobChatViewSet
-from apps.job_chat.ws_auth import JWTAuthMiddleware, JWTAuthMiddlewareStack
 from apps.organization.models import (
     Announcement,
     Category,
@@ -36,7 +34,23 @@ from apps.organization.models import (
 from .models import Job
 from .views import JobViewSet, job_search_parameter
 
+JOB_CHAT_INSTALLED = django_apps.is_installed("apps.job_chat")
 
+if JOB_CHAT_INSTALLED:
+    from apps.job_chat.models import JobChatAttachment, JobChatMessage
+    from apps.job_chat.routing import websocket_urlpatterns
+    from apps.job_chat.views import JobChatViewSet
+    from apps.job_chat.ws_auth import JWTAuthMiddleware, JWTAuthMiddlewareStack
+else:
+    JobChatAttachment = None
+    JobChatMessage = None
+    JobChatViewSet = None
+    JWTAuthMiddleware = None
+    JWTAuthMiddlewareStack = None
+    websocket_urlpatterns = []
+
+
+@skipUnless(JOB_CHAT_INSTALLED, "job_chat app disabled")
 class JobAttachmentDownloadUrlTests(SimpleTestCase):
     def setUp(self):
         self.factory = APIRequestFactory()
@@ -97,6 +111,7 @@ class JobAttachmentDownloadUrlTests(SimpleTestCase):
         self.assertEqual(response.data["filename"], "proof.txt")
 
 
+@skipUnless(JOB_CHAT_INSTALLED, "job_chat app disabled")
 class JobMessagesPaginationTests(SimpleTestCase):
     def setUp(self):
         self.factory = APIRequestFactory()
@@ -210,6 +225,89 @@ class JobListSearchViewTests(SimpleTestCase):
         self.assertIn(("announcement__organization__name__icontains", "Acm"), search_filter.children)
 
 
+class JobChatDisabledTests(APITestCase):
+    def setUp(self):
+        user_model = get_user_model()
+        self.client_user = user_model.objects.create_user(
+            username="chat-disabled-client",
+            email="chat-disabled-client@example.com",
+            password="testpass123",
+            email_verified=True,
+        )
+        self.organization_owner = user_model.objects.create_user(
+            username="chat-disabled-owner",
+            email="chat-disabled-owner@example.com",
+            password="testpass123",
+            email_verified=True,
+        )
+        self.organization = Organization.objects.create(
+            user=self.organization_owner,
+            name="Disabled Chat Org",
+            legal_name="Disabled Chat Org SL",
+            tax_id="CHAT-OFF-1",
+            billing_email="billing@chat-off.example.com",
+            billing_address="Main 1",
+            billing_city="Madrid",
+            billing_country="ES",
+            billing_postal_code="28001",
+            is_approved=True,
+        )
+        self.organization_job = OrganizationJob.objects.create(
+            organization=self.organization,
+            name="Disabled Chat Services",
+            description="",
+        )
+        self.category = Category.objects.create(name="Disabled Chat Category", description="")
+        self.service = Service.objects.create(
+            job=self.organization_job,
+            category=self.category,
+            name="Disabled Chat Service",
+            description="",
+        )
+        self.subservice = Subservice.objects.create(
+            service=self.service,
+            name="Disabled Chat Subservice",
+            description="",
+        )
+        self.service_price = ServicePrice.objects.create(
+            subservice=self.subservice,
+            amount="19.99",
+            currency="EUR",
+            charging_type=ServicePrice.ChargingType.PER_PROJECT,
+            effective_from=date(2026, 1, 1),
+        )
+        self.announcement = Announcement.objects.create(
+            organization=self.organization,
+            category=self.category,
+            name="Disabled Chat Announcement",
+            location="Madrid",
+            announcement="Disabled chat",
+        )
+        self.announcement.services.add(self.service)
+
+    def test_create_job_does_not_create_chat_when_feature_is_disabled(self):
+        self.client.force_authenticate(user=self.client_user)
+
+        response = self.client.post(
+            reverse("jobs-list"),
+            {
+                "announcement": self.announcement.id,
+                "plan_price": self.service_price.id,
+                "status": Job.Status.PENDING,
+            },
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+        job = Job.objects.get(id=response.data["id"])
+        self.assertFalse(hasattr(job, "chat"))
+        self.assertIsNone(response.data["chat_uuid"])
+
+    def test_job_chat_routes_are_not_registered_when_feature_is_disabled(self):
+        with self.assertRaises(NoReverseMatch):
+            reverse("job-chats-detail", kwargs={"uuid": "00000000-0000-0000-0000-000000000000"})
+
+
 @override_settings(
     STORAGES={
         "default": {"BACKEND": "django.core.files.storage.FileSystemStorage"},
@@ -218,6 +316,7 @@ class JobListSearchViewTests(SimpleTestCase):
     MEDIA_ROOT="/tmp/bravo-job-tests-media",
     MEDIA_URL="/media/",
 )
+@skipUnless(JOB_CHAT_INSTALLED, "job_chat app disabled")
 class JobsApiTests(APITestCase):
     def setUp(self):
         user_model = get_user_model()
@@ -1105,6 +1204,7 @@ class JobsApiTests(APITestCase):
         self.assertEqual(second_response.status_code, status.HTTP_429_TOO_MANY_REQUESTS)
 
 
+@skipUnless(JOB_CHAT_INSTALLED, "job_chat app disabled")
 class JwtAuthMiddlewareTests(APITestCase):
     def _run_middleware(self, middleware, scope):
         resolved = {}
@@ -1224,6 +1324,7 @@ class JwtAuthMiddlewareTests(APITestCase):
         }
     }
 )
+@skipUnless(JOB_CHAT_INSTALLED, "job_chat app disabled")
 class JobChatWebSocketTests(TransactionTestCase):
     reset_sequences = True
 

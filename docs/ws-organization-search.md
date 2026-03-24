@@ -16,22 +16,14 @@ Documentar el contrato del endpoint WebSocket de busqueda de organizaciones, ya 
 
 ## Autenticacion
 
-El handshake requiere un usuario autenticado mediante JWT enviado en la cabecera `Authorization`.
+El handshake no requiere autenticacion.
 
-Formato esperado:
-
-```text
-Authorization: Bearer <access_token>
-```
-
-Si el usuario no esta autenticado, el servidor acepta el handshake y cierra a continuacion con codigo WebSocket `4401`.
-
-Ese detalle es intencional: evita que el cliente observe un rechazo HTTP `403` durante el handshake y mantiene el contrato documentado de cierre `4401`.
+Si el cliente envia una cabecera `Authorization`, el buscador no depende de ella para autorizar el acceso.
 
 ## Restricciones
 
 - Requiere origen permitido por `AllowedHostsOriginValidator`.
-- Aplica rate limit por usuario.
+- Aplica rate limit por visitante.
 - La consulta debe incluir al menos 3 caracteres.
 
 ## Mensaje de entrada
@@ -71,7 +63,7 @@ Notas:
 
 - `query` devuelve la cadena normalizada procesada por el servidor.
 - `results` usa `OrganizationPublicSerializer`.
-- Actualmente cada resultado expone `uuid` y `name`.
+- Actualmente cada resultado expone `uuid`, `name`, `verification_level`, `is_approved` y `rating`.
 
 ## Mensajes de error
 

@@ -1,12 +1,9 @@
-import time
-
 from django.conf import settings
 from django.contrib.auth import get_user_model
 from django.contrib.auth.password_validation import validate_password
 from django.core import signing
 from django.core.exceptions import ObjectDoesNotExist
 from django.core.exceptions import ValidationError as DjangoValidationError
-from django.core.mail import send_mail
 from django.db import transaction
 from drf_spectacular.utils import extend_schema_field
 from rest_framework import serializers
@@ -14,31 +11,7 @@ from rest_framework.exceptions import AuthenticationFailed
 from rest_framework_simplejwt.serializers import TokenObtainPairSerializer
 
 from common.permissions import get_email_verification_denial_message
-
-VERIFY_EMAIL_SALT = "auth.verify_email"
-VERIFY_EMAIL_MAX_AGE_SECONDS = 60 * 60 * 24
-
-
-def build_verify_email_url(token):
-    return settings.AUTH_VERIFY_EMAIL_URL_TEMPLATE.format(token=token)
-
-
-def send_verification_email(user):
-    token = VerifyEmailSerializer.build_token(user)
-    verification_url = build_verify_email_url(token)
-    subject = "Verify your email"
-    message = (
-        "Welcome to Bravo.\n\n"
-        "Verify your email by opening this link:\n"
-        f"{verification_url}\n"
-    )
-
-    send_mail(
-        subject=subject,
-        message=message,
-        from_email=settings.DEFAULT_FROM_EMAIL,
-        recipient_list=[user.email],
-    )
+from .services import load_verify_email_user_id, send_verification_email
 
 
 class UserSerializer(serializers.ModelSerializer):
@@ -84,10 +57,17 @@ class UserSerializer(serializers.ModelSerializer):
         return str(provider.uuid)
 
     def _get_provider(self, obj):
+        provider = getattr(obj, "_auth_provider_cache", None)
+        if provider is not None:
+            return provider
+
         try:
-            return obj.organization
+            provider = obj.organization
         except ObjectDoesNotExist:
-            return None
+            provider = None
+
+        obj._auth_provider_cache = provider
+        return provider
 
 
 class RegisterSerializer(serializers.ModelSerializer):
@@ -118,9 +98,8 @@ class RegisterSerializer(serializers.ModelSerializer):
         user_model = get_user_model()
         with transaction.atomic():
             user = user_model.objects.create_user(**validated_data)
-            if settings.AUTH_BYPASS_EMAIL_VERIFICATION:
-                user.email_verified = True
-                user.save(update_fields=["email_verified"])
+            if user.is_email_verified:
+                user.mark_email_verified()
             else:
                 send_verification_email(user)
         return user
@@ -153,11 +132,10 @@ class VerifyEmailSerializer(serializers.Serializer):
         user_model = get_user_model()
 
         try:
-            payload = signing.loads(value, salt=VERIFY_EMAIL_SALT)
-            expires_at = payload["exp"]
-            if expires_at < time.time():
-                raise signing.SignatureExpired("Token expired.")
-            user = user_model.objects.get(pk=payload["user_id"])
+            user_id = load_verify_email_user_id(value)
+            user = user_model.objects.get(pk=user_id)
+            if user.is_email_verified:
+                raise serializers.ValidationError(self.error_messages["invalid_token"])
         except (KeyError, signing.BadSignature, signing.SignatureExpired, user_model.DoesNotExist):
             raise serializers.ValidationError(self.error_messages["invalid_token"])
 
@@ -166,17 +144,5 @@ class VerifyEmailSerializer(serializers.Serializer):
 
     def save(self, **kwargs):
         user = self.context["user"]
-        if not user.email_verified:
-            user.email_verified = True
-            user.save(update_fields=["email_verified"])
+        user.mark_email_verified()
         return user
-
-    @classmethod
-    def build_token(cls, user):
-        return signing.dumps(
-            {
-                "user_id": user.pk,
-                "exp": int(time.time()) + VERIFY_EMAIL_MAX_AGE_SECONDS,
-            },
-            salt=VERIFY_EMAIL_SALT,
-        )
