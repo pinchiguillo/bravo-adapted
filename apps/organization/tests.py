@@ -8,12 +8,12 @@ from channels.routing import URLRouter
 from channels.security.websocket import AllowedHostsOriginValidator
 from channels.testing import WebsocketCommunicator
 from django.apps import apps as django_apps
-from django.contrib.auth.models import AnonymousUser
-from django.contrib.sessions.middleware import SessionMiddleware
 from django.contrib.auth import get_user_model
+from django.contrib.auth.models import AnonymousUser
 from django.core.cache import cache
 from django.db import connections, transaction
 from django.db.utils import IntegrityError
+from django.contrib.sessions.middleware import SessionMiddleware
 from django.test import RequestFactory, SimpleTestCase, TransactionTestCase, override_settings
 from django.urls import NoReverseMatch, reverse
 from rest_framework import status
@@ -21,6 +21,7 @@ from rest_framework.test import APITestCase
 from rest_framework.throttling import SimpleRateThrottle
 from rest_framework_simplejwt.tokens import RefreshToken
 
+from .middleware import AnnouncementViewCountMiddleware
 from .models import (
     Announcement,
     AnnouncementReview,
@@ -31,7 +32,6 @@ from .models import (
     ServicePrice,
     Subservice,
 )
-from .middleware import AnnouncementViewCountMiddleware
 from .routing import websocket_urlpatterns
 from .views import OrganizationViewSet
 
