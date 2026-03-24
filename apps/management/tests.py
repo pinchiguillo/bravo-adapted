@@ -1,6 +1,8 @@
 from datetime import date
 from io import StringIO
+from unittest import skipUnless
 
+from django.apps import apps as django_apps
 from django.conf import settings
 from django.contrib.auth import get_user_model
 from django.core.management import call_command
@@ -9,7 +11,6 @@ from django.urls import reverse
 from rest_framework import status
 from rest_framework.test import APITestCase
 
-from apps.job_chat.models import JobChat, JobChatAttachment, JobChatMessage
 from apps.jobs.models import Job
 from apps.management.feature_flags import is_feature_enabled
 from apps.management.models import FeatureFlag
@@ -23,6 +24,15 @@ from apps.organization.models import (
     ServicePrice,
     Subservice,
 )
+
+JOB_CHAT_INSTALLED = django_apps.is_installed("apps.job_chat")
+
+if JOB_CHAT_INSTALLED:
+    from apps.job_chat.models import JobChat, JobChatAttachment, JobChatMessage
+else:
+    JobChat = None
+    JobChatAttachment = None
+    JobChatMessage = None
 
 
 class ManagementApiTests(APITestCase):
@@ -451,6 +461,28 @@ class FeatureFlagHelperTests(APITestCase):
         self.assertTrue(is_feature_enabled("job_chat_uploads"))
 
 
+@override_settings(
+    STORAGES={
+        "default": {"BACKEND": "django.core.files.storage.FileSystemStorage"},
+        "staticfiles": {"BACKEND": "django.contrib.staticfiles.storage.StaticFilesStorage"},
+    },
+    MEDIA_ROOT="/tmp/bravo-management-seed-tests-media",
+    MEDIA_URL="/media/",
+)
+class SeedDemoDataCommandJobChatDisabledTests(APITestCase):
+    def test_seed_demo_data_skips_job_chat_records_when_feature_is_disabled(self):
+        out = StringIO()
+
+        call_command("seed_demo_data", stdout=out)
+
+        self.assertEqual(Job.objects.count(), 4)
+        self.assertFalse(JOB_CHAT_INSTALLED)
+        self.assertIn("job_chats=0", out.getvalue())
+        self.assertIn("job_chat_messages=0", out.getvalue())
+        self.assertIn("job_chat_attachments=0", out.getvalue())
+
+
+@skipUnless(JOB_CHAT_INSTALLED, "job_chat app disabled")
 @override_settings(
     STORAGES={
         "default": {"BACKEND": "django.core.files.storage.FileSystemStorage"},

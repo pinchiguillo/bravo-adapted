@@ -10,4 +10,3 @@ from .models import JobChat
 def create_job_chat(sender, instance, created, **kwargs):
     if created:
         JobChat.objects.get_or_create(job=instance)
-

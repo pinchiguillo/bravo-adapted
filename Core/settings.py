@@ -199,7 +199,6 @@ INSTALLED_APPS = [
     'apps.auth.apps.AuthConfig',
     'apps.organization.apps.OrganizationConfig',
     'apps.jobs.apps.JobsConfig',
-    'apps.job_chat.apps.JobChatConfig',
     'apps.management.apps.ManagementConfig',
 ]
 

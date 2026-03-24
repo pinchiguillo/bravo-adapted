@@ -7,7 +7,6 @@ from django.core.files.base import ContentFile
 from django.core.management.base import BaseCommand
 from django.db import transaction
 
-from apps.job_chat.models import JobChat, JobChatAttachment, JobChatMessage
 from apps.jobs.models import Job
 from apps.organization.models import (
     Announcement,
@@ -523,13 +522,20 @@ class Command(BaseCommand):
             if created:
                 counters["jobs"] += 1
 
-            chat, chat_created = JobChat.objects.get_or_create(job=job)
+            if not apps.is_installed("apps.job_chat"):
+                continue
+
+            job_chat_model = apps.get_model("job_chat", "JobChat")
+            job_chat_message_model = apps.get_model("job_chat", "JobChatMessage")
+            job_chat_attachment_model = apps.get_model("job_chat", "JobChatAttachment")
+
+            chat, chat_created = job_chat_model.objects.get_or_create(job=job)
             if chat_created:
                 counters["job_chats"] += 1
 
             for index, message_data in enumerate(job_data.get("messages", []), start=1):
                 sender = users_by_email[message_data["sender_email"]]
-                message, message_created = JobChatMessage.objects.update_or_create(
+                message, message_created = job_chat_message_model.objects.update_or_create(
                     chat=chat,
                     sender=sender,
                     content=message_data["content"],
@@ -551,7 +557,7 @@ class Command(BaseCommand):
                 if attachment is not None:
                     continue
 
-                created_attachment = JobChatAttachment(
+                created_attachment = job_chat_attachment_model(
                     message=message,
                     uploaded_by=sender,
                 )
