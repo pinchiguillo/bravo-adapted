@@ -6,7 +6,6 @@ from .views import (
     CategoryViewSet,
     OrganizationJobViewSet,
     OrganizationSearchViewSet,
-    OrganizationUserViewSet,
     OrganizationViewSet,
     ServiceViewSet,
     SubserviceViewSet,
@@ -16,9 +15,6 @@ router = DefaultRouter()
 router.register("categories", CategoryViewSet, basename="organization-category")
 router.register("", OrganizationViewSet, basename="organization")
 
-organization_user = OrganizationUserViewSet.as_view(
-    {"get": "list", "post": "create", "patch": "partial_update"}
-)
 service_list = ServiceViewSet.as_view({"get": "list", "post": "create"})
 service_detail = ServiceViewSet.as_view(
     {"get": "retrieve", "put": "update", "patch": "partial_update", "delete": "destroy"}
@@ -42,11 +38,6 @@ urlpatterns = [
         "search/",
         organization_search,
         name="organization-search",
-    ),
-    path(
-        "user/",
-        organization_user,
-        name="organization-user",
     ),
     path(
         "<uuid:organization_uuid>/jobs/",

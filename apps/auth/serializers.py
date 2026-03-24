@@ -98,9 +98,8 @@ class RegisterSerializer(serializers.ModelSerializer):
         user_model = get_user_model()
         with transaction.atomic():
             user = user_model.objects.create_user(**validated_data)
-            if settings.AUTH_BYPASS_EMAIL_VERIFICATION:
-                user.email_verified = True
-                user.save(update_fields=["email_verified"])
+            if user.is_email_verified:
+                user.mark_email_verified()
             else:
                 send_verification_email(user)
         return user
@@ -135,7 +134,7 @@ class VerifyEmailSerializer(serializers.Serializer):
         try:
             user_id = load_verify_email_user_id(value)
             user = user_model.objects.get(pk=user_id)
-            if user.email_verified:
+            if user.is_email_verified:
                 raise serializers.ValidationError(self.error_messages["invalid_token"])
         except (KeyError, signing.BadSignature, signing.SignatureExpired, user_model.DoesNotExist):
             raise serializers.ValidationError(self.error_messages["invalid_token"])
@@ -145,7 +144,5 @@ class VerifyEmailSerializer(serializers.Serializer):
 
     def save(self, **kwargs):
         user = self.context["user"]
-        if not user.email_verified:
-            user.email_verified = True
-            user.save(update_fields=["email_verified"])
+        user.mark_email_verified()
         return user

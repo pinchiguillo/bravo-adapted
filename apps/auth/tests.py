@@ -356,6 +356,12 @@ class AuthApiTests(APITestCase):
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.data["email"], self.email)
 
+    @override_settings(AUTH_BYPASS_EMAIL_VERIFICATION=True)
+    def test_user_model_exposes_bypass_as_verified_state(self):
+        self.user.email_verified = False
+
+        self.assertTrue(self.user.is_email_verified)
+
 
 class AuthThrottleTests(APITestCase):
     def setUp(self):
@@ -441,6 +447,7 @@ class AuthThrottleTests(APITestCase):
         self.assertEqual(first_response.status_code, 200)
         self.assertEqual(second_response.status_code, 429)
 
+    @override_settings(AUTH_BYPASS_EMAIL_VERIFICATION=False)
     def test_verify_email_is_throttled_after_rate_limit(self):
         class VerifyEmailTestThrottle(SimpleRateThrottle):
             scope = "auth_verify_email_test"

@@ -24,6 +24,8 @@ class OrganizationRatingMixin(serializers.Serializer):
 
 
 class OrganizationPublicSerializer(OrganizationRatingMixin, serializers.ModelSerializer):
+    is_approved = serializers.BooleanField(source="is_validated", read_only=True)
+
     class Meta:
         model = Organization
         fields = (
@@ -37,6 +39,8 @@ class OrganizationPublicSerializer(OrganizationRatingMixin, serializers.ModelSer
 
 
 class OrganizationSerializer(OrganizationRatingMixin, serializers.ModelSerializer):
+    is_approved = serializers.BooleanField(source="is_validated", read_only=True)
+
     class Meta:
         model = Organization
         fields = (
@@ -179,10 +183,18 @@ class ServiceSerializer(serializers.ModelSerializer):
 
 
 class ServicePriceSerializer(serializers.ModelSerializer):
+    subservice = serializers.SlugRelatedField(
+        queryset=Subservice.objects.select_related("service", "service__job", "service__job__organization"),
+        slug_field="uuid",
+        write_only=True,
+        required=False,
+    )
+
     class Meta:
         model = ServicePrice
         fields = (
             "uuid",
+            "subservice",
             "amount",
             "currency",
             "charging_type",
@@ -191,7 +203,7 @@ class ServicePriceSerializer(serializers.ModelSerializer):
             "created_at",
             "updated_at",
         )
-        read_only_fields = fields
+        read_only_fields = ("uuid", "created_at", "updated_at")
 
 
 class SubserviceSerializer(serializers.ModelSerializer):
