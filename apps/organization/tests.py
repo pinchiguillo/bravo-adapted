@@ -10,10 +10,10 @@ from channels.testing import WebsocketCommunicator
 from django.apps import apps as django_apps
 from django.contrib.auth import get_user_model
 from django.contrib.auth.models import AnonymousUser
+from django.contrib.sessions.middleware import SessionMiddleware
 from django.core.cache import cache
 from django.db import connections, transaction
 from django.db.utils import IntegrityError
-from django.contrib.sessions.middleware import SessionMiddleware
 from django.test import RequestFactory, SimpleTestCase, TransactionTestCase, override_settings
 from django.urls import NoReverseMatch, reverse
 from rest_framework import status
