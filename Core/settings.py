@@ -98,6 +98,7 @@ if IS_PRODUCTION and not ALLOWED_HOSTS:
 
 CSRF_TRUSTED_ORIGINS = env_list("CSRF_TRUSTED_ORIGINS")
 TRUSTED_PROXY_IPS = env_list("TRUSTED_PROXY_IPS")
+CORS_ALLOW_ALL_ORIGINS = APP_MODE == "development"
 
 SECURE_SSL_REDIRECT = env_bool("SECURE_SSL_REDIRECT", default=IS_PRODUCTION)
 SECURE_HSTS_SECONDS = env_int(
@@ -215,6 +216,7 @@ if IS_PRODUCTION and USE_SES_EMAIL:
 # Application definition
 
 INSTALLED_APPS = [
+    'corsheaders',
     'django.contrib.admin',
     'django.contrib.auth',
     'django.contrib.contenttypes',
@@ -238,6 +240,7 @@ if USE_S3_STORAGE:
 
 MIDDLEWARE = [
     'django.middleware.security.SecurityMiddleware',
+    'corsheaders.middleware.CorsMiddleware',
     'django.contrib.sessions.middleware.SessionMiddleware',
     'django.middleware.common.CommonMiddleware',
     'django.middleware.csrf.CsrfViewMiddleware',

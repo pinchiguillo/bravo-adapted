@@ -10,6 +10,7 @@ Este documento resume las variables consumidas por el backend desde `Core/settin
 - `DEBUG`: activa o desactiva modo debug.
 - `ALLOWED_HOSTS`: lista separada por comas de hosts permitidos.
 - `CSRF_TRUSTED_ORIGINS`: lista separada por comas de origenes confiables para CSRF.
+- CORS: cuando `APP_MODE=development`, el backend permite todos los origenes (`CORS_ALLOW_ALL_ORIGINS=True`). En `production` queda desactivado.
 
 ## Seguridad HTTP y cookies
 
