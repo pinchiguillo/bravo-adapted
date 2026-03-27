@@ -567,8 +567,60 @@ class OrganizationApiTests(APITestCase):
         self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
         self.assertTrue(Organization.objects.filter(uuid=self.organization.uuid).exists())
 
-    def test_private_service_price_endpoints_exist(self):
-        self.assertEqual(
+    def test_private_job_routes_do_not_exist(self):
+        with self.assertRaises(NoReverseMatch):
+            reverse("organization-job-list", kwargs={"organization_uuid": self.organization.uuid})
+
+        with self.assertRaises(NoReverseMatch):
+            reverse(
+                "organization-job-detail",
+                kwargs={
+                    "organization_uuid": self.organization.uuid,
+                    "job_uuid": self.owner_organization_job.uuid,
+                },
+            )
+
+        with self.assertRaises(NoReverseMatch):
+            reverse(
+                "organization-service-list",
+                kwargs={
+                    "organization_uuid": self.organization.uuid,
+                    "job_uuid": self.owner_organization_job.uuid,
+                },
+            )
+
+        with self.assertRaises(NoReverseMatch):
+            reverse(
+                "organization-service-detail",
+                kwargs={
+                    "organization_uuid": self.organization.uuid,
+                    "job_uuid": self.owner_organization_job.uuid,
+                    "service_uuid": self.owner_service.uuid,
+                },
+            )
+
+        with self.assertRaises(NoReverseMatch):
+            reverse(
+                "organization-subservice-list",
+                kwargs={
+                    "organization_uuid": self.organization.uuid,
+                    "job_uuid": self.owner_organization_job.uuid,
+                    "service_uuid": self.owner_service.uuid,
+                },
+            )
+
+        with self.assertRaises(NoReverseMatch):
+            reverse(
+                "organization-subservice-detail",
+                kwargs={
+                    "organization_uuid": self.organization.uuid,
+                    "job_uuid": self.owner_organization_job.uuid,
+                    "service_uuid": self.owner_service.uuid,
+                    "uuid": self.owner_subservice.uuid,
+                },
+            )
+
+        with self.assertRaises(NoReverseMatch):
             reverse(
                 "organization-service-price-list",
                 kwargs={
@@ -577,13 +629,9 @@ class OrganizationApiTests(APITestCase):
                     "service_uuid": self.owner_service.uuid,
                     "subservice_uuid": self.owner_subservice.uuid,
                 },
-            ),
-            (
-                f"/api/organizations/{self.organization.uuid}/jobs/{self.owner_organization_job.uuid}"
-                f"/services/{self.owner_service.uuid}/subservices/{self.owner_subservice.uuid}/prices/"
-            ),
-        )
-        self.assertEqual(
+            )
+
+        with self.assertRaises(NoReverseMatch):
             reverse(
                 "organization-service-price-detail",
                 kwargs={
@@ -593,13 +641,7 @@ class OrganizationApiTests(APITestCase):
                     "subservice_uuid": self.owner_subservice.uuid,
                     "price_uuid": self.owner_service_price.uuid,
                 },
-            ),
-            (
-                f"/api/organizations/{self.organization.uuid}/jobs/{self.owner_organization_job.uuid}"
-                f"/services/{self.owner_service.uuid}/subservices/{self.owner_subservice.uuid}"
-                f"/prices/{self.owner_service_price.uuid}/"
-            ),
-        )
+            )
 
     def test_public_nested_subservice_and_price_endpoints_exist(self):
         self.assertEqual(
@@ -1139,151 +1181,6 @@ class OrganizationApiTests(APITestCase):
             response.data["services"][0],
             "Services must belong to the organization in the URL.",
         )
-
-    def test_organization_owner_can_manage_service_prices(self):
-        self.client.force_authenticate(user=self.owner)
-        list_url = reverse(
-            "organization-service-price-list",
-            kwargs={
-                "organization_uuid": self.organization.uuid,
-                "job_uuid": self.owner_organization_job.uuid,
-                "service_uuid": self.owner_service.uuid,
-                "subservice_uuid": self.owner_subservice.uuid,
-            },
-        )
-
-        list_response = self.client.get(list_url)
-        create_response = self.client.post(
-            list_url,
-            {
-                "subservice": str(self.owner_subservice.uuid),
-                "amount": "79.99",
-                "currency": "EUR",
-                "charging_type": ServicePrice.ChargingType.PER_HOUR,
-                "effective_from": "2026-02-01",
-            },
-            format="json",
-        )
-
-        created_uuid = create_response.data["uuid"]
-        detail_url = reverse(
-            "organization-service-price-detail",
-            kwargs={
-                "organization_uuid": self.organization.uuid,
-                "job_uuid": self.owner_organization_job.uuid,
-                "service_uuid": self.owner_service.uuid,
-                "subservice_uuid": self.owner_subservice.uuid,
-                "price_uuid": created_uuid,
-            },
-        )
-        update_response = self.client.patch(
-            detail_url,
-            {"amount": "89.99"},
-            format="json",
-        )
-        delete_response = self.client.delete(detail_url)
-
-        self.assertEqual(list_response.status_code, status.HTTP_200_OK)
-        self.assertEqual(list_response.data["count"], 1)
-        self.assertEqual(create_response.status_code, status.HTTP_201_CREATED)
-        self.assertEqual(create_response.data["amount"], "79.99")
-        self.assertEqual(update_response.status_code, status.HTTP_200_OK)
-        self.assertEqual(update_response.data["amount"], "89.99")
-        self.assertEqual(delete_response.status_code, status.HTTP_204_NO_CONTENT)
-        self.assertFalse(ServicePrice.objects.filter(uuid=created_uuid).exists())
-
-    def test_service_price_create_rejects_subservice_from_another_organization(self):
-        self.client.force_authenticate(user=self.owner)
-
-        response = self.client.post(
-            reverse(
-                "organization-service-price-list",
-                kwargs={
-                    "organization_uuid": self.organization.uuid,
-                    "job_uuid": self.owner_organization_job.uuid,
-                    "service_uuid": self.owner_service.uuid,
-                    "subservice_uuid": self.owner_subservice.uuid,
-                },
-            ),
-            {
-                "subservice": str(self.other_subservice.uuid),
-                "amount": "79.99",
-                "currency": "EUR",
-                "charging_type": ServicePrice.ChargingType.PER_PROJECT,
-                "effective_from": "2026-02-01",
-            },
-            format="json",
-        )
-
-        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
-        self.assertEqual(
-            response.data["subservice"],
-            "Subservice must match the subservice in the URL.",
-        )
-
-    def test_non_owner_cannot_access_private_service_price_endpoints(self):
-        self.client.force_authenticate(user=self.other_owner)
-        list_url = reverse(
-            "organization-service-price-list",
-            kwargs={
-                "organization_uuid": self.organization.uuid,
-                "job_uuid": self.owner_organization_job.uuid,
-                "service_uuid": self.owner_service.uuid,
-                "subservice_uuid": self.owner_subservice.uuid,
-            },
-        )
-        detail_url = reverse(
-            "organization-service-price-detail",
-            kwargs={
-                "organization_uuid": self.organization.uuid,
-                "job_uuid": self.owner_organization_job.uuid,
-                "service_uuid": self.owner_service.uuid,
-                "subservice_uuid": self.owner_subservice.uuid,
-                "price_uuid": self.owner_service_price.uuid,
-            },
-        )
-
-        list_response = self.client.get(list_url)
-        update_response = self.client.patch(
-            detail_url,
-            {"amount": "59.99"},
-            format="json",
-        )
-        delete_response = self.client.delete(detail_url)
-
-        self.assertEqual(list_response.status_code, status.HTTP_404_NOT_FOUND)
-        self.assertEqual(update_response.status_code, status.HTTP_404_NOT_FOUND)
-        self.assertEqual(delete_response.status_code, status.HTTP_404_NOT_FOUND)
-        self.owner_service_price.refresh_from_db()
-        self.assertEqual(str(self.owner_service_price.amount), "49.99")
-
-    def test_unapproved_organization_cannot_create_service_price(self):
-        self.organization.is_approved = False
-        self.organization.save(update_fields=["is_approved"])
-        self.client.force_authenticate(user=self.owner)
-
-        response = self.client.post(
-            reverse(
-                "organization-service-price-list",
-                kwargs={
-                    "organization_uuid": self.organization.uuid,
-                    "job_uuid": self.owner_organization_job.uuid,
-                    "service_uuid": self.owner_service.uuid,
-                    "subservice_uuid": self.owner_subservice.uuid,
-                },
-            ),
-            {
-                "subservice": str(self.owner_subservice.uuid),
-                "amount": "79.99",
-                "currency": "EUR",
-                "charging_type": ServicePrice.ChargingType.PER_PROJECT,
-                "effective_from": "2026-02-01",
-            },
-            format="json",
-        )
-
-        self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
-        self.assertEqual(response.data["detail"], "Organization must be approved for this action.")
 
     def test_announcement_list_hides_foreign_organization_from_authenticated_user(self):
         self.client.force_authenticate(user=self.other_owner)
