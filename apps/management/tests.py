@@ -18,8 +18,8 @@ from apps.organization.models import (
     AnnouncementReview,
     Category,
     Organization,
-    OrganizationJob,
     Service,
+    ServiceCatalog,
     ServicePrice,
     Subservice,
 )
@@ -71,18 +71,19 @@ class ManagementApiTests(APITestCase):
             billing_country="ES",
             billing_postal_code="28001",
         )
-        self.organization_job = OrganizationJob.objects.create(
-            organization=self.organization,
-            name="Managed Services",
-            description="Managed org job",
-        )
         if JOBS_INSTALLED:
             self.category, _ = Category.objects.get_or_create(
                 name="Managed Category",
                 defaults={"description": "Categoria gestionada"},
             )
+            self.service_catalog = ServiceCatalog.objects.create(
+                category=self.category,
+                name="Managed Plan",
+                description="",
+            )
             self.service = Service.objects.create(
-                job=self.organization_job,
+                organization=self.organization,
+                service_catalog=self.service_catalog,
                 category=self.category,
                 name="Managed Plan",
                 description="",
@@ -701,13 +702,14 @@ class SeedAnnouncementsCommandTests(APITestCase):
             name="Seed Category",
             description="Categoria para seed announcements",
         )
-        self.organization_job = OrganizationJob.objects.create(
-            organization=self.active_organization_with_services,
-            name="Seed Job",
-            description="Seed job",
+        self.service_catalog = ServiceCatalog.objects.create(
+            category=self.category,
+            name="Seed Service",
+            description="Seed service",
         )
         self.service = Service.objects.create(
-            job=self.organization_job,
+            organization=self.active_organization_with_services,
+            service_catalog=self.service_catalog,
             category=self.category,
             name="Seed Service",
             description="Seed service",
@@ -744,6 +746,100 @@ class SeedAnnouncementsCommandTests(APITestCase):
         self.assertEqual(Announcement.objects.count(), 2)
         self.assertIn("announcements_created=0", second_out.getvalue())
         self.assertIn("announcements_updated=2", second_out.getvalue())
+
+
+class SeedFixedTablesCommandTests(APITestCase):
+    def test_seed_fixed_tables_creates_expected_catalog_data(self):
+        out = StringIO()
+
+        call_command("seed_fixed_tables", stdout=out)
+
+        seeded_category_names = set(
+            Category.objects.filter(name__in={"Reformas", "Mantenimiento"}).values_list(
+                "name", flat=True
+            )
+        )
+        service_catalog_names = set(
+            ServiceCatalog.objects.values_list("name", flat=True)
+        )
+        feature_flags = {
+            flag.key: flag.is_active for flag in FeatureFlag.objects.order_by("key")
+        }
+
+        self.assertEqual(seeded_category_names, {"Mantenimiento", "Reformas"})
+        self.assertTrue(Category.objects.filter(name="General").exists())
+        self.assertEqual(
+            service_catalog_names,
+            {"Electricidad", "Fontaneria", "Limpieza", "Pintura"},
+        )
+        self.assertEqual(
+            feature_flags,
+            {
+                "job_chat": True,
+                "job_chat_attachments": True,
+                "job_chat_uploads": True,
+            },
+        )
+        self.assertIn("categories_created=2", out.getvalue())
+        self.assertIn("service_catalogs_created=4", out.getvalue())
+        self.assertIn("feature_flags_created=3", out.getvalue())
+
+    def test_seed_fixed_tables_is_idempotent_and_updates_existing_records(self):
+        category = Category.objects.create(
+            name="Reformas",
+            description="Descripcion desactualizada",
+        )
+        mantenimiento = Category.objects.create(
+            name="Mantenimiento",
+            description="Otra descripcion desactualizada",
+        )
+        catalog = ServiceCatalog.objects.create(
+            category=category,
+            name="Pintura",
+            description="Descripcion antigua",
+        )
+        FeatureFlag.objects.create(
+            key="job_chat",
+            name="Job chat antiguo",
+            description="Descripcion antigua",
+            is_active=False,
+        )
+
+        first_out = StringIO()
+        second_out = StringIO()
+
+        call_command("seed_fixed_tables", stdout=first_out)
+        call_command("seed_fixed_tables", stdout=second_out)
+
+        category.refresh_from_db()
+        mantenimiento.refresh_from_db()
+        catalog.refresh_from_db()
+        job_chat_flag = FeatureFlag.objects.get(key="job_chat")
+
+        self.assertEqual(Category.objects.count(), 3)
+        self.assertEqual(ServiceCatalog.objects.count(), 4)
+        self.assertEqual(FeatureFlag.objects.count(), 3)
+        self.assertEqual(
+            category.description,
+            "Servicios vinculados a reformas y obras.",
+        )
+        self.assertEqual(
+            mantenimiento.description,
+            "Servicios recurrentes de mantenimiento.",
+        )
+        self.assertEqual(catalog.category, category)
+        self.assertEqual(
+            catalog.description,
+            "Trabajos de pintura interior y exterior.",
+        )
+        self.assertTrue(job_chat_flag.is_active)
+        self.assertEqual(job_chat_flag.name, "Job chat")
+        self.assertIn("categories_created=0", second_out.getvalue())
+        self.assertIn("categories_updated=0", second_out.getvalue())
+        self.assertIn("service_catalogs_created=0", second_out.getvalue())
+        self.assertIn("service_catalogs_updated=0", second_out.getvalue())
+        self.assertIn("feature_flags_created=0", second_out.getvalue())
+        self.assertIn("feature_flags_updated=0", second_out.getvalue())
 
 
 class CreateAdminUserCommandTests(APITestCase):

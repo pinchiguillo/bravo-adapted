@@ -4,8 +4,8 @@ from .models import (
     Announcement,
     Category,
     Organization,
-    OrganizationJob,
     Service,
+    ServiceCatalog,
     ServicePrice,
     Subservice,
 )
@@ -76,20 +76,20 @@ class CategorySerializer(serializers.ModelSerializer):
         read_only_fields = ("uuid",)
 
 
-class OrganizationJobSerializer(serializers.ModelSerializer):
-    organization = serializers.UUIDField(source="organization.uuid", read_only=True)
+class ServiceCatalogSerializer(serializers.ModelSerializer):
+    category = serializers.UUIDField(source="category.uuid", read_only=True)
 
     class Meta:
-        model = OrganizationJob
+        model = ServiceCatalog
         fields = (
             "uuid",
-            "organization",
+            "category",
             "name",
             "description",
             "created_at",
             "updated_at",
         )
-        read_only_fields = ("uuid", "organization", "created_at", "updated_at")
+        read_only_fields = fields
 
 
 class AnnouncementSerializer(serializers.ModelSerializer):
@@ -97,7 +97,7 @@ class AnnouncementSerializer(serializers.ModelSerializer):
     category = serializers.SlugRelatedField(queryset=Category.objects.all(), slug_field="uuid")
     services = serializers.SlugRelatedField(
         many=True,
-        queryset=Service.objects.select_related("job", "job__organization"),
+        queryset=Service.objects.select_related("organization", "service_catalog"),
         slug_field="uuid",
         required=False,
     )
@@ -144,7 +144,7 @@ class AnnouncementSerializer(serializers.ModelSerializer):
         if organization is None:
             return value
         invalid_services = [
-            service for service in value if service.job.organization_id != organization.id
+            service for service in value if service.organization_id != organization.id
         ]
         if invalid_services:
             raise serializers.ValidationError("Services must belong to the organization in the URL.")
@@ -158,8 +158,11 @@ class AnnouncementSerializer(serializers.ModelSerializer):
 
 
 class ServiceSerializer(serializers.ModelSerializer):
-    organization = serializers.UUIDField(source="job.organization.uuid", read_only=True)
-    job = serializers.UUIDField(source="job.uuid", read_only=True)
+    organization = serializers.UUIDField(source="organization.uuid", read_only=True)
+    service_catalog = serializers.SlugRelatedField(
+        queryset=ServiceCatalog.objects.select_related("category"),
+        slug_field="uuid",
+    )
     category = serializers.SlugRelatedField(queryset=Category.objects.all(), slug_field="uuid")
     subservices = serializers.SerializerMethodField()
 
@@ -168,7 +171,7 @@ class ServiceSerializer(serializers.ModelSerializer):
         fields = (
             "uuid",
             "organization",
-            "job",
+            "service_catalog",
             "category",
             "subservices",
             "name",
@@ -176,20 +179,31 @@ class ServiceSerializer(serializers.ModelSerializer):
             "created_at",
             "updated_at",
         )
-        read_only_fields = ("uuid", "organization", "job", "created_at", "updated_at")
+        read_only_fields = ("uuid", "organization", "created_at", "updated_at")
 
     def get_subservices(self, obj):
         return SubserviceSerializer(obj.subservices.all(), many=True).data
 
+    def validate(self, attrs):
+        attrs = super().validate(attrs)
+        service_catalog = attrs.get("service_catalog", getattr(self.instance, "service_catalog", None))
+        category = attrs.get("category", getattr(self.instance, "category", None))
+        if service_catalog is not None and category is not None and service_catalog.category_id != category.id:
+            raise serializers.ValidationError(
+                {"category": "Category must match the selected service catalog."}
+            )
+        return attrs
+
     def to_representation(self, instance):
         data = super().to_representation(instance)
         data["category"] = str(instance.category.uuid)
+        data["service_catalog"] = str(instance.service_catalog.uuid)
         return data
 
 
 class ServicePriceSerializer(serializers.ModelSerializer):
     subservice = serializers.SlugRelatedField(
-        queryset=Subservice.objects.select_related("service", "service__job", "service__job__organization"),
+        queryset=Subservice.objects.select_related("service", "service__organization"),
         slug_field="uuid",
         write_only=True,
         required=False,
@@ -232,7 +246,7 @@ class PublicServicePriceSerializer(serializers.ModelSerializer):
 
 class SubserviceSerializer(serializers.ModelSerializer):
     service = serializers.SlugRelatedField(
-        queryset=Service.objects.select_related("job", "job__organization"),
+        queryset=Service.objects.select_related("organization", "service_catalog"),
         slug_field="uuid",
     )
     service_prices = PublicServicePriceSerializer(source="price_table", many=True, read_only=True)

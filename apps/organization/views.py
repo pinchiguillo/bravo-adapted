@@ -19,8 +19,8 @@ from .models import (
     Announcement,
     Category,
     Organization,
-    OrganizationJob,
     Service,
+    ServiceCatalog,
     ServicePrice,
     Subservice,
 )
@@ -32,10 +32,10 @@ from .permissions import (
 from .serializers import (
     AnnouncementSerializer,
     CategorySerializer,
-    OrganizationJobSerializer,
     OrganizationPublicSerializer,
     OrganizationSerializer,
     PublicServicePriceSerializer,
+    ServiceCatalogSerializer,
     ServicePriceSerializer,
     ServiceSerializer,
     SubserviceSerializer,
@@ -55,14 +55,6 @@ organization_uuid_parameter = OpenApiParameter(
     location=OpenApiParameter.PATH,
     required=True,
     description="UUID of the organization that owns the nested resource.",
-)
-
-organization_job_uuid_parameter = OpenApiParameter(
-    name="job_uuid",
-    type=str,
-    location=OpenApiParameter.PATH,
-    required=True,
-    description="UUID of the organization job that owns the service.",
 )
 
 announcement_uuid_parameter = OpenApiParameter(
@@ -111,6 +103,116 @@ announcement_category_parameter = OpenApiParameter(
     location=OpenApiParameter.QUERY,
     required=False,
     description="Single category UUID filter kept for backwards compatibility.",
+)
+
+announcement_uuid_query_parameter = OpenApiParameter(
+    name="uuid",
+    type=str,
+    location=OpenApiParameter.QUERY,
+    required=False,
+    description="Single announcement UUID filter.",
+)
+
+announcement_organization_parameter = OpenApiParameter(
+    name="organization",
+    type=str,
+    location=OpenApiParameter.QUERY,
+    required=False,
+    description="Single organization UUID filter.",
+)
+
+announcement_organizations_parameter = OpenApiParameter(
+    name="organizations",
+    type={"type": "array", "items": {"type": "string", "format": "uuid"}},
+    location=OpenApiParameter.QUERY,
+    required=False,
+    explode=True,
+    style="form",
+    description="Optional list of organization UUIDs used to filter announcements.",
+)
+
+announcement_service_parameter = OpenApiParameter(
+    name="service",
+    type=str,
+    location=OpenApiParameter.QUERY,
+    required=False,
+    description="Single service UUID filter.",
+)
+
+announcement_services_parameter = OpenApiParameter(
+    name="services",
+    type={"type": "array", "items": {"type": "string", "format": "uuid"}},
+    location=OpenApiParameter.QUERY,
+    required=False,
+    explode=True,
+    style="form",
+    description="Optional list of service UUIDs used to filter announcements.",
+)
+
+announcement_status_parameter = OpenApiParameter(
+    name="status",
+    type=str,
+    location=OpenApiParameter.QUERY,
+    required=False,
+    description="Single announcement status filter.",
+)
+
+announcement_statuses_parameter = OpenApiParameter(
+    name="statuses",
+    type={"type": "array", "items": {"type": "string"}},
+    location=OpenApiParameter.QUERY,
+    required=False,
+    explode=True,
+    style="form",
+    description="Optional list of announcement statuses used to filter announcements.",
+)
+
+announcement_name_parameter = OpenApiParameter(
+    name="name",
+    type=str,
+    location=OpenApiParameter.QUERY,
+    required=False,
+    description="Optional text used to filter announcements by name.",
+)
+
+announcement_location_parameter = OpenApiParameter(
+    name="location",
+    type=str,
+    location=OpenApiParameter.QUERY,
+    required=False,
+    description="Optional text used to filter announcements by location.",
+)
+
+announcement_text_parameter = OpenApiParameter(
+    name="announcement",
+    type=str,
+    location=OpenApiParameter.QUERY,
+    required=False,
+    description="Optional text used to filter announcements by announcement text.",
+)
+
+announcement_description_parameter = OpenApiParameter(
+    name="description",
+    type=str,
+    location=OpenApiParameter.QUERY,
+    required=False,
+    description="Optional text used to filter announcements by description.",
+)
+
+announcement_free_text_parameter = OpenApiParameter(
+    name="free_text",
+    type=str,
+    location=OpenApiParameter.QUERY,
+    required=False,
+    description="Optional text used to filter announcements by free text.",
+)
+
+announcement_has_coordinates_parameter = OpenApiParameter(
+    name="has_coordinates",
+    type=bool,
+    location=OpenApiParameter.QUERY,
+    required=False,
+    description="Optional boolean filter to include only announcements with or without coordinates.",
 )
 
 announcement_search_parameter = OpenApiParameter(
@@ -374,11 +476,9 @@ class CategoryServiceViewSet(
     mixins.ListModelMixin,
     viewsets.GenericViewSet,
 ):
-    serializer_class = ServiceSerializer
+    serializer_class = ServiceCatalogSerializer
     permission_classes = [permissions.AllowAny]
-    queryset = Service.objects.select_related(
-        "job",
-        "job__organization",
+    queryset = ServiceCatalog.objects.select_related(
         "category",
     )
     throttle_scope_prefix = "organization"
@@ -393,14 +493,87 @@ class CategoryServiceViewSet(
         return (
             self.queryset.filter(
                 category__uuid=category_uuid,
-                **Organization.validated_filter_kwargs(prefix="job__organization__"),
             )
-            .distinct()
             .order_by("name", "uuid")
         )
 
 
-class AnnouncementPublicFilterMixin:
+class AnnouncementQueryParamFilterMixin:
+    text_filter_fields = {}
+
+    def _get_filter_values(self, single_param, multi_param):
+        raw_values = self.request.query_params.getlist(multi_param)
+        if not raw_values:
+            single_value = str(self.request.query_params.get(single_param, "")).strip()
+            return [single_value] if single_value else []
+
+        values = []
+        for raw_value in raw_values:
+            for part in str(raw_value).split(","):
+                normalized_value = part.strip()
+                if normalized_value:
+                    values.append(normalized_value)
+        return values
+
+    def _get_text_filter_value(self, param_name):
+        return str(self.request.query_params.get(param_name, "")).strip()
+
+    def _get_boolean_filter_value(self, param_name):
+        raw_value = str(self.request.query_params.get(param_name, "")).strip().lower()
+        if not raw_value:
+            return None
+        if raw_value in {"true", "1", "yes"}:
+            return True
+        if raw_value in {"false", "0", "no"}:
+            return False
+        raise ValidationError({param_name: "Use a boolean value: true or false."})
+
+    def _apply_uuid_filters(self, queryset, filter_map):
+        for single_param, multi_param, lookup in filter_map:
+            values = self._get_filter_values(single_param, multi_param)
+            if values:
+                queryset = queryset.filter(**{f"{lookup}__in": values})
+        return queryset
+
+    def _apply_text_filters(self, queryset):
+        for param_name, field_name in self.text_filter_fields.items():
+            value = self._get_text_filter_value(param_name)
+            if value:
+                queryset = queryset.filter(**{f"{field_name}__icontains": value})
+        return queryset
+
+    def _apply_has_coordinates_filter(self, queryset):
+        has_coordinates = self._get_boolean_filter_value("has_coordinates")
+        if has_coordinates is None:
+            return queryset
+        if has_coordinates:
+            return queryset.filter(latitude__isnull=False, longitude__isnull=False)
+        return queryset.filter(latitude__isnull=True, longitude__isnull=True)
+
+    def _apply_search_filter(self, queryset, search_fields, uuid_fields):
+        search_query = self._get_text_filter_value("search")
+        if not search_query:
+            return queryset
+
+        search_filter = Q()
+        for field_name in search_fields:
+            search_filter |= Q(**{f"{field_name}__icontains": search_query})
+
+        search_uuid = self._parse_uuid(search_query)
+        if search_uuid is not None:
+            for field_name in uuid_fields:
+                search_filter |= Q(**{field_name: search_uuid})
+
+        return queryset.filter(search_filter)
+
+    def _parse_uuid(self, raw_value):
+        try:
+            return uuid.UUID(raw_value)
+        except (TypeError, ValueError, AttributeError):
+            return None
+
+
+class AnnouncementPublicFilterMixin(AnnouncementQueryParamFilterMixin):
     public_search_fields = (
         "name",
         "location",
@@ -409,46 +582,64 @@ class AnnouncementPublicFilterMixin:
         "free_text",
         "organization__name",
         "category__name",
+        "services__name",
     )
+    public_search_uuid_fields = (
+        "uuid",
+        "organization__uuid",
+        "category__uuid",
+        "services__uuid",
+    )
+    text_filter_fields = {
+        "name": "name",
+        "location": "location",
+        "announcement": "announcement",
+        "description": "description",
+        "free_text": "free_text",
+    }
 
     def filter_announcements(self, queryset):
-        category_uuids = self._get_public_category_filters()
-        search_query = str(self.request.query_params.get("search", "")).strip()
-
-        if category_uuids:
-            queryset = queryset.filter(category__uuid__in=category_uuids)
-        if search_query:
-            search_filter = Q()
-            for field_name in self.public_search_fields:
-                search_filter |= Q(**{f"{field_name}__icontains": search_query})
-            queryset = queryset.filter(search_filter)
+        queryset = self._apply_uuid_filters(
+            queryset,
+            (
+                ("uuid", "uuids", "uuid"),
+                ("organization", "organizations", "organization__uuid"),
+                ("category", "categories", "category__uuid"),
+                ("service", "services", "services__uuid"),
+            ),
+        )
+        queryset = self._apply_text_filters(queryset)
+        queryset = self._apply_has_coordinates_filter(queryset)
+        queryset = self._apply_search_filter(
+            queryset,
+            self.public_search_fields,
+            self.public_search_uuid_fields,
+        )
         return queryset.distinct()
-
-    def _get_public_category_filters(self):
-        raw_values = self.request.query_params.getlist("categories")
-        if not raw_values:
-            single_category = str(self.request.query_params.get("category", "")).strip()
-            return [single_category] if single_category else []
-
-        category_uuids = []
-        for raw_value in raw_values:
-            for part in str(raw_value).split(","):
-                normalized_value = part.strip()
-                if normalized_value:
-                    category_uuids.append(normalized_value)
-        return category_uuids
 
 
 @extend_schema_view(
     list=extend_schema(
         summary="List public announcements",
         description=(
-            "Lists active announcements. Supports optional filtering by category UUIDs "
-            "and plain text search."
+            "Lists active announcements. Supports optional filtering by announcement, "
+            "organization, category, service, text fields, coordinates presence and "
+            "plain text search."
         ),
         parameters=[
+            announcement_uuid_query_parameter,
+            announcement_organization_parameter,
+            announcement_organizations_parameter,
             announcement_categories_parameter,
             announcement_category_parameter,
+            announcement_service_parameter,
+            announcement_services_parameter,
+            announcement_name_parameter,
+            announcement_location_parameter,
+            announcement_text_parameter,
+            announcement_description_parameter,
+            announcement_free_text_parameter,
+            announcement_has_coordinates_parameter,
             announcement_search_parameter,
         ],
         auth=[],
@@ -516,134 +707,39 @@ class PublicAnnouncementDetailViewSet(
 
 @extend_schema_view(
     list=extend_schema(
-        summary="List organization jobs",
-        description="Lists the jobs of the organization specified in the URL.",
-        parameters=[organization_uuid_parameter],
-        auth=[],
-    ),
-    create=extend_schema(
-        summary="Create organization job",
-        description=(
-            "Creates an organization job in the organization specified in the URL "
-            "if it belongs to the authenticated user."
-        ),
-        parameters=[organization_uuid_parameter],
-    ),
-    retrieve=extend_schema(
-        summary="Get organization job",
-        description="Returns the details of a job belonging to the organization specified in the URL.",
-        parameters=[organization_uuid_parameter, organization_job_uuid_parameter],
-        auth=[],
-    ),
-    update=extend_schema(
-        summary="Replace organization job",
-        description="Fully replaces a job in the organization specified in the URL.",
-        parameters=[organization_uuid_parameter, organization_job_uuid_parameter],
-    ),
-    partial_update=extend_schema(
-        summary="Update organization job",
-        description="Partially updates a job in the organization specified in the URL.",
-        parameters=[organization_uuid_parameter, organization_job_uuid_parameter],
-    ),
-    destroy=extend_schema(
-        summary="Delete organization job",
-        description="Deletes a job in the organization specified in the URL.",
-        parameters=[organization_uuid_parameter, organization_job_uuid_parameter],
-    ),
-)
-class OrganizationJobViewSet(
-    OrganizationVisibilityMixin,
-    ActionScopedRateThrottleMixin,
-    viewsets.ModelViewSet,
-):
-    serializer_class = OrganizationJobSerializer
-    queryset = OrganizationJob.objects.select_related("organization")
-    lookup_field = "uuid"
-    lookup_url_kwarg = "job_uuid"
-    throttle_scope_prefix = "organization"
-    throttle_scope_action_map = {
-        "list": "organization_public_read",
-        "retrieve": "organization_public_read",
-        "create": "organization_write",
-        "update": "organization_write",
-        "partial_update": "organization_write",
-        "destroy": "organization_write",
-    }
-
-    def get_permissions(self):
-        if self.action in {"list", "retrieve"}:
-            return [permissions.AllowAny()]
-        return [IsActiveAccount()]
-
-    def get_queryset(self):
-        queryset = self.queryset
-        organization_uuid = self.kwargs.get("organization_uuid")
-        if organization_uuid is not None:
-            if self.action in {"list", "retrieve"}:
-                self.require_visible_organization()
-            queryset = queryset.filter(organization__uuid=organization_uuid)
-        return queryset
-
-    def _get_organization_from_url(self):
-        return self.get_url_organization()
-
-    def _validate_organization_owner(self, organization):
-        if organization.user_id != self.request.user.id:
-            raise PermissionDenied("Organization does not belong to the authenticated user.")
-
-    def perform_create(self, serializer):
-        organization = self._get_organization_from_url()
-        self._validate_organization_owner(organization)
-        self.ensure_organization_is_approved_for_write(organization)
-        serializer.save(organization=organization)
-
-    def perform_update(self, serializer):
-        organization = self._get_organization_from_url()
-        self._validate_organization_owner(organization)
-        self.ensure_organization_is_approved_for_write(organization)
-        serializer.save(organization=organization)
-
-    def perform_destroy(self, instance):
-        self._validate_organization_owner(instance.organization)
-        self.ensure_organization_is_approved_for_write(instance.organization)
-        instance.delete()
-
-
-@extend_schema_view(
-    list=extend_schema(
         summary="List services",
-        description="Lists the services of the organization job specified in the URL.",
-        parameters=[organization_uuid_parameter, organization_job_uuid_parameter],
+        description="Lists the services of the organization specified in the URL.",
+        parameters=[organization_uuid_parameter],
         auth=[],
     ),
     create=extend_schema(
         summary="Create service",
         description=(
-            "Creates a service in the organization job specified in the URL "
+            "Creates a service in the organization specified in the URL "
             "if it belongs to the authenticated user."
         ),
-        parameters=[organization_uuid_parameter, organization_job_uuid_parameter],
+        parameters=[organization_uuid_parameter],
     ),
     retrieve=extend_schema(
         summary="Get service",
-        description="Returns the details of a service belonging to the organization job specified in the URL.",
-        parameters=[organization_uuid_parameter, organization_job_uuid_parameter, service_uuid_parameter],
+        description="Returns the details of a service belonging to the organization specified in the URL.",
+        parameters=[organization_uuid_parameter, service_uuid_parameter],
         auth=[],
     ),
     update=extend_schema(
         summary="Replace service",
-        description="Fully replaces a service in the organization job specified in the URL.",
-        parameters=[organization_uuid_parameter, organization_job_uuid_parameter, service_uuid_parameter],
+        description="Fully replaces a service in the organization specified in the URL.",
+        parameters=[organization_uuid_parameter, service_uuid_parameter],
     ),
     partial_update=extend_schema(
         summary="Update service",
-        description="Partially updates a service in the organization job specified in the URL.",
-        parameters=[organization_uuid_parameter, organization_job_uuid_parameter, service_uuid_parameter],
+        description="Partially updates a service in the organization specified in the URL.",
+        parameters=[organization_uuid_parameter, service_uuid_parameter],
     ),
     destroy=extend_schema(
         summary="Delete service",
-        description="Deletes a service in the organization job specified in the URL.",
-        parameters=[organization_uuid_parameter, organization_job_uuid_parameter, service_uuid_parameter],
+        description="Deletes a service in the organization specified in the URL.",
+        parameters=[organization_uuid_parameter, service_uuid_parameter],
     ),
 )
 class ServiceViewSet(
@@ -652,7 +748,7 @@ class ServiceViewSet(
     viewsets.ModelViewSet,
 ):
     serializer_class = ServiceSerializer
-    queryset = Service.objects.select_related("job", "job__organization")
+    queryset = Service.objects.select_related("organization", "service_catalog", "category")
     lookup_field = "uuid"
     lookup_url_kwarg = "service_uuid"
     throttle_scope_prefix = "organization"
@@ -678,36 +774,28 @@ class ServiceViewSet(
         if organization_uuid is not None:
             if self.action in {"list", "retrieve"}:
                 self.require_visible_organization()
-            queryset = queryset.filter(job__organization__uuid=organization_uuid)
-        job_uuid = self.kwargs.get("job_uuid")
-        if job_uuid is not None:
-            queryset = queryset.filter(job__uuid=job_uuid)
+            queryset = queryset.filter(organization__uuid=organization_uuid)
         return queryset
 
-    def _get_job_from_url(self):
-        organization_uuid = self.kwargs.get("organization_uuid")
-        job_uuid = self.kwargs.get("job_uuid")
-        organization_job = OrganizationJob.objects.select_related("organization").filter(uuid=job_uuid)
-        if organization_uuid is not None:
-            organization_job = organization_job.filter(organization__uuid=organization_uuid)
-        organization_job = organization_job.first()
-        if organization_job is None:
-            raise NotFound("Organization job not found.")
-        return organization_job
+    def _get_organization_from_url(self):
+        organization = self.get_url_organization()
+        if organization is None:
+            raise NotFound("Organization not found.")
+        return organization
 
     def perform_create(self, serializer):
-        organization_job = self._get_job_from_url()
-        if organization_job.organization.user_id != self.request.user.id:
+        organization = self._get_organization_from_url()
+        if organization.user_id != self.request.user.id:
             raise PermissionDenied("Organization does not belong to the authenticated user.")
-        self.ensure_organization_is_approved_for_write(organization_job.organization)
-        serializer.save(job=organization_job)
+        self.ensure_organization_is_approved_for_write(organization)
+        serializer.save(organization=organization)
 
     def perform_update(self, serializer):
-        self.ensure_organization_is_approved_for_write(serializer.instance.job.organization)
+        self.ensure_organization_is_approved_for_write(serializer.instance.organization)
         super().perform_update(serializer)
 
     def perform_destroy(self, instance):
-        self.ensure_organization_is_approved_for_write(instance.job.organization)
+        self.ensure_organization_is_approved_for_write(instance.organization)
         super().perform_destroy(instance)
 
 
@@ -720,7 +808,10 @@ class ServiceViewSet(
     ),
     retrieve=extend_schema(
         summary="Get public subservice",
-        description="Returns the details of a public subservice identified by organization UUID, service UUID and subservice UUID.",
+        description=(
+            "Returns the details of a public subservice identified by "
+            "organization UUID, service UUID and subservice UUID."
+        ),
         parameters=[organization_uuid_parameter, service_uuid_parameter, subservice_uuid_parameter],
         auth=[],
     ),
@@ -736,8 +827,7 @@ class PublicSubserviceViewSet(
     permission_classes = [permissions.AllowAny]
     queryset = Subservice.objects.select_related(
         "service",
-        "service__job",
-        "service__job__organization",
+        "service__organization",
     ).prefetch_related("price_table")
     lookup_field = "uuid"
     lookup_url_kwarg = "subservice_uuid"
@@ -750,7 +840,7 @@ class PublicSubserviceViewSet(
     def get_queryset(self):
         organization = self.require_visible_organization()
         return self.queryset.filter(
-            service__job__organization=organization,
+            service__organization=organization,
             service__uuid=self.kwargs["service_uuid"],
         )
 
@@ -758,10 +848,26 @@ class PublicSubserviceViewSet(
 @extend_schema_view(
     list=extend_schema(
         summary="List announcements",
-        description="Lists announcements for the organization specified in the URL.",
+        description=(
+            "Lists announcements for the organization specified in the URL. Supports "
+            "optional filtering by announcement, category, service, status, text fields, "
+            "coordinates presence and plain text search."
+        ),
         parameters=[
             organization_uuid_parameter,
+            announcement_uuid_query_parameter,
             announcement_categories_parameter,
+            announcement_category_parameter,
+            announcement_service_parameter,
+            announcement_services_parameter,
+            announcement_status_parameter,
+            announcement_statuses_parameter,
+            announcement_name_parameter,
+            announcement_location_parameter,
+            announcement_text_parameter,
+            announcement_description_parameter,
+            announcement_free_text_parameter,
+            announcement_has_coordinates_parameter,
             announcement_search_parameter,
         ],
     ),
@@ -792,10 +898,30 @@ class PublicSubserviceViewSet(
     ),
 )
 class AnnouncementViewSet(
+    AnnouncementQueryParamFilterMixin,
     OrganizationVisibilityMixin,
     ActionScopedRateThrottleMixin,
     viewsets.ModelViewSet,
 ):
+    text_filter_fields = {
+        "name": "name",
+        "location": "location",
+        "announcement": "announcement",
+        "description": "description",
+        "free_text": "free_text",
+    }
+    search_fields = (
+        "name",
+        "location",
+        "announcement",
+        "description",
+        "free_text",
+        "category__name",
+        "services__name",
+        "status",
+    )
+    search_uuid_fields = ("uuid", "category__uuid", "services__uuid")
+
     serializer_class = AnnouncementSerializer
     permission_classes = [IsActiveAccount]
     queryset = Announcement.objects.select_related(
@@ -826,31 +952,24 @@ class AnnouncementViewSet(
             if not (user.is_staff or organization.user_id == user.id):
                 raise NotFound("Organization not found.")
             queryset = queryset.filter(organization=organization)
-        category_uuids = self._get_category_filters()
-        if category_uuids:
-            queryset = queryset.filter(category__uuid__in=category_uuids)
-
-        search_query = str(self.request.query_params.get("search", "")).strip()
-        if search_query:
-            queryset = queryset.filter(
-                Q(name__icontains=search_query)
-                | Q(location__icontains=search_query)
-                | Q(announcement__icontains=search_query)
-                | Q(description__icontains=search_query)
-                | Q(free_text__icontains=search_query)
-            )
+        queryset = self._apply_uuid_filters(
+            queryset,
+            (
+                ("uuid", "uuids", "uuid"),
+                ("category", "categories", "category__uuid"),
+                ("service", "services", "services__uuid"),
+                ("status", "statuses", "status"),
+            ),
+        )
+        queryset = self._apply_text_filters(queryset)
+        queryset = self._apply_has_coordinates_filter(queryset)
+        queryset = self._apply_search_filter(
+            queryset,
+            self.search_fields,
+            self.search_uuid_fields,
+        )
 
         return queryset.distinct()
-
-    def _get_category_filters(self):
-        raw_values = self.request.query_params.getlist("categories")
-        category_uuids = []
-        for raw_value in raw_values:
-            for part in str(raw_value).split(","):
-                normalized_value = part.strip()
-                if normalized_value:
-                    category_uuids.append(normalized_value)
-        return category_uuids
 
     def get_serializer_context(self):
         context = super().get_serializer_context()
@@ -882,32 +1001,32 @@ class AnnouncementViewSet(
     list=extend_schema(
         summary="List subservices",
         description="Lists the subservices of the service specified in the URL.",
-        parameters=[organization_uuid_parameter, organization_job_uuid_parameter, service_uuid_parameter],
+        parameters=[organization_uuid_parameter, service_uuid_parameter],
     ),
     create=extend_schema(
         summary="Create subservice",
         description="Creates a subservice associated with the service specified in the URL.",
-        parameters=[organization_uuid_parameter, organization_job_uuid_parameter, service_uuid_parameter],
+        parameters=[organization_uuid_parameter, service_uuid_parameter],
     ),
     retrieve=extend_schema(
         summary="Get subservice",
         description="Returns the details of a subservice belonging to the service specified in the URL.",
-        parameters=[organization_uuid_parameter, organization_job_uuid_parameter, service_uuid_parameter],
+        parameters=[organization_uuid_parameter, service_uuid_parameter],
     ),
     update=extend_schema(
         summary="Replace subservice",
         description="Fully replaces a subservice of the service specified in the URL.",
-        parameters=[organization_uuid_parameter, organization_job_uuid_parameter, service_uuid_parameter],
+        parameters=[organization_uuid_parameter, service_uuid_parameter],
     ),
     partial_update=extend_schema(
         summary="Update subservice",
         description="Partially updates a subservice of the service specified in the URL.",
-        parameters=[organization_uuid_parameter, organization_job_uuid_parameter, service_uuid_parameter],
+        parameters=[organization_uuid_parameter, service_uuid_parameter],
     ),
     destroy=extend_schema(
         summary="Delete subservice",
         description="Deletes a subservice of the service specified in the URL.",
-        parameters=[organization_uuid_parameter, organization_job_uuid_parameter, service_uuid_parameter],
+        parameters=[organization_uuid_parameter, service_uuid_parameter],
     ),
 )
 class SubserviceViewSet(
@@ -918,7 +1037,7 @@ class SubserviceViewSet(
     serializer_class = SubserviceSerializer
     permission_classes = [IsActiveAccount]
     queryset = Subservice.objects.select_related(
-        "service", "service__job", "service__job__organization"
+        "service", "service__organization"
     ).prefetch_related("price_table")
     lookup_field = "uuid"
     throttle_scope_prefix = "organization"
@@ -932,13 +1051,10 @@ class SubserviceViewSet(
     }
 
     def get_queryset(self):
-        queryset = self.queryset.filter(service__job__organization__user=self.request.user)
+        queryset = self.queryset.filter(service__organization__user=self.request.user)
         organization_uuid = self.kwargs.get("organization_uuid")
         if organization_uuid is not None:
-            queryset = queryset.filter(service__job__organization__uuid=organization_uuid)
-        job_uuid = self.kwargs.get("job_uuid")
-        if job_uuid is not None:
-            queryset = queryset.filter(service__job__uuid=job_uuid)
+            queryset = queryset.filter(service__organization__uuid=organization_uuid)
         service_uuid = self.kwargs.get("service_uuid")
         if service_uuid is not None:
             queryset = queryset.filter(service__uuid=service_uuid)
@@ -946,15 +1062,12 @@ class SubserviceViewSet(
 
     def _get_service_from_url(self):
         organization_uuid = self.kwargs.get("organization_uuid")
-        job_uuid = self.kwargs.get("job_uuid")
         service_uuid = self.kwargs.get("service_uuid")
-        service = Service.objects.select_related("job", "job__organization").filter(
+        service = Service.objects.select_related("organization", "service_catalog").filter(
             uuid=service_uuid
         )
         if organization_uuid is not None:
-            service = service.filter(job__organization__uuid=organization_uuid)
-        if job_uuid is not None:
-            service = service.filter(job__uuid=job_uuid)
+            service = service.filter(organization__uuid=organization_uuid)
         service = service.first()
         if service is None:
             raise NotFound("Service not found.")
@@ -962,9 +1075,9 @@ class SubserviceViewSet(
 
     def perform_create(self, serializer):
         service = self._get_service_from_url()
-        if service.job.organization.user_id != self.request.user.id:
+        if service.organization.user_id != self.request.user.id:
             raise PermissionDenied("Service does not belong to the authenticated user organization.")
-        self.ensure_organization_is_approved_for_write(service.job.organization)
+        self.ensure_organization_is_approved_for_write(service.organization)
         payload_service = serializer.validated_data["service"]
         if payload_service.uuid != service.uuid:
             raise ValidationError({"service": "Service must match the service in the URL."})
@@ -972,16 +1085,16 @@ class SubserviceViewSet(
 
     def perform_update(self, serializer):
         service = self._get_service_from_url()
-        if service.job.organization.user_id != self.request.user.id:
+        if service.organization.user_id != self.request.user.id:
             raise PermissionDenied("Service does not belong to the authenticated user organization.")
-        self.ensure_organization_is_approved_for_write(service.job.organization)
+        self.ensure_organization_is_approved_for_write(service.organization)
         payload_service = serializer.validated_data.get("service", serializer.instance.service)
         if payload_service.uuid != service.uuid:
             raise ValidationError({"service": "Service must match the service in the URL."})
         serializer.save(service=service)
 
     def perform_destroy(self, instance):
-        self.ensure_organization_is_approved_for_write(instance.service.job.organization)
+        self.ensure_organization_is_approved_for_write(instance.service.organization)
         super().perform_destroy(instance)
 
 
@@ -991,7 +1104,6 @@ class SubserviceViewSet(
         description="Lists the service prices of the subservice specified in the URL.",
         parameters=[
             organization_uuid_parameter,
-            organization_job_uuid_parameter,
             service_uuid_parameter,
             subservice_uuid_parameter,
         ],
@@ -1001,7 +1113,6 @@ class SubserviceViewSet(
         description="Creates a service price for the subservice specified in the URL.",
         parameters=[
             organization_uuid_parameter,
-            organization_job_uuid_parameter,
             service_uuid_parameter,
             subservice_uuid_parameter,
         ],
@@ -1011,7 +1122,6 @@ class SubserviceViewSet(
         description="Returns a service price belonging to the subservice specified in the URL.",
         parameters=[
             organization_uuid_parameter,
-            organization_job_uuid_parameter,
             service_uuid_parameter,
             subservice_uuid_parameter,
             service_price_uuid_parameter,
@@ -1022,7 +1132,6 @@ class SubserviceViewSet(
         description="Fully replaces a service price belonging to the subservice specified in the URL.",
         parameters=[
             organization_uuid_parameter,
-            organization_job_uuid_parameter,
             service_uuid_parameter,
             subservice_uuid_parameter,
             service_price_uuid_parameter,
@@ -1033,7 +1142,6 @@ class SubserviceViewSet(
         description="Partially updates a service price belonging to the subservice specified in the URL.",
         parameters=[
             organization_uuid_parameter,
-            organization_job_uuid_parameter,
             service_uuid_parameter,
             subservice_uuid_parameter,
             service_price_uuid_parameter,
@@ -1044,7 +1152,6 @@ class SubserviceViewSet(
         description="Deletes a service price belonging to the subservice specified in the URL.",
         parameters=[
             organization_uuid_parameter,
-            organization_job_uuid_parameter,
             service_uuid_parameter,
             subservice_uuid_parameter,
             service_price_uuid_parameter,
@@ -1061,8 +1168,7 @@ class ServicePriceViewSet(
     queryset = ServicePrice.objects.select_related(
         "subservice",
         "subservice__service",
-        "subservice__service__job",
-        "subservice__service__job__organization",
+        "subservice__service__organization",
     )
     lookup_field = "uuid"
     lookup_url_kwarg = "price_uuid"
@@ -1077,13 +1183,10 @@ class ServicePriceViewSet(
     }
 
     def get_queryset(self):
-        queryset = self.queryset.filter(subservice__service__job__organization__user=self.request.user)
+        queryset = self.queryset.filter(subservice__service__organization__user=self.request.user)
         organization_uuid = self.kwargs.get("organization_uuid")
         if organization_uuid is not None:
-            queryset = queryset.filter(subservice__service__job__organization__uuid=organization_uuid)
-        job_uuid = self.kwargs.get("job_uuid")
-        if job_uuid is not None:
-            queryset = queryset.filter(subservice__service__job__uuid=job_uuid)
+            queryset = queryset.filter(subservice__service__organization__uuid=organization_uuid)
         service_uuid = self.kwargs.get("service_uuid")
         if service_uuid is not None:
             queryset = queryset.filter(subservice__service__uuid=service_uuid)
@@ -1095,18 +1198,15 @@ class ServicePriceViewSet(
 
     def _get_subservice_from_url(self):
         organization_uuid = self.kwargs.get("organization_uuid")
-        job_uuid = self.kwargs.get("job_uuid")
         service_uuid = self.kwargs.get("service_uuid")
         subservice_uuid = self.kwargs.get("subservice_uuid")
-        subservice = Subservice.objects.select_related("service", "service__job", "service__job__organization")
+        subservice = Subservice.objects.select_related("service", "service__organization")
         subservice = subservice.filter(
             uuid=subservice_uuid,
-            service__job__organization__user=self.request.user,
+            service__organization__user=self.request.user,
         )
         if organization_uuid is not None:
-            subservice = subservice.filter(service__job__organization__uuid=organization_uuid)
-        if job_uuid is not None:
-            subservice = subservice.filter(service__job__uuid=job_uuid)
+            subservice = subservice.filter(service__organization__uuid=organization_uuid)
         if service_uuid is not None:
             subservice = subservice.filter(service__uuid=service_uuid)
         subservice = subservice.first()
@@ -1116,9 +1216,9 @@ class ServicePriceViewSet(
 
     def _get_subservice(self, serializer):
         subservice = self._get_subservice_from_url()
-        if subservice.service.job.organization.user_id != self.request.user.id:
+        if subservice.service.organization.user_id != self.request.user.id:
             raise PermissionDenied("Subservice does not belong to the authenticated user organization.")
-        self.ensure_organization_is_approved_for_write(subservice.service.job.organization)
+        self.ensure_organization_is_approved_for_write(subservice.service.organization)
         payload_subservice = serializer.validated_data.get(
             "subservice",
             getattr(serializer.instance, "subservice", None),
@@ -1138,7 +1238,7 @@ class ServicePriceViewSet(
         serializer.save(subservice=subservice)
 
     def perform_destroy(self, instance):
-        self.ensure_organization_is_approved_for_write(instance.subservice.service.job.organization)
+        self.ensure_organization_is_approved_for_write(instance.subservice.service.organization)
         super().perform_destroy(instance)
 
 
@@ -1179,8 +1279,7 @@ class PublicServicePriceViewSet(
     queryset = ServicePrice.objects.select_related(
         "subservice",
         "subservice__service",
-        "subservice__service__job",
-        "subservice__service__job__organization",
+        "subservice__service__organization",
     )
     lookup_field = "uuid"
     lookup_url_kwarg = "price_uuid"
@@ -1193,7 +1292,7 @@ class PublicServicePriceViewSet(
     def get_queryset(self):
         organization = self.require_visible_organization()
         return self.queryset.filter(
-            subservice__service__job__organization=organization,
+            subservice__service__organization=organization,
             subservice__service__uuid=self.kwargs["service_uuid"],
             subservice__uuid=self.kwargs["subservice_uuid"],
         )

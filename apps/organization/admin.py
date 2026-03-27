@@ -3,8 +3,8 @@ from django.contrib import admin
 from .models import (
     Category,
     Organization,
-    OrganizationJob,
     Service,
+    ServiceCatalog,
     ServicePrice,
     Subservice,
 )
@@ -22,22 +22,22 @@ class CategoryAdmin(admin.ModelAdmin):
     search_fields = ("name",)
 
 
-@admin.register(OrganizationJob)
-class OrganizationJobAdmin(admin.ModelAdmin):
-    list_display = ("organization", "name", "created_at")
-    search_fields = ("organization__name", "name")
+@admin.register(ServiceCatalog)
+class ServiceCatalogAdmin(admin.ModelAdmin):
+    list_display = ("name", "category", "created_at")
+    search_fields = ("name", "category__name")
 
 
 @admin.register(Service)
 class ServiceAdmin(admin.ModelAdmin):
-    list_display = ("job", "name", "created_at")
-    search_fields = ("job__name", "job__organization__name", "name")
+    list_display = ("organization", "service_catalog", "name", "created_at")
+    search_fields = ("organization__name", "service_catalog__name", "name")
 
 
 @admin.register(Subservice)
 class SubserviceAdmin(admin.ModelAdmin):
     list_display = ("service", "name", "created_at")
-    search_fields = ("service__name", "service__job__name", "service__job__organization__name", "name")
+    search_fields = ("service__name", "service__organization__name", "name")
 
 
 @admin.register(ServicePrice)
@@ -47,6 +47,5 @@ class ServicePriceAdmin(admin.ModelAdmin):
     search_fields = (
         "subservice__name",
         "subservice__service__name",
-        "subservice__service__job__name",
-        "subservice__service__job__organization__name",
+        "subservice__service__organization__name",
     )

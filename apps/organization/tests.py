@@ -1,3 +1,4 @@
+import uuid
 from datetime import date
 from unittest import skipUnless
 from unittest.mock import patch
@@ -20,8 +21,8 @@ from .models import (
     AnnouncementReview,
     Category,
     Organization,
-    OrganizationJob,
     Service,
+    ServiceCatalog,
     ServicePrice,
     Subservice,
 )
@@ -90,18 +91,20 @@ class OrganizationApiTests(APITestCase):
             name="Pet Services",
             description="Servicios para mascotas",
         )
-        self.owner_organization_job = OrganizationJob.objects.create(
-            organization=self.organization,
-            name="Cleaning",
-            description="Cleaning services",
+        self.owner_service_catalog = ServiceCatalog.objects.create(
+            category=self.category,
+            name="Owner Plan",
+            description="Owner service",
         )
-        self.other_organization_job = OrganizationJob.objects.create(
-            organization=self.other_organization,
-            name="Pet Care",
-            description="Pet services",
+        self.other_service_catalog = ServiceCatalog.objects.create(
+            category=self.other_category,
+            name="Other Plan",
+            description="Other service",
         )
+        self.owner_organization_job_uuid = uuid.uuid4()
         self.owner_service = Service.objects.create(
-            job=self.owner_organization_job,
+            organization=self.organization,
+            service_catalog=self.owner_service_catalog,
             category=self.category,
             name="Owner Plan",
             description="Owner service",
@@ -119,7 +122,8 @@ class OrganizationApiTests(APITestCase):
             effective_from=date(2026, 1, 1),
         )
         self.other_service = Service.objects.create(
-            job=self.other_organization_job,
+            organization=self.other_organization,
+            service_catalog=self.other_service_catalog,
             category=self.other_category,
             name="Other Plan",
             description="Other service",
@@ -333,19 +337,18 @@ class OrganizationApiTests(APITestCase):
 
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertEqual(response.data["count"], 1)
-        self.assertEqual(response.data["results"][0]["uuid"], str(self.owner_service.uuid))
-        self.assertEqual(
-            response.data["results"][0]["subservices"][0]["uuid"],
-            str(self.owner_subservice.uuid),
-        )
-        self.assertEqual(
-            response.data["results"][0]["subservices"][0]["service_prices"][0]["uuid"],
-            str(self.owner_service_price.uuid),
-        )
+        self.assertEqual(response.data["results"][0]["uuid"], str(self.owner_service_catalog.uuid))
+        self.assertEqual(response.data["results"][0]["category"], str(self.category.uuid))
 
     def test_category_services_list_is_paginated(self):
+        second_service_catalog = ServiceCatalog.objects.create(
+            category=self.category,
+            name="Second Category Service",
+            description="Second category service",
+        )
         Service.objects.create(
-            job=self.owner_organization_job,
+            organization=self.organization,
+            service_catalog=second_service_catalog,
             category=self.category,
             name="Second Category Service",
             description="Second category service",
@@ -361,7 +364,7 @@ class OrganizationApiTests(APITestCase):
         self.assertEqual(len(response.data["results"]), 1)
         self.assertIsNotNone(response.data["next"])
 
-    def test_category_services_list_hides_services_from_unapproved_organizations(self):
+    def test_category_services_list_returns_catalog_without_duplicates_from_organization_services(self):
         hidden_owner = get_user_model().objects.create_user(
             username="hidden-category-owner",
             email="hidden-category-owner@example.com",
@@ -379,16 +382,12 @@ class OrganizationApiTests(APITestCase):
             billing_postal_code="28001",
             is_approved=False,
         )
-        hidden_job = OrganizationJob.objects.create(
+        Service.objects.create(
             organization=hidden_organization,
-            name="Hidden Job",
-            description="",
-        )
-        hidden_service = Service.objects.create(
-            job=hidden_job,
+            service_catalog=self.owner_service_catalog,
             category=self.category,
             name="Hidden Service",
-            description="Should not be visible",
+            description="Should not duplicate catalog",
         )
 
         response = self.client.get(
@@ -397,8 +396,7 @@ class OrganizationApiTests(APITestCase):
 
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         returned_uuids = {item["uuid"] for item in response.data["results"]}
-        self.assertIn(str(self.owner_service.uuid), returned_uuids)
-        self.assertNotIn(str(hidden_service.uuid), returned_uuids)
+        self.assertEqual(returned_uuids, {str(self.owner_service_catalog.uuid)})
 
     def test_category_services_list_returns_404_for_unknown_category(self):
         response = self.client.get(
@@ -576,7 +574,7 @@ class OrganizationApiTests(APITestCase):
                 "organization-job-detail",
                 kwargs={
                     "organization_uuid": self.organization.uuid,
-                    "job_uuid": self.owner_organization_job.uuid,
+                    "job_uuid": self.owner_organization_job_uuid,
                 },
             )
 
@@ -585,7 +583,7 @@ class OrganizationApiTests(APITestCase):
                 "organization-service-list",
                 kwargs={
                     "organization_uuid": self.organization.uuid,
-                    "job_uuid": self.owner_organization_job.uuid,
+                    "job_uuid": self.owner_organization_job_uuid,
                 },
             )
 
@@ -594,7 +592,7 @@ class OrganizationApiTests(APITestCase):
                 "organization-service-detail",
                 kwargs={
                     "organization_uuid": self.organization.uuid,
-                    "job_uuid": self.owner_organization_job.uuid,
+                    "job_uuid": self.owner_organization_job_uuid,
                     "service_uuid": self.owner_service.uuid,
                 },
             )
@@ -604,7 +602,7 @@ class OrganizationApiTests(APITestCase):
                 "organization-subservice-list",
                 kwargs={
                     "organization_uuid": self.organization.uuid,
-                    "job_uuid": self.owner_organization_job.uuid,
+                    "job_uuid": self.owner_organization_job_uuid,
                     "service_uuid": self.owner_service.uuid,
                 },
             )
@@ -614,7 +612,7 @@ class OrganizationApiTests(APITestCase):
                 "organization-subservice-detail",
                 kwargs={
                     "organization_uuid": self.organization.uuid,
-                    "job_uuid": self.owner_organization_job.uuid,
+                    "job_uuid": self.owner_organization_job_uuid,
                     "service_uuid": self.owner_service.uuid,
                     "uuid": self.owner_subservice.uuid,
                 },
@@ -625,7 +623,7 @@ class OrganizationApiTests(APITestCase):
                 "organization-service-price-list",
                 kwargs={
                     "organization_uuid": self.organization.uuid,
-                    "job_uuid": self.owner_organization_job.uuid,
+                    "job_uuid": self.owner_organization_job_uuid,
                     "service_uuid": self.owner_service.uuid,
                     "subservice_uuid": self.owner_subservice.uuid,
                 },
@@ -636,7 +634,7 @@ class OrganizationApiTests(APITestCase):
                 "organization-service-price-detail",
                 kwargs={
                     "organization_uuid": self.organization.uuid,
-                    "job_uuid": self.owner_organization_job.uuid,
+                    "job_uuid": self.owner_organization_job_uuid,
                     "service_uuid": self.owner_service.uuid,
                     "subservice_uuid": self.owner_subservice.uuid,
                     "price_uuid": self.owner_service_price.uuid,
@@ -840,6 +838,126 @@ class OrganizationApiTests(APITestCase):
             {str(self.announcement.uuid), str(matching.uuid)},
         )
 
+    def test_public_announcement_list_filters_by_service(self):
+        matching = Announcement.objects.create(
+            organization=self.other_organization,
+            category=self.other_category,
+            name="Pet Grooming",
+            location="Madrid",
+            announcement="Peluqueria canina",
+            status=Announcement.Status.ACTIVE,
+            description="Corte y bano",
+            free_text="Guardias fines de semana",
+        )
+        matching.services.add(self.other_service)
+        non_matching = Announcement.objects.create(
+            organization=self.other_organization,
+            category=self.category,
+            name="Home Repairs",
+            location="Madrid Norte",
+            announcement="Reparaciones urgentes",
+            status=Announcement.Status.ACTIVE,
+            description="Servicio para averias domesticas",
+            free_text="Guardias nocturnas",
+        )
+        non_matching.services.add(self.owner_service)
+
+        response = self.client.get(
+            reverse("public-announcement-list"),
+            {"service": str(self.other_service.uuid)},
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.data["count"], 1)
+        self.assertEqual(response.data["results"][0]["uuid"], str(matching.uuid))
+        self.assertNotEqual(response.data["results"][0]["uuid"], str(non_matching.uuid))
+
+    def test_public_announcement_list_filters_by_uuid_organization_and_coordinates(self):
+        matching = Announcement.objects.create(
+            organization=self.other_organization,
+            category=self.category,
+            name="Exact Match",
+            location="Bilbao",
+            announcement="Servicio concreto",
+            status=Announcement.Status.ACTIVE,
+            description="Con coordenadas",
+            free_text="Match total",
+            latitude="43.2630",
+            longitude="-2.9350",
+        )
+        Announcement.objects.create(
+            organization=self.other_organization,
+            category=self.category,
+            name="No Coordinates",
+            location="Bilbao",
+            announcement="Servicio sin mapa",
+            status=Announcement.Status.ACTIVE,
+            description="Sin coordenadas",
+            free_text="No match",
+        )
+
+        response = self.client.get(
+            reverse("public-announcement-list"),
+            {
+                "uuid": str(matching.uuid),
+                "organization": str(self.other_organization.uuid),
+                "has_coordinates": "true",
+            },
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.data["count"], 1)
+        self.assertEqual(response.data["results"][0]["uuid"], str(matching.uuid))
+
+    def test_public_announcement_list_filters_by_specific_text_fields(self):
+        matching = Announcement.objects.create(
+            organization=self.other_organization,
+            category=self.category,
+            name="Urgent Plumber",
+            location="Valencia Centro",
+            announcement="Fontaneria inmediata",
+            status=Announcement.Status.ACTIVE,
+            description="Reparacion de fugas",
+            free_text="Disponible hoy",
+        )
+        Announcement.objects.create(
+            organization=self.other_organization,
+            category=self.category,
+            name="Urgent Electrician",
+            location="Valencia Centro",
+            announcement="Electricidad inmediata",
+            status=Announcement.Status.ACTIVE,
+            description="Reparacion de fugas",
+            free_text="Disponible hoy",
+        )
+
+        response = self.client.get(
+            reverse("public-announcement-list"),
+            {
+                "name": "plumber",
+                "location": "valencia",
+                "announcement": "fontaneria",
+                "description": "fugas",
+                "free_text": "hoy",
+            },
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.data["count"], 1)
+        self.assertEqual(response.data["results"][0]["uuid"], str(matching.uuid))
+
+    def test_public_announcement_list_rejects_invalid_has_coordinates_value(self):
+        response = self.client.get(
+            reverse("public-announcement-list"),
+            {"has_coordinates": "maybe"},
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertEqual(
+            str(response.data["has_coordinates"]),
+            "Use a boolean value: true or false.",
+        )
+
     def test_public_announcement_list_returns_most_recent_announcements_first(self):
         older = Announcement.objects.create(
             organization=self.other_organization,
@@ -1032,6 +1150,158 @@ class OrganizationApiTests(APITestCase):
         self.assertEqual(response.data["count"], 1)
         self.assertEqual(response.data["results"][0]["uuid"], str(self.announcement.uuid))
         self.assertNotEqual(response.data["results"][0]["uuid"], str(second_announcement.uuid))
+
+    def test_announcement_list_filters_by_single_category_param(self):
+        self.client.force_authenticate(user=self.owner)
+        second_category = Category.objects.create(name="Garden", description="Jardineria")
+        Announcement.objects.create(
+            organization=self.organization,
+            category=second_category,
+            name="Garden Maintenance",
+            location="Madrid Norte",
+            announcement="Puesta a punto de jardin",
+            status=Announcement.Status.ACTIVE,
+            description="Mantenimiento semanal",
+            free_text="Incluye poda",
+        )
+
+        response = self.client.get(
+            reverse(
+                "organization-announcement-list",
+                kwargs={"organization_uuid": self.organization.uuid},
+            ),
+            {"category": str(self.category.uuid)},
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.data["count"], 1)
+        self.assertEqual(response.data["results"][0]["uuid"], str(self.announcement.uuid))
+
+    def test_announcement_list_filters_by_service(self):
+        self.client.force_authenticate(user=self.owner)
+        second_announcement = Announcement.objects.create(
+            organization=self.organization,
+            category=self.category,
+            name="Deep Cleaning",
+            location="Madrid Sur",
+            announcement="Limpieza intensiva",
+            status=Announcement.Status.ACTIVE,
+            description="Incluye cocina y banos",
+            free_text="Disponible domingos",
+        )
+        second_announcement.services.add(self.other_service)
+
+        response = self.client.get(
+            reverse(
+                "organization-announcement-list",
+                kwargs={"organization_uuid": self.organization.uuid},
+            ),
+            {"service": str(self.owner_service.uuid)},
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.data["count"], 1)
+        self.assertEqual(response.data["results"][0]["uuid"], str(self.announcement.uuid))
+        self.assertNotEqual(response.data["results"][0]["uuid"], str(second_announcement.uuid))
+
+    def test_announcement_list_filters_by_status_uuid_and_coordinates(self):
+        self.client.force_authenticate(user=self.owner)
+        matching = Announcement.objects.create(
+            organization=self.organization,
+            category=self.category,
+            name="Draft Plumbing",
+            location="Madrid Oeste",
+            announcement="Pendiente de publicar",
+            status=Announcement.Status.SUSPENDED,
+            description="Suspendido por revision",
+            free_text="Sin mapa",
+        )
+        Announcement.objects.create(
+            organization=self.organization,
+            category=self.category,
+            name="Mapped Plumbing",
+            location="Madrid Oeste",
+            announcement="Activo con mapa",
+            status=Announcement.Status.SUSPENDED,
+            description="Suspendido con mapa",
+            free_text="Con mapa",
+            latitude="40.5000",
+            longitude="-3.7000",
+        )
+
+        response = self.client.get(
+            reverse(
+                "organization-announcement-list",
+                kwargs={"organization_uuid": self.organization.uuid},
+            ),
+            {
+                "uuid": str(matching.uuid),
+                "status": Announcement.Status.SUSPENDED,
+                "has_coordinates": "false",
+            },
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.data["count"], 1)
+        self.assertEqual(response.data["results"][0]["uuid"], str(matching.uuid))
+
+    def test_announcement_list_filters_by_specific_text_fields(self):
+        self.client.force_authenticate(user=self.owner)
+        matching = Announcement.objects.create(
+            organization=self.organization,
+            category=self.category,
+            name="Weekend Gardening",
+            location="Alcobendas",
+            announcement="Jardineria de mantenimiento",
+            status=Announcement.Status.ACTIVE,
+            description="Cesped y poda",
+            free_text="Disponible domingos",
+        )
+        Announcement.objects.create(
+            organization=self.organization,
+            category=self.category,
+            name="Weekend Painting",
+            location="Alcobendas",
+            announcement="Pintura de mantenimiento",
+            status=Announcement.Status.ACTIVE,
+            description="Cesped y poda",
+            free_text="Disponible domingos",
+        )
+
+        response = self.client.get(
+            reverse(
+                "organization-announcement-list",
+                kwargs={"organization_uuid": self.organization.uuid},
+            ),
+            {
+                "name": "gardening",
+                "location": "alcob",
+                "announcement": "jardineria",
+                "description": "poda",
+                "free_text": "domingos",
+            },
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.data["count"], 1)
+        self.assertEqual(response.data["results"][0]["uuid"], str(matching.uuid))
+
+    def test_announcement_list_rejects_invalid_has_coordinates_value(self):
+        self.client.force_authenticate(user=self.owner)
+
+        response = self.client.get(
+            reverse(
+                "organization-announcement-list",
+                kwargs={"organization_uuid": self.organization.uuid},
+            ),
+            {"has_coordinates": "invalid"},
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertEqual(
+            str(response.data["has_coordinates"]),
+            "Use a boolean value: true or false.",
+        )
 
     def test_announcement_list_filters_by_search_text(self):
         self.client.force_authenticate(user=self.owner)
