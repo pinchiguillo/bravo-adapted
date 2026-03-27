@@ -11,7 +11,6 @@ from django.urls import reverse
 from rest_framework import status
 from rest_framework.test import APITestCase
 
-from apps.jobs.models import Job
 from apps.management.feature_flags import is_feature_enabled
 from apps.management.models import FeatureFlag
 from apps.organization.models import (
@@ -25,7 +24,13 @@ from apps.organization.models import (
     Subservice,
 )
 
+JOBS_INSTALLED = django_apps.is_installed("apps.jobs")
 JOB_CHAT_INSTALLED = django_apps.is_installed("apps.job_chat")
+
+if JOBS_INSTALLED:
+    from apps.jobs.models import Job
+else:
+    Job = None
 
 if JOB_CHAT_INSTALLED:
     from apps.job_chat.models import JobChat, JobChatAttachment, JobChatMessage
@@ -70,42 +75,43 @@ class ManagementApiTests(APITestCase):
             name="Managed Services",
             description="Managed org job",
         )
-        self.category, _ = Category.objects.get_or_create(
-            name="Managed Category",
-            defaults={"description": "Categoria gestionada"},
-        )
-        self.service = Service.objects.create(
-            job=self.organization_job,
-            category=self.category,
-            name="Managed Plan",
-            description="",
-        )
-        self.subservice = Subservice.objects.create(
-            service=self.service,
-            name="Managed Variant",
-            description="",
-        )
-        self.service_price = ServicePrice.objects.create(
-            subservice=self.subservice,
-            amount="19.99",
-            currency="EUR",
-            charging_type=ServicePrice.ChargingType.PER_PROJECT,
-            effective_from=date(2026, 1, 1),
-        )
-        self.announcement = Announcement.objects.create(
-            organization=self.organization,
-            category=self.category,
-            name="Managed Announcement",
-            location="Madrid",
-            announcement="Managed plan disponible",
-        )
-        self.announcement.services.add(self.service)
-        self.job = Job.objects.create(
-            user=self.staff_candidate,
-            announcement=self.announcement,
-            plan_price=self.service_price,
-            status=Job.Status.PENDING,
-        )
+        if JOBS_INSTALLED:
+            self.category, _ = Category.objects.get_or_create(
+                name="Managed Category",
+                defaults={"description": "Categoria gestionada"},
+            )
+            self.service = Service.objects.create(
+                job=self.organization_job,
+                category=self.category,
+                name="Managed Plan",
+                description="",
+            )
+            self.subservice = Subservice.objects.create(
+                service=self.service,
+                name="Managed Variant",
+                description="",
+            )
+            self.service_price = ServicePrice.objects.create(
+                subservice=self.subservice,
+                amount="19.99",
+                currency="EUR",
+                charging_type=ServicePrice.ChargingType.PER_PROJECT,
+                effective_from=date(2026, 1, 1),
+            )
+            self.announcement = Announcement.objects.create(
+                organization=self.organization,
+                category=self.category,
+                name="Managed Announcement",
+                location="Madrid",
+                announcement="Managed plan disponible",
+            )
+            self.announcement.services.add(self.service)
+            self.job = Job.objects.create(
+                user=self.staff_candidate,
+                announcement=self.announcement,
+                plan_price=self.service_price,
+                status=Job.Status.PENDING,
+            )
 
     def test_non_staff_cannot_access_management_endpoints(self):
         self.client.force_authenticate(user=self.staff_candidate)
@@ -250,6 +256,7 @@ class ManagementApiTests(APITestCase):
         self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
         self.assertEqual(response.data["user"][0], "Selected user already has an organization.")
 
+    @skipUnless(JOBS_INSTALLED, "jobs app disabled")
     def test_admin_can_suspend_job(self):
         self.client.force_authenticate(user=self.admin_user)
 
@@ -261,6 +268,7 @@ class ManagementApiTests(APITestCase):
         self.job.refresh_from_db()
         self.assertEqual(self.job.status, Job.Status.SUSPENDED)
 
+    @skipUnless(JOBS_INSTALLED, "jobs app disabled")
     def test_unauthenticated_user_cannot_deactivate_job(self):
         response = self.client.post(
             reverse("management-jobs-deactivate", kwargs={"uuid": self.job.uuid})
@@ -268,6 +276,25 @@ class ManagementApiTests(APITestCase):
 
         self.assertEqual(response.status_code, status.HTTP_401_UNAUTHORIZED)
 
+    @override_settings(BYPASS_ADMIN_LOGIN=True)
+    def test_bypass_admin_login_allows_unauthenticated_access_to_management_list(self):
+        response = self.client.get(reverse("management-users-list"))
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.data["count"], 3)
+
+    @skipUnless(JOBS_INSTALLED, "jobs app disabled")
+    @override_settings(BYPASS_ADMIN_LOGIN=True)
+    def test_bypass_admin_login_allows_unauthenticated_management_status_actions(self):
+        response = self.client.post(
+            reverse("management-jobs-deactivate", kwargs={"uuid": self.job.uuid})
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.job.refresh_from_db()
+        self.assertEqual(self.job.status, Job.Status.INACTIVE)
+
+    @skipUnless(JOBS_INSTALLED, "jobs app disabled")
     def test_non_staff_user_cannot_deactivate_job(self):
         self.client.force_authenticate(user=self.staff_candidate)
 
@@ -277,6 +304,7 @@ class ManagementApiTests(APITestCase):
 
         self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
 
+    @skipUnless(JOBS_INSTALLED, "jobs app disabled")
     def test_suspended_admin_cannot_activate_job(self):
         self.admin_user.status = self.admin_user.Status.SUSPENDED
         self.admin_user.save(update_fields=["status"])
@@ -297,6 +325,7 @@ class ManagementApiTests(APITestCase):
 
         self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
 
+    @skipUnless(JOBS_INSTALLED, "jobs app disabled")
     def test_admin_can_create_job(self):
         self.client.force_authenticate(user=self.admin_user)
 
