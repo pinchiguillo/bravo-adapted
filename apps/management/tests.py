@@ -138,6 +138,7 @@ class ManagementApiTests(APITestCase):
         self.assertEqual(response.status_code, status.HTTP_201_CREATED)
         self.assertEqual(response.data["email"], "new-managed-user@example.com")
         self.assertEqual(response.data["status"], "active")
+        self.assertNotIn("id", response.data)
 
     def test_admin_cannot_create_staff_users_from_management_endpoint(self):
         self.client.force_authenticate(user=self.admin_user)
@@ -282,6 +283,7 @@ class ManagementApiTests(APITestCase):
 
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertEqual(response.data["count"], 3)
+        self.assertNotIn("id", response.data["results"][0])
 
     @skipUnless(JOBS_INSTALLED, "jobs app disabled")
     @override_settings(BYPASS_ADMIN_LOGIN=True)
@@ -334,7 +336,7 @@ class ManagementApiTests(APITestCase):
             {
                 "user": str(self.staff_candidate.uuid),
                 "announcement": str(self.announcement.uuid),
-                "plan_price": self.service_price.id,
+                "plan_price": str(self.service_price.uuid),
                 "status": Job.Status.ACTIVE,
             },
             format="json",
@@ -342,6 +344,7 @@ class ManagementApiTests(APITestCase):
 
         self.assertEqual(response.status_code, status.HTTP_201_CREATED)
         self.assertEqual(response.data["status"], Job.Status.ACTIVE)
+        self.assertNotIn("id", response.data)
 
 
 class ManagementOrganizationListApiTests(APITestCase):

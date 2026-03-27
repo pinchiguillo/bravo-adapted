@@ -22,7 +22,6 @@ class ManagementUserSerializer(serializers.ModelSerializer):
     class Meta:
         model = get_user_model()
         fields = (
-            "id",
             "uuid",
             "username",
             "email",
@@ -34,7 +33,7 @@ class ManagementUserSerializer(serializers.ModelSerializer):
             "is_staff",
             "is_active",
         )
-        read_only_fields = ("id", "uuid")
+        read_only_fields = ("uuid",)
 
     def validate(self, attrs):
         errors = {}

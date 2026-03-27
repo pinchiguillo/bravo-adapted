@@ -96,4 +96,3 @@ class JobChatMessageSerializer(serializers.ModelSerializer):
         if not content.strip():
             raise serializers.ValidationError({"content": "Message content cannot be empty."})
         return attrs
-
