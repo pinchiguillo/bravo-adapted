@@ -63,6 +63,7 @@ Si `REDIS_URL` no existe fuera de produccion, Channels usa `InMemoryChannelLayer
 
 - `AUTH_VERIFY_EMAIL_URL_TEMPLATE`: URL base para verificacion de email.
 - `AUTH_BYPASS_EMAIL_VERIFICATION`: cuando vale `1`, omite la verificacion de email en toda la app (auth, endpoints protegidos y acceso jobs/ws). En desarrollo el valor por defecto es `1`; en produccion el valor por defecto es `0`.
+- `BYPASS_ADMIN_LOGIN`: cuando vale `1`, desactiva el requisito de autenticacion y permisos admin en los endpoints de `api/management/`. Su valor por defecto es `0` y en produccion se fuerza automaticamente a `0`. Tambien puede referenciarse como `Bypass_Admin_Login` a nivel funcional, pero la variable real de entorno es `BYPASS_ADMIN_LOGIN`.
 - `BYPASS_ORGANIZATION_VALIDATION`: cuando vale `1`, trata las organizaciones como validadas para reglas de visibilidad y escritura. En produccion se fuerza automaticamente a `0`.
 - `AUTH_ENFORCE_PASSWORD_RESTRICTIONS`: cuando vale `0`, desactiva validadores de Django y longitud minima en serializers para permitir contrasenas sin restricciones.
 - `JWT_ROTATE_REFRESH_TOKENS`: rota refresh tokens al renovar sesion.
