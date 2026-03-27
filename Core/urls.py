@@ -25,16 +25,23 @@ urlpatterns = [
     path('admin/', admin.site.urls),
     path("health/", healthcheck, name="healthcheck"),
     path("api/auth/", include("apps.auth.urls")),
+    path("api/", include("apps.organization.catalog_urls")),
     path("api/announcements/", include("apps.organization.public_urls")),
     path("api/organizations/", include("apps.organization.urls")),
     path("api/management/", include("apps.management.urls")),
-    path("api/schema/", SpectacularAPIView.as_view(), name="api-schema"),
-    path(
-        "api/docs/",
-        SpectacularSwaggerView.as_view(url_name="api-schema"),
-        name="api-docs",
-    ),
 ]
+
+if not settings.HIDE_API_DOCS:
+    urlpatterns.extend(
+        [
+            path("api/schema/", SpectacularAPIView.as_view(), name="api-schema"),
+            path(
+                "api/docs/",
+                SpectacularSwaggerView.as_view(url_name="api-schema"),
+                name="api-docs",
+            ),
+        ]
+    )
 
 if settings.RGPD_MODULE_ENABLED:
     urlpatterns.append(path("api/rgpd/", include("apps.rgpd.urls")))

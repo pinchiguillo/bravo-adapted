@@ -5,7 +5,7 @@ from django.contrib.auth.password_validation import validate_password
 from rest_framework import serializers
 
 from apps.management.models import FeatureFlag
-from apps.organization.models import Announcement, Organization
+from apps.organization.models import Announcement, Category, Organization
 from apps.organization.serializers import OrganizationRatingMixin
 
 if apps.is_installed("apps.jobs"):
@@ -157,3 +157,14 @@ class ManagementFeatureFlagSerializer(serializers.ModelSerializer):
             "updated_at",
         )
         read_only_fields = ("uuid", "created_at", "updated_at")
+
+
+class ManagementCategorySerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Category
+        fields = (
+            "uuid",
+            "name",
+            "description",
+        )
+        read_only_fields = ("uuid",)

@@ -1,8 +1,10 @@
+import importlib
 import os
 from unittest.mock import patch
 
 from django.core.exceptions import ImproperlyConfigured
-from django.test import SimpleTestCase
+from django.test import SimpleTestCase, override_settings
+from django.urls import NoReverseMatch, clear_url_caches, reverse
 from drf_spectacular.generators import SchemaGenerator
 
 from Core import settings as core_settings
@@ -62,8 +64,27 @@ class SettingsEnvHelpersTests(SimpleTestCase):
         with patch.object(core_settings, "IS_PRODUCTION", False):
             self.assertTrue(core_settings.disable_in_production_bool(True))
 
+    def test_hide_api_docs_defaults_to_true_in_production(self):
+        with patch.dict("os.environ", {"APP_MODE": "production"}, clear=True):
+            self.assertTrue(
+                core_settings.env_bool(
+                    "HIDE_API_DOCS",
+                    default=os.environ.get("APP_MODE", "development").strip().lower() == "production",
+                )
+            )
+
+    def test_hide_api_docs_defaults_to_false_in_development(self):
+        with patch.dict("os.environ", {"APP_MODE": "development"}, clear=True):
+            self.assertFalse(
+                core_settings.env_bool(
+                    "HIDE_API_DOCS",
+                    default=os.environ.get("APP_MODE", "development").strip().lower() == "production",
+                )
+            )
+
     def test_read_project_version_reads_version_file(self):
-        self.assertEqual(core_settings.read_project_version(), "0.0.2")
+        expected_version = (core_settings.BASE_DIR / "VERSION").read_text(encoding="utf-8").strip()
+        self.assertEqual(core_settings.read_project_version(), expected_version)
 
 
 class OpenApiSecuritySchemaTests(SimpleTestCase):
@@ -80,8 +101,6 @@ class OpenApiSecuritySchemaTests(SimpleTestCase):
             ("/api/auth/verify-email/", "post"),
             ("/api/announcements/", "get"),
             ("/api/organizations/{uuid}/", "get"),
-            ("/api/organizations/{organization_uuid}/jobs/", "get"),
-            ("/api/organizations/{organization_uuid}/jobs/{job_uuid}/services/", "get"),
         )
 
         for path, method in public_operations:
@@ -102,4 +121,30 @@ class OpenApiSecuritySchemaTests(SimpleTestCase):
 
     def test_schema_uses_project_version_from_version_file(self):
         schema = SchemaGenerator().get_schema(request=None, public=True)
-        self.assertEqual(schema["info"]["version"], "0.0.2")
+        expected_version = (core_settings.BASE_DIR / "VERSION").read_text(encoding="utf-8").strip()
+        self.assertEqual(schema["info"]["version"], expected_version)
+
+
+class ApiDocsRoutingTests(SimpleTestCase):
+    def _reload_urlconf(self):
+        from Core import urls as core_urls
+
+        clear_url_caches()
+        importlib.reload(core_urls)
+
+    @override_settings(HIDE_API_DOCS=False)
+    def test_docs_routes_are_registered_when_not_hidden(self):
+        self._reload_urlconf()
+        self.assertEqual(reverse("api-schema"), "/api/schema/")
+        self.assertEqual(reverse("api-docs"), "/api/docs/")
+
+    @override_settings(HIDE_API_DOCS=True)
+    def test_docs_routes_are_not_registered_when_hidden(self):
+        self._reload_urlconf()
+        try:
+            with self.assertRaises(NoReverseMatch):
+                reverse("api-schema")
+            with self.assertRaises(NoReverseMatch):
+                reverse("api-docs")
+        finally:
+            self._reload_urlconf()

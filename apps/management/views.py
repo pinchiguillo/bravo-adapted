@@ -7,11 +7,12 @@ from rest_framework.decorators import action
 from rest_framework.response import Response
 
 from apps.management.models import FeatureFlag
-from apps.organization.models import Organization
+from apps.organization.models import Category, Organization
 from common.permissions import IsActiveAccount
 from common.throttling import ActionScopedRateThrottleMixin
 
 from .serializers import (
+    ManagementCategorySerializer,
     ManagementFeatureFlagSerializer,
     ManagementOrganizationSerializer,
     ManagementUserSerializer,
@@ -126,6 +127,31 @@ class ManagementFeatureFlagViewSet(
         "partial_update": "management_write",
         "activate": "management_status",
         "deactivate": "management_status",
+    }
+
+
+class ManagementCategoryViewSet(
+    ManagementBypassAdminLoginMixin,
+    ActionScopedRateThrottleMixin,
+    mixins.ListModelMixin,
+    mixins.CreateModelMixin,
+    mixins.RetrieveModelMixin,
+    mixins.UpdateModelMixin,
+    mixins.DestroyModelMixin,
+    viewsets.GenericViewSet,
+):
+    permission_classes = [IsActiveAccount, permissions.IsAdminUser]
+    serializer_class = ManagementCategorySerializer
+    queryset = Category.objects.all().order_by("name")
+    lookup_field = "uuid"
+    throttle_scope_prefix = "management"
+    throttle_scope_action_map = {
+        "list": "management_read",
+        "retrieve": "management_read",
+        "create": "management_write",
+        "update": "management_write",
+        "partial_update": "management_write",
+        "destroy": "management_write",
     }
 
 

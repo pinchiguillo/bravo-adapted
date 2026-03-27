@@ -479,6 +479,74 @@ class ManagementFeatureFlagApiTests(APITestCase):
         self.assertIn("key", response.data)
 
 
+class ManagementCategoryApiTests(APITestCase):
+    def setUp(self):
+        user_model = get_user_model()
+        self.admin_user = user_model.objects.create_user(
+            username="management-category-admin",
+            email="management-category-admin@example.com",
+            password="testpass123",
+            is_staff=True,
+        )
+        self.regular_user = user_model.objects.create_user(
+            username="management-category-user",
+            email="management-category-user@example.com",
+            password="testpass123",
+        )
+        self.category = Category.objects.create(
+            name="Reformas",
+            description="Servicios de reforma",
+        )
+
+    def test_admin_can_list_categories(self):
+        self.client.force_authenticate(user=self.admin_user)
+
+        response = self.client.get(reverse("management-categories-list"))
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        returned_uuids = {item["uuid"] for item in response.data["results"]}
+        self.assertGreaterEqual(response.data["count"], 1)
+        self.assertIn(str(self.category.uuid), returned_uuids)
+
+    def test_admin_can_crud_categories(self):
+        self.client.force_authenticate(user=self.admin_user)
+
+        create_response = self.client.post(
+            reverse("management-categories-list"),
+            {"name": "Mantenimiento", "description": "Servicios de mantenimiento"},
+            format="json",
+        )
+
+        self.assertEqual(create_response.status_code, status.HTTP_201_CREATED)
+        created_uuid = create_response.data["uuid"]
+
+        retrieve_response = self.client.get(
+            reverse("management-categories-detail", kwargs={"uuid": created_uuid})
+        )
+        self.assertEqual(retrieve_response.status_code, status.HTTP_200_OK)
+        self.assertEqual(retrieve_response.data["name"], "Mantenimiento")
+
+        update_response = self.client.patch(
+            reverse("management-categories-detail", kwargs={"uuid": created_uuid}),
+            {"description": "Servicios recurrentes"},
+            format="json",
+        )
+        self.assertEqual(update_response.status_code, status.HTTP_200_OK)
+        self.assertEqual(update_response.data["description"], "Servicios recurrentes")
+
+        delete_response = self.client.delete(
+            reverse("management-categories-detail", kwargs={"uuid": created_uuid})
+        )
+        self.assertEqual(delete_response.status_code, status.HTTP_204_NO_CONTENT)
+        self.assertFalse(Category.objects.filter(uuid=created_uuid).exists())
+
+    def test_non_staff_cannot_manage_categories(self):
+        self.client.force_authenticate(user=self.regular_user)
+
+        response = self.client.get(reverse("management-categories-list"))
+
+        self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
+
 class FeatureFlagHelperTests(APITestCase):
     def test_returns_default_when_flag_does_not_exist(self):
         self.assertFalse(is_feature_enabled("missing-flag"))
