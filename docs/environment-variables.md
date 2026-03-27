@@ -67,6 +67,7 @@ Si `REDIS_URL` no existe fuera de produccion, Channels usa `InMemoryChannelLayer
 - `BYPASS_ADMIN_LOGIN`: cuando vale `1`, desactiva el requisito de autenticacion y permisos admin en los endpoints de `api/management/`. Su valor por defecto es `0` y en produccion se fuerza automaticamente a `0`. Tambien puede referenciarse como `Bypass_Admin_Login` a nivel funcional, pero la variable real de entorno es `BYPASS_ADMIN_LOGIN`.
 - `BYPASS_ORGANIZATION_VALIDATION`: cuando vale `1`, trata las organizaciones como validadas para reglas de visibilidad y escritura. En produccion se fuerza automaticamente a `0`.
 - `AUTH_ENFORCE_PASSWORD_RESTRICTIONS`: cuando vale `0`, desactiva validadores de Django y longitud minima en serializers para permitir contrasenas sin restricciones.
+- `HIDE_API_DOCS`: cuando vale `1`, elimina del enrutado las rutas `api/docs/` y `api/schema/`, dejandolas no disponibles. Por defecto vale `0` en desarrollo y `1` en produccion.
 - `JWT_ROTATE_REFRESH_TOKENS`: rota refresh tokens al renovar sesion.
 
 ## Jobs y WebSocket
@@ -103,5 +104,5 @@ Variables disponibles:
 ## Referencia practica
 
 - Plantilla base: `example.env`
-- Swagger UI local: `http://localhost:8000/api/docs/`
-- OpenAPI schema: `http://localhost:8000/api/schema/`
+- Swagger UI local: `http://localhost:8000/api/docs/` si `HIDE_API_DOCS=0`
+- OpenAPI schema: `http://localhost:8000/api/schema/` si `HIDE_API_DOCS=0`

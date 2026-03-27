@@ -55,6 +55,7 @@ services:
       EMAIL_HOST_PASSWORD: ${EMAIL_HOST_PASSWORD:-}
       EMAIL_USE_TLS: ${EMAIL_USE_TLS:-0}
       EMAIL_USE_SSL: ${EMAIL_USE_SSL:-0}
+      HIDE_API_DOCS: ${HIDE_API_DOCS:-1}
     depends_on:
       postgres:
         condition: service_healthy

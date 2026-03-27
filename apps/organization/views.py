@@ -35,6 +35,7 @@ from .serializers import (
     OrganizationJobSerializer,
     OrganizationPublicSerializer,
     OrganizationSerializer,
+    PublicServicePriceSerializer,
     ServicePriceSerializer,
     ServiceSerializer,
     SubserviceSerializer,
@@ -78,6 +79,22 @@ service_uuid_parameter = OpenApiParameter(
     location=OpenApiParameter.PATH,
     required=True,
     description="UUID of the service that owns the nested subservice.",
+)
+
+subservice_uuid_parameter = OpenApiParameter(
+    name="subservice_uuid",
+    type=str,
+    location=OpenApiParameter.PATH,
+    required=True,
+    description="UUID of the subservice.",
+)
+
+category_uuid_parameter = OpenApiParameter(
+    name="category_uuid",
+    type=str,
+    location=OpenApiParameter.PATH,
+    required=True,
+    description="UUID of the category.",
 )
 
 organization_search_parameter = OpenApiParameter(
@@ -326,23 +343,61 @@ class OrganizationSearchViewSet(
 @extend_schema_view(
     list=extend_schema(
         summary="List categories",
-        description="Returns the categories catalog available to authenticated users.",
-    ),
-    retrieve=extend_schema(
-        summary="Get category",
-        description="Returns the details of a category identified by UUID.",
+        description="Returns the public categories catalog.",
+        auth=[],
     ),
 )
-class CategoryViewSet(ActionScopedRateThrottleMixin, viewsets.ReadOnlyModelViewSet):
+class CategoryViewSet(
+    ActionScopedRateThrottleMixin,
+    mixins.ListModelMixin,
+    viewsets.GenericViewSet,
+):
     serializer_class = CategorySerializer
-    permission_classes = [IsActiveAccount]
-    queryset = Category.objects.all()
-    lookup_field = "uuid"
+    permission_classes = [permissions.AllowAny]
+    queryset = Category.objects.all().order_by("name")
     throttle_scope_prefix = "organization"
     throttle_scope_action_map = {
-        "list": "organization_authenticated_read",
-        "retrieve": "organization_authenticated_read",
+        "list": "organization_public_read",
     }
+
+
+@extend_schema_view(
+    list=extend_schema(
+        summary="List services by category",
+        description="Returns the public services catalog filtered by category UUID.",
+        parameters=[category_uuid_parameter],
+        auth=[],
+    ),
+)
+class CategoryServiceViewSet(
+    ActionScopedRateThrottleMixin,
+    mixins.ListModelMixin,
+    viewsets.GenericViewSet,
+):
+    serializer_class = ServiceSerializer
+    permission_classes = [permissions.AllowAny]
+    queryset = Service.objects.select_related(
+        "job",
+        "job__organization",
+        "category",
+    )
+    throttle_scope_prefix = "organization"
+    throttle_scope_action_map = {
+        "list": "organization_public_read",
+    }
+
+    def get_queryset(self):
+        category_uuid = self.kwargs["category_uuid"]
+        if not Category.objects.filter(uuid=category_uuid).exists():
+            raise NotFound("Category not found.")
+        return (
+            self.queryset.filter(
+                category__uuid=category_uuid,
+                **Organization.validated_filter_kwargs(prefix="job__organization__"),
+            )
+            .distinct()
+            .order_by("name", "uuid")
+        )
 
 
 class AnnouncementPublicFilterMixin:
@@ -425,6 +480,38 @@ class PublicAnnouncementViewSet(
 
     def get_queryset(self):
         return self.filter_announcements(self.queryset).order_by("-created_at", "-id")
+
+
+@extend_schema_view(
+    retrieve=extend_schema(
+        summary="Get public announcement",
+        description="Returns the details of an active public announcement by organization UUID and announcement UUID.",
+        parameters=[organization_uuid_parameter, announcement_uuid_parameter],
+        auth=[],
+    ),
+)
+class PublicAnnouncementDetailViewSet(
+    OrganizationVisibilityMixin,
+    ActionScopedRateThrottleMixin,
+    mixins.RetrieveModelMixin,
+    viewsets.GenericViewSet,
+):
+    serializer_class = AnnouncementSerializer
+    permission_classes = [permissions.AllowAny]
+    queryset = (
+        Announcement.objects.select_related("organization", "category")
+        .prefetch_related("services")
+        .filter(status=Announcement.Status.ACTIVE)
+    )
+    lookup_field = "uuid"
+    throttle_scope_prefix = "organization"
+    throttle_scope_action_map = {
+        "retrieve": "organization_public_read",
+    }
+
+    def get_queryset(self):
+        organization = self.require_visible_organization()
+        return self.queryset.filter(organization=organization)
 
 
 @extend_schema_view(
@@ -622,6 +709,50 @@ class ServiceViewSet(
     def perform_destroy(self, instance):
         self.ensure_organization_is_approved_for_write(instance.job.organization)
         super().perform_destroy(instance)
+
+
+@extend_schema_view(
+    list=extend_schema(
+        summary="List public subservices",
+        description="Lists the public subservices of a service identified by organization UUID and service UUID.",
+        parameters=[organization_uuid_parameter, service_uuid_parameter],
+        auth=[],
+    ),
+    retrieve=extend_schema(
+        summary="Get public subservice",
+        description="Returns the details of a public subservice identified by organization UUID, service UUID and subservice UUID.",
+        parameters=[organization_uuid_parameter, service_uuid_parameter, subservice_uuid_parameter],
+        auth=[],
+    ),
+)
+class PublicSubserviceViewSet(
+    OrganizationVisibilityMixin,
+    ActionScopedRateThrottleMixin,
+    mixins.ListModelMixin,
+    mixins.RetrieveModelMixin,
+    viewsets.GenericViewSet,
+):
+    serializer_class = SubserviceSerializer
+    permission_classes = [permissions.AllowAny]
+    queryset = Subservice.objects.select_related(
+        "service",
+        "service__job",
+        "service__job__organization",
+    ).prefetch_related("price_table")
+    lookup_field = "uuid"
+    lookup_url_kwarg = "subservice_uuid"
+    throttle_scope_prefix = "organization"
+    throttle_scope_action_map = {
+        "list": "organization_public_read",
+        "retrieve": "organization_public_read",
+    }
+
+    def get_queryset(self):
+        organization = self.require_visible_organization()
+        return self.queryset.filter(
+            service__job__organization=organization,
+            service__uuid=self.kwargs["service_uuid"],
+        )
 
 
 @extend_schema_view(
@@ -857,31 +988,67 @@ class SubserviceViewSet(
 @extend_schema_view(
     list=extend_schema(
         summary="List service prices",
-        description="Lists the service prices that belong to the authenticated organization owner.",
+        description="Lists the service prices of the subservice specified in the URL.",
+        parameters=[
+            organization_uuid_parameter,
+            organization_job_uuid_parameter,
+            service_uuid_parameter,
+            subservice_uuid_parameter,
+        ],
     ),
     create=extend_schema(
         summary="Create service price",
-        description="Creates a service price for a subservice owned by the authenticated organization.",
+        description="Creates a service price for the subservice specified in the URL.",
+        parameters=[
+            organization_uuid_parameter,
+            organization_job_uuid_parameter,
+            service_uuid_parameter,
+            subservice_uuid_parameter,
+        ],
     ),
     retrieve=extend_schema(
         summary="Get service price",
-        description="Returns a service price owned by the authenticated organization.",
-        parameters=[service_price_uuid_parameter],
+        description="Returns a service price belonging to the subservice specified in the URL.",
+        parameters=[
+            organization_uuid_parameter,
+            organization_job_uuid_parameter,
+            service_uuid_parameter,
+            subservice_uuid_parameter,
+            service_price_uuid_parameter,
+        ],
     ),
     update=extend_schema(
         summary="Replace service price",
-        description="Fully replaces a service price owned by the authenticated organization.",
-        parameters=[service_price_uuid_parameter],
+        description="Fully replaces a service price belonging to the subservice specified in the URL.",
+        parameters=[
+            organization_uuid_parameter,
+            organization_job_uuid_parameter,
+            service_uuid_parameter,
+            subservice_uuid_parameter,
+            service_price_uuid_parameter,
+        ],
     ),
     partial_update=extend_schema(
         summary="Update service price",
-        description="Partially updates a service price owned by the authenticated organization.",
-        parameters=[service_price_uuid_parameter],
+        description="Partially updates a service price belonging to the subservice specified in the URL.",
+        parameters=[
+            organization_uuid_parameter,
+            organization_job_uuid_parameter,
+            service_uuid_parameter,
+            subservice_uuid_parameter,
+            service_price_uuid_parameter,
+        ],
     ),
     destroy=extend_schema(
         summary="Delete service price",
-        description="Deletes a service price owned by the authenticated organization.",
-        parameters=[service_price_uuid_parameter],
+        description="Deletes a service price belonging to the subservice specified in the URL.",
+        parameters=[
+            organization_uuid_parameter,
+            organization_job_uuid_parameter,
+            service_uuid_parameter,
+            subservice_uuid_parameter,
+            service_price_uuid_parameter,
+        ],
     ),
 )
 class ServicePriceViewSet(
@@ -898,6 +1065,7 @@ class ServicePriceViewSet(
         "subservice__service__job__organization",
     )
     lookup_field = "uuid"
+    lookup_url_kwarg = "price_uuid"
     throttle_scope_prefix = "organization"
     throttle_scope_action_map = {
         "list": "organization_authenticated_read",
@@ -909,13 +1077,56 @@ class ServicePriceViewSet(
     }
 
     def get_queryset(self):
-        return self.queryset.filter(subservice__service__job__organization__user=self.request.user)
+        queryset = self.queryset.filter(subservice__service__job__organization__user=self.request.user)
+        organization_uuid = self.kwargs.get("organization_uuid")
+        if organization_uuid is not None:
+            queryset = queryset.filter(subservice__service__job__organization__uuid=organization_uuid)
+        job_uuid = self.kwargs.get("job_uuid")
+        if job_uuid is not None:
+            queryset = queryset.filter(subservice__service__job__uuid=job_uuid)
+        service_uuid = self.kwargs.get("service_uuid")
+        if service_uuid is not None:
+            queryset = queryset.filter(subservice__service__uuid=service_uuid)
+        subservice_uuid = self.kwargs.get("subservice_uuid")
+        if subservice_uuid is not None:
+            self._get_subservice_from_url()
+            queryset = queryset.filter(subservice__uuid=subservice_uuid)
+        return queryset
+
+    def _get_subservice_from_url(self):
+        organization_uuid = self.kwargs.get("organization_uuid")
+        job_uuid = self.kwargs.get("job_uuid")
+        service_uuid = self.kwargs.get("service_uuid")
+        subservice_uuid = self.kwargs.get("subservice_uuid")
+        subservice = Subservice.objects.select_related("service", "service__job", "service__job__organization")
+        subservice = subservice.filter(
+            uuid=subservice_uuid,
+            service__job__organization__user=self.request.user,
+        )
+        if organization_uuid is not None:
+            subservice = subservice.filter(service__job__organization__uuid=organization_uuid)
+        if job_uuid is not None:
+            subservice = subservice.filter(service__job__uuid=job_uuid)
+        if service_uuid is not None:
+            subservice = subservice.filter(service__uuid=service_uuid)
+        subservice = subservice.first()
+        if subservice is None:
+            raise NotFound("Subservice not found.")
+        return subservice
 
     def _get_subservice(self, serializer):
-        subservice = serializer.validated_data.get("subservice", serializer.instance.subservice)
+        subservice = self._get_subservice_from_url()
         if subservice.service.job.organization.user_id != self.request.user.id:
             raise PermissionDenied("Subservice does not belong to the authenticated user organization.")
         self.ensure_organization_is_approved_for_write(subservice.service.job.organization)
+        payload_subservice = serializer.validated_data.get(
+            "subservice",
+            getattr(serializer.instance, "subservice", None),
+        )
+        if payload_subservice is None:
+            payload_subservice = subservice
+        if payload_subservice.uuid != subservice.uuid:
+            raise ValidationError({"subservice": "Subservice must match the subservice in the URL."})
         return subservice
 
     def perform_create(self, serializer):
@@ -929,3 +1140,60 @@ class ServicePriceViewSet(
     def perform_destroy(self, instance):
         self.ensure_organization_is_approved_for_write(instance.subservice.service.job.organization)
         super().perform_destroy(instance)
+
+
+@extend_schema_view(
+    list=extend_schema(
+        summary="List public service prices",
+        description=(
+            "Lists the public prices of a subservice identified by organization UUID, "
+            "service UUID and subservice UUID."
+        ),
+        parameters=[organization_uuid_parameter, service_uuid_parameter, subservice_uuid_parameter],
+        auth=[],
+    ),
+    retrieve=extend_schema(
+        summary="Get public service price",
+        description=(
+            "Returns a public service price identified by organization UUID, service UUID, "
+            "subservice UUID and price UUID."
+        ),
+        parameters=[
+            organization_uuid_parameter,
+            service_uuid_parameter,
+            subservice_uuid_parameter,
+            service_price_uuid_parameter,
+        ],
+        auth=[],
+    ),
+)
+class PublicServicePriceViewSet(
+    OrganizationVisibilityMixin,
+    ActionScopedRateThrottleMixin,
+    mixins.ListModelMixin,
+    mixins.RetrieveModelMixin,
+    viewsets.GenericViewSet,
+):
+    serializer_class = PublicServicePriceSerializer
+    permission_classes = [permissions.AllowAny]
+    queryset = ServicePrice.objects.select_related(
+        "subservice",
+        "subservice__service",
+        "subservice__service__job",
+        "subservice__service__job__organization",
+    )
+    lookup_field = "uuid"
+    lookup_url_kwarg = "price_uuid"
+    throttle_scope_prefix = "organization"
+    throttle_scope_action_map = {
+        "list": "organization_public_read",
+        "retrieve": "organization_public_read",
+    }
+
+    def get_queryset(self):
+        organization = self.require_visible_organization()
+        return self.queryset.filter(
+            subservice__service__job__organization=organization,
+            subservice__service__uuid=self.kwargs["service_uuid"],
+            subservice__uuid=self.kwargs["subservice_uuid"],
+        )
