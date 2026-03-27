@@ -25,8 +25,8 @@ from apps.organization.models import (
     Announcement,
     Category,
     Organization,
-    OrganizationJob,
     Service,
+    ServiceCatalog,
     ServicePrice,
     Subservice,
 )
@@ -252,14 +252,15 @@ class JobChatDisabledTests(APITestCase):
             billing_postal_code="28001",
             is_approved=True,
         )
-        self.organization_job = OrganizationJob.objects.create(
-            organization=self.organization,
-            name="Disabled Chat Services",
+        self.category = Category.objects.create(name="Disabled Chat Category", description="")
+        self.service_catalog = ServiceCatalog.objects.create(
+            category=self.category,
+            name="Disabled Chat Service",
             description="",
         )
-        self.category = Category.objects.create(name="Disabled Chat Category", description="")
         self.service = Service.objects.create(
-            job=self.organization_job,
+            organization=self.organization,
+            service_catalog=self.service_catalog,
             category=self.category,
             name="Disabled Chat Service",
             description="",
@@ -351,17 +352,18 @@ class JobsApiTests(APITestCase):
             billing_country="ES",
             billing_postal_code="28001",
         )
-        self.organization_job = OrganizationJob.objects.create(
-            organization=self.organization,
-            name="Home Services",
-            description="Primary org job",
-        )
         self.category, _ = Category.objects.get_or_create(
             name="General",
             defaults={"description": "Categoria general"},
         )
+        self.service_catalog = ServiceCatalog.objects.create(
+            category=self.category,
+            name="Plan",
+            description="",
+        )
         self.service = Service.objects.create(
-            job=self.organization_job,
+            organization=self.organization,
+            service_catalog=self.service_catalog,
             category=self.category,
             name="Plan",
             description="",
@@ -397,13 +399,14 @@ class JobsApiTests(APITestCase):
             billing_country="ES",
             billing_postal_code="46001",
         )
-        self.second_organization_job = OrganizationJob.objects.create(
-            organization=self.second_organization,
-            name="Client Services",
-            description="Secondary org job",
+        self.second_service_catalog = ServiceCatalog.objects.create(
+            category=self.category,
+            name="Second Plan",
+            description="",
         )
         self.second_service = Service.objects.create(
-            job=self.second_organization_job,
+            organization=self.second_organization,
+            service_catalog=self.second_service_catalog,
             category=self.category,
             name="Second Plan",
             description="",
@@ -621,13 +624,14 @@ class JobsApiTests(APITestCase):
             billing_country="ES",
             billing_postal_code="41001",
         )
-        outsider_org_job = OrganizationJob.objects.create(
-            organization=outsider_org,
-            name="Outsider Services",
-            description="Outsider org job",
+        outsider_service_catalog = ServiceCatalog.objects.create(
+            category=self.category,
+            name="Out Plan",
+            description="",
         )
         outsider_service = Service.objects.create(
-            job=outsider_org_job,
+            organization=outsider_org,
+            service_catalog=outsider_service_catalog,
             category=self.category,
             name="Out Plan",
             description="",
@@ -712,8 +716,14 @@ class JobsApiTests(APITestCase):
 
     def test_job_list_filters_results_by_categories(self):
         garden_category = Category.objects.create(name="Garden", description="Jardineria")
+        garden_service_catalog = ServiceCatalog.objects.create(
+            category=garden_category,
+            name="Garden Plan",
+            description="",
+        )
         garden_service = Service.objects.create(
-            job=self.second_organization_job,
+            organization=self.second_organization,
+            service_catalog=garden_service_catalog,
             category=garden_category,
             name="Garden Plan",
             description="",
@@ -776,8 +786,14 @@ class JobsApiTests(APITestCase):
 
     def test_job_list_combines_categories_and_search_filters(self):
         garden_category = Category.objects.create(name="Garden Plus", description="Exterior")
+        garden_service_catalog = ServiceCatalog.objects.create(
+            category=garden_category,
+            name="Garden Plan",
+            description="",
+        )
         garden_service = Service.objects.create(
-            job=self.second_organization_job,
+            organization=self.second_organization,
+            service_catalog=garden_service_catalog,
             category=garden_category,
             name="Garden Plan",
             description="",
@@ -1364,13 +1380,14 @@ class JobChatWebSocketTests(TransactionTestCase):
             billing_country="ES",
             billing_postal_code="28001",
         )
-        organization_job = OrganizationJob.objects.create(
-            organization=self.organization,
-            name="Websocket Services",
-            description="Websocket org job",
+        service_catalog = ServiceCatalog.objects.create(
+            category=self.category,
+            name="Websocket Plan",
+            description="",
         )
         service = Service.objects.create(
-            job=organization_job,
+            organization=self.organization,
+            service_catalog=service_catalog,
             category=self.category,
             name="Websocket Plan",
             description="",

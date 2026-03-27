@@ -3,36 +3,16 @@ import uuid
 from django.db import models
 
 
-class OrganizationJob(models.Model):
+class Service(models.Model):
     uuid = models.UUIDField(default=uuid.uuid4, unique=True, editable=False)
     organization = models.ForeignKey(
         "organization.Organization",
         on_delete=models.CASCADE,
-        related_name="organization_jobs",
+        related_name="services",
     )
-    name = models.CharField(max_length=120)
-    description = models.TextField(blank=True)
-    created_at = models.DateTimeField(auto_now_add=True)
-    updated_at = models.DateTimeField(auto_now=True)
-
-    class Meta:
-        constraints = [
-            models.UniqueConstraint(
-                fields=["organization", "name"],
-                name="unique_organization_job_name",
-            )
-        ]
-        ordering = ["organization_id", "name"]
-
-    def __str__(self):
-        return f"{self.organization_id}:{self.name}"
-
-
-class Service(models.Model):
-    uuid = models.UUIDField(default=uuid.uuid4, unique=True, editable=False)
-    job = models.ForeignKey(
-        "organization.OrganizationJob",
-        on_delete=models.CASCADE,
+    service_catalog = models.ForeignKey(
+        "organization.ServiceCatalog",
+        on_delete=models.PROTECT,
         related_name="services",
     )
     category = models.ForeignKey(
@@ -47,12 +27,15 @@ class Service(models.Model):
 
     class Meta:
         constraints = [
-            models.UniqueConstraint(fields=["job", "name"], name="unique_job_service_name")
+            models.UniqueConstraint(
+                fields=["organization", "service_catalog"],
+                name="unique_organization_service_catalog",
+            )
         ]
-        ordering = ["job_id", "name"]
+        ordering = ["organization_id", "name"]
 
     def __str__(self):
-        return f"{self.job_id}:{self.name}"
+        return f"{self.organization_id}:{self.name}"
 
 
 class Subservice(models.Model):

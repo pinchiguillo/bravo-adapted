@@ -35,8 +35,8 @@ class Command(BaseCommand):
 
         for organization in organizations:
             services = list(
-                Service.objects.select_related("category", "job", "job__organization")
-                .filter(job__organization=organization)
+                Service.objects.select_related("category", "organization")
+                .filter(organization=organization)
                 .order_by("id")
             )
             category = services[0].category if services else fallback_category

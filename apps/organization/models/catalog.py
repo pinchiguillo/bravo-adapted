@@ -13,3 +13,22 @@ class Category(models.Model):
 
     def __str__(self):
         return self.name
+
+
+class ServiceCatalog(models.Model):
+    uuid = models.UUIDField(default=uuid.uuid4, unique=True, editable=False)
+    category = models.ForeignKey(
+        "organization.Category",
+        on_delete=models.PROTECT,
+        related_name="service_catalogs",
+    )
+    name = models.CharField(max_length=120, unique=True)
+    description = models.TextField(blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ["name"]
+
+    def __str__(self):
+        return self.name
