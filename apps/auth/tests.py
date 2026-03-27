@@ -53,6 +53,7 @@ class AuthApiTests(APITestCase):
         self.assertFalse(response.data["email_verified"])
         self.assertNotIn("access", response.data)
         self.assertNotIn("refresh", response.data)
+        self.assertNotIn("id", response.data)
         self.assertEqual(response.data["preferencias"], {})
         self.assertEqual(response.data["permissions"], [])
 
@@ -164,6 +165,7 @@ class AuthApiTests(APITestCase):
         self.assertFalse(me_response.data["is_provider"])
         self.assertIsNone(me_response.data["provider_uuid"])
         self.assertEqual(me_response.data["permissions"], [])
+        self.assertNotIn("id", me_response.data)
 
     def test_me_returns_provider_uuid_for_provider_user(self):
         organization = Organization.objects.create(
@@ -184,6 +186,7 @@ class AuthApiTests(APITestCase):
         self.assertEqual(response.status_code, 200)
         self.assertTrue(response.data["is_provider"])
         self.assertEqual(response.data["provider_uuid"], str(organization.uuid))
+        self.assertNotIn("id", response.data)
 
     def test_me_returns_user_permissions_as_strings(self):
         permission = Permission.objects.create(
@@ -240,6 +243,7 @@ class AuthApiTests(APITestCase):
         self.assertTrue(response.data["email_verified"])
         self.assertIn("access", response.data)
         self.assertIn("refresh", response.data)
+        self.assertNotIn("id", response.data)
         self.user.refresh_from_db()
         self.assertTrue(self.user.email_verified)
 
