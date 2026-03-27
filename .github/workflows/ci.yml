@@ -6,6 +6,9 @@ on:
   push:
     branches: ["master", "develop"]
 
+permissions:
+  contents: write
+
 jobs:
   lint-and-test:
     runs-on: ubuntu-latest
@@ -13,6 +16,8 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}
 
       - name: Prepare environment
         run: cp example.env .env
@@ -89,6 +94,31 @@ jobs:
             fi
           fi
           docker compose exec -T localstack awslocal ses verify-email-identity --email-address "$sender_email" >/dev/null
+
+      - name: Run lint with autofix
+        id: lint_autofix
+        shell: bash
+        run: |
+          set +e
+          docker compose run --rm --no-deps app ruff check --fix --config .github/ruff.toml Core common apps manage.py
+          set -e
+
+          if git diff --quiet -- Core common apps manage.py; then
+            echo "changed=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "changed=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Commit ruff fixes
+        if: ${{ steps.lint_autofix.outputs.changed == 'true' && github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add Core common apps manage.py
+          git commit -m "ci: apply ruff fixes"
+          git push origin "HEAD:${{ github.event.pull_request.head.ref }}"
 
       - name: Run lint
         run: docker compose run --rm --no-deps app ruff check --config .github/ruff.toml Core common apps manage.py
