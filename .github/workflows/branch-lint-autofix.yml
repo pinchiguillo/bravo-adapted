@@ -1,0 +1,61 @@
+name: Branch Lint Autofix
+
+on:
+  push:
+    branches-ignore:
+      - main
+      - master
+      - develop
+    paths:
+      - "Core/**"
+      - "common/**"
+      - "apps/**"
+      - "manage.py"
+      - "requirements.txt"
+      - "Dockerfile"
+      - "compose.yml"
+      - ".github/ruff.toml"
+      - ".github/workflows/branch-lint-autofix.yml"
+
+permissions:
+  contents: write
+
+concurrency:
+  group: branch-lint-autofix-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  lint-autofix:
+    if: github.actor != 'github-actions[bot]' && !contains(github.event.head_commit.message, 'ci: apply ruff fixes')
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Prepare environment
+        run: cp example.env .env
+
+      - name: Build app image
+        run: docker compose build app
+
+      - name: Run ruff with autofix
+        run: docker compose run --rm --no-deps app ruff check --fix --config .github/ruff.toml Core common apps manage.py
+
+      - name: Commit lint fixes
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          if git diff --quiet -- Core common apps manage.py; then
+            echo "No lint fixes to commit"
+            exit 0
+          fi
+
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add Core common apps manage.py
+          git commit -m "ci: apply ruff fixes"
+          git push origin "HEAD:${GITHUB_REF_NAME}"
