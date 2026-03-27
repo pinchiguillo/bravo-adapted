@@ -45,6 +45,15 @@ class SettingsEnvHelpersTests(SimpleTestCase):
                 )
             )
 
+    def test_bypass_admin_login_defaults_to_false_in_development(self):
+        with patch.dict("os.environ", {"APP_MODE": "development"}, clear=True):
+            self.assertFalse(
+                core_settings.env_bool(
+                    "BYPASS_ADMIN_LOGIN",
+                    default=False,
+                )
+            )
+
     def test_disable_in_production_bool_forces_false_in_production(self):
         with patch.object(core_settings, "IS_PRODUCTION", True):
             self.assertFalse(core_settings.disable_in_production_bool(True))
