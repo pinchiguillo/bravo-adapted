@@ -13,8 +13,8 @@ from apps.organization.models import (
     AnnouncementReview,
     Category,
     Organization,
-    OrganizationJob,
     Service,
+    ServiceCatalog,
     ServicePrice,
     Subservice,
 )
@@ -406,21 +406,23 @@ class Command(BaseCommand):
             organizations_by_name[organization.name] = organization
             if created:
                 counters["organizations"] += 1
-            organization_job, organization_job_created = OrganizationJob.objects.update_or_create(
-                organization=organization,
-                name=f"{organization.name} services",
-                defaults={"description": f"Default organization job for {organization.name}."},
-            )
-            if organization_job_created:
-                counters.setdefault("organization_jobs", 0)
-                counters["organization_jobs"] += 1
-
             for service_data in organization_data["services"]:
                 service_category = categories_by_name[service_data["category"]]
-                service, service_created = Service.objects.update_or_create(
-                    job=organization_job,
+                service_catalog, service_catalog_created = ServiceCatalog.objects.update_or_create(
                     name=service_data["name"],
                     defaults={
+                        "category": service_category,
+                        "description": service_data["description"],
+                    },
+                )
+                if service_catalog_created:
+                    counters.setdefault("service_catalogs", 0)
+                    counters["service_catalogs"] += 1
+                service, service_created = Service.objects.update_or_create(
+                    organization=organization,
+                    service_catalog=service_catalog,
+                    defaults={
+                        "name": service_data["name"],
                         "category": service_category,
                         "description": service_data["description"],
                     },
@@ -467,7 +469,7 @@ class Command(BaseCommand):
                     },
                 )
                 announcement.services.set(
-                    organization_job.services.filter(name__in=announcement_data["service_names"])
+                    organization.services.filter(name__in=announcement_data["service_names"])
                 )
                 if announcement_created:
                     counters["announcements"] += 1
@@ -485,8 +487,8 @@ class Command(BaseCommand):
         for job_data in JOBS:
             user = users_by_email[job_data["user_email"]]
             organization = organizations_by_name[job_data["organization_name"]]
-            service = Service.objects.select_related("job", "job__organization").get(
-                job__organization=organization,
+            service = Service.objects.select_related("organization").get(
+                organization=organization,
                 name=job_data["service_name"],
             )
             announcement = organization.announcements.filter(services=service).order_by("id").first()
