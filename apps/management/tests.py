@@ -40,6 +40,7 @@ else:
     JobChatMessage = None
 
 
+@skipUnless(JOBS_INSTALLED, "jobs app disabled")
 class ManagementApiTests(APITestCase):
     def setUp(self):
         user_model = get_user_model()
@@ -493,6 +494,7 @@ class FeatureFlagHelperTests(APITestCase):
         self.assertTrue(is_feature_enabled("job_chat_uploads"))
 
 
+@skipUnless(JOBS_INSTALLED, "jobs app disabled")
 @override_settings(
     STORAGES={
         "default": {"BACKEND": "django.core.files.storage.FileSystemStorage"},
@@ -514,6 +516,7 @@ class SeedDemoDataCommandJobChatDisabledTests(APITestCase):
         self.assertIn("job_chat_attachments=0", out.getvalue())
 
 
+@skipUnless(JOBS_INSTALLED, "jobs app disabled")
 @skipUnless(JOB_CHAT_INSTALLED, "job_chat app disabled")
 @override_settings(
     STORAGES={

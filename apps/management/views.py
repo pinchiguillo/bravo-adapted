@@ -19,6 +19,7 @@ from .serializers import (
 
 if apps.is_installed("apps.jobs"):
     from apps.jobs.models import Job
+
     from .serializers import ManagementJobSerializer
 
 
