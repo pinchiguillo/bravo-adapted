@@ -1,25 +1,18 @@
-import asyncio
 from datetime import date
 from unittest import skipUnless
 from unittest.mock import patch
 
-from asgiref.sync import async_to_sync
-from channels.routing import URLRouter
-from channels.security.websocket import AllowedHostsOriginValidator
-from channels.testing import WebsocketCommunicator
 from django.apps import apps as django_apps
 from django.contrib.auth import get_user_model
 from django.contrib.auth.models import AnonymousUser
 from django.contrib.sessions.middleware import SessionMiddleware
 from django.core.cache import cache
-from django.db import connections, transaction
 from django.db.utils import IntegrityError
-from django.test import RequestFactory, SimpleTestCase, TransactionTestCase, override_settings
+from django.test import RequestFactory, SimpleTestCase, override_settings
 from django.urls import NoReverseMatch, reverse
 from rest_framework import status
 from rest_framework.test import APITestCase
 from rest_framework.throttling import SimpleRateThrottle
-from rest_framework_simplejwt.tokens import RefreshToken
 
 from .middleware import AnnouncementViewCountMiddleware
 from .models import (
@@ -32,13 +25,11 @@ from .models import (
     ServicePrice,
     Subservice,
 )
-from .routing import websocket_urlpatterns
 from .views import OrganizationViewSet
 
 JOBS_INSTALLED = django_apps.is_installed("apps.jobs")
 
 if JOBS_INSTALLED:
-    from apps.job_chat.ws_auth import JWTAuthMiddlewareStack
     from apps.jobs.models import Job
 
 
@@ -309,12 +300,115 @@ class OrganizationApiTests(APITestCase):
         self.assertEqual(len(response.data["results"]), 1)
         self.assertEqual(response.data["results"][0]["uuid"], str(self.organization.uuid))
 
+    def test_organization_search_only_allows_get(self):
+        self.client.force_authenticate(user=self.admin_user)
+
+        response = self.client.post(reverse("organization-search"), {"search": "Acm"}, format="json")
+
+        self.assertEqual(response.status_code, status.HTTP_405_METHOD_NOT_ALLOWED)
+
     def test_organization_root_get_is_not_available_as_list(self):
         self.client.force_authenticate(user=self.admin_user)
 
         response = self.client.get(reverse("organization-list"))
 
         self.assertEqual(response.status_code, status.HTTP_405_METHOD_NOT_ALLOWED)
+
+    def test_category_list_is_public_and_read_only(self):
+        response = self.client.get(reverse("organization-category-list"))
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        returned_uuids = {item["uuid"] for item in response.data["results"]}
+        self.assertGreaterEqual(response.data["count"], 2)
+        self.assertTrue({str(self.category.uuid), str(self.other_category.uuid)}.issubset(returned_uuids))
+
+    def test_category_detail_route_does_not_exist(self):
+        with self.assertRaises(NoReverseMatch):
+            reverse("organization-category-detail", kwargs={"uuid": self.category.uuid})
+
+    def test_category_services_list_is_public(self):
+        response = self.client.get(
+            reverse("category-service-list", kwargs={"category_uuid": self.category.uuid})
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.data["count"], 1)
+        self.assertEqual(response.data["results"][0]["uuid"], str(self.owner_service.uuid))
+        self.assertEqual(
+            response.data["results"][0]["subservices"][0]["uuid"],
+            str(self.owner_subservice.uuid),
+        )
+        self.assertEqual(
+            response.data["results"][0]["subservices"][0]["service_prices"][0]["uuid"],
+            str(self.owner_service_price.uuid),
+        )
+
+    def test_category_services_list_is_paginated(self):
+        Service.objects.create(
+            job=self.owner_organization_job,
+            category=self.category,
+            name="Second Category Service",
+            description="Second category service",
+        )
+
+        response = self.client.get(
+            reverse("category-service-list", kwargs={"category_uuid": self.category.uuid}),
+            {"page_size": 1},
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.data["count"], 2)
+        self.assertEqual(len(response.data["results"]), 1)
+        self.assertIsNotNone(response.data["next"])
+
+    def test_category_services_list_hides_services_from_unapproved_organizations(self):
+        hidden_owner = get_user_model().objects.create_user(
+            username="hidden-category-owner",
+            email="hidden-category-owner@example.com",
+            password="testpass123",
+        )
+        hidden_organization = Organization.objects.create(
+            user=hidden_owner,
+            name="Hidden Org",
+            legal_name="Hidden Org SL",
+            tax_id="H123",
+            billing_email="billing@hidden.example.com",
+            billing_address="Hidden 1",
+            billing_city="Madrid",
+            billing_country="ES",
+            billing_postal_code="28001",
+            is_approved=False,
+        )
+        hidden_job = OrganizationJob.objects.create(
+            organization=hidden_organization,
+            name="Hidden Job",
+            description="",
+        )
+        hidden_service = Service.objects.create(
+            job=hidden_job,
+            category=self.category,
+            name="Hidden Service",
+            description="Should not be visible",
+        )
+
+        response = self.client.get(
+            reverse("category-service-list", kwargs={"category_uuid": self.category.uuid})
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        returned_uuids = {item["uuid"] for item in response.data["results"]}
+        self.assertIn(str(self.owner_service.uuid), returned_uuids)
+        self.assertNotIn(str(hidden_service.uuid), returned_uuids)
+
+    def test_category_services_list_returns_404_for_unknown_category(self):
+        response = self.client.get(
+            reverse(
+                "category-service-list",
+                kwargs={"category_uuid": "00000000-0000-0000-0000-000000000000"},
+            )
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_404_NOT_FOUND)
 
     def test_organization_search_lists_organizations_for_admin(self):
         self.client.force_authenticate(user=self.admin_user)
@@ -473,479 +567,65 @@ class OrganizationApiTests(APITestCase):
         self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
         self.assertTrue(Organization.objects.filter(uuid=self.organization.uuid).exists())
 
-    def test_organization_jobs_list_is_public(self):
-        response = self.client.get(
-            reverse("organization-job-list", kwargs={"organization_uuid": self.organization.uuid})
-        )
-
-        self.assertEqual(response.status_code, status.HTTP_200_OK)
-        self.assertEqual(response.data["count"], 1)
-        self.assertEqual(response.data["results"][0]["uuid"], str(self.owner_organization_job.uuid))
-
-    def test_public_job_list_hides_unapproved_organization(self):
-        self.organization.is_approved = False
-        self.organization.save(update_fields=["is_approved"])
-
-        response = self.client.get(
-            reverse("organization-job-list", kwargs={"organization_uuid": self.organization.uuid})
-        )
-
-        self.assertEqual(response.status_code, status.HTTP_404_NOT_FOUND)
-
-    def test_organization_job_crud_for_owner(self):
-        self.client.force_authenticate(user=self.owner)
-
-        create_response = self.client.post(
-            reverse("organization-job-list", kwargs={"organization_uuid": self.organization.uuid}),
-            {"name": "Repairs", "description": "Repair services"},
-            format="json",
-        )
-
-        self.assertEqual(create_response.status_code, status.HTTP_201_CREATED)
-        created_job_uuid = create_response.data["uuid"]
-        self.assertEqual(create_response.data["organization"], str(self.organization.uuid))
-
-        update_response = self.client.patch(
-            reverse(
-                "organization-job-detail",
-                kwargs={
-                    "organization_uuid": self.organization.uuid,
-                    "job_uuid": created_job_uuid,
-                },
-            ),
-            {"name": "Repairs Updated"},
-            format="json",
-        )
-
-        self.assertEqual(update_response.status_code, status.HTTP_200_OK)
-        self.assertEqual(update_response.data["name"], "Repairs Updated")
-
-        delete_response = self.client.delete(
-            reverse(
-                "organization-job-detail",
-                kwargs={
-                    "organization_uuid": self.organization.uuid,
-                    "job_uuid": created_job_uuid,
-                },
-            )
-        )
-
-        self.assertEqual(delete_response.status_code, status.HTTP_204_NO_CONTENT)
-        self.assertFalse(OrganizationJob.objects.filter(uuid=created_job_uuid).exists())
-
-    def test_unapproved_organization_cannot_create_job(self):
-        self.organization.is_approved = False
-        self.organization.save(update_fields=["is_approved"])
-        self.client.force_authenticate(user=self.owner)
-
-        response = self.client.post(
-            reverse("organization-job-list", kwargs={"organization_uuid": self.organization.uuid}),
-            {"name": "Repairs", "description": "Repair services"},
-            format="json",
-        )
-
-        self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
-        self.assertEqual(response.data["detail"], "Organization must be approved for this action.")
-
-    def test_services_list_is_public(self):
-        response = self.client.get(
-            reverse(
-                "organization-service-list",
-                kwargs={
-                    "organization_uuid": self.organization.uuid,
-                    "job_uuid": self.owner_organization_job.uuid,
-                },
-            )
-        )
-
-        self.assertEqual(response.status_code, status.HTTP_200_OK)
-
-    def test_services_list_is_public_and_returns_services_for_requested_organization(self):
-        response = self.client.get(
-            reverse(
-                "organization-service-list",
-                kwargs={
-                    "organization_uuid": self.organization.uuid,
-                    "job_uuid": self.owner_organization_job.uuid,
-                },
-            )
-        )
-
-        self.assertEqual(response.status_code, status.HTTP_200_OK)
-        self.assertEqual(response.data["count"], 1)
-        returned_uuids = {item["uuid"] for item in response.data["results"]}
-        self.assertEqual(returned_uuids, {str(self.owner_service.uuid)})
-
-    def test_services_list_is_paginated(self):
-        Service.objects.create(
-            job=self.owner_organization_job,
-            category=self.category,
-            name="Second Owner Plan",
-            description="Second service",
-        )
-
-        response = self.client.get(
-            reverse(
-                "organization-service-list",
-                kwargs={
-                    "organization_uuid": self.organization.uuid,
-                    "job_uuid": self.owner_organization_job.uuid,
-                },
-            ),
-            {"page_size": 1},
-        )
-
-        self.assertEqual(response.status_code, status.HTTP_200_OK)
-        self.assertEqual(response.data["count"], 2)
-        self.assertEqual(len(response.data["results"]), 1)
-        self.assertIsNotNone(response.data["next"])
-
-    def test_service_retrieve_is_public_by_uuid(self):
-        response = self.client.get(
-            reverse(
-                "organization-service-detail",
-                kwargs={
-                    "organization_uuid": self.organization.uuid,
-                    "job_uuid": self.owner_organization_job.uuid,
-                    "service_uuid": self.owner_service.uuid,
-                },
-            )
-        )
-
-        self.assertEqual(response.status_code, status.HTTP_200_OK)
-        self.assertEqual(response.data["uuid"], str(self.owner_service.uuid))
-        self.assertEqual(response.data["job"], str(self.owner_organization_job.uuid))
-        self.assertEqual(response.data["category"], str(self.category.uuid))
-        self.assertNotIn("id", response.data)
-
-    def test_public_service_retrieve_hides_unapproved_organization(self):
-        self.organization.is_approved = False
-        self.organization.save(update_fields=["is_approved"])
-
-        response = self.client.get(
-            reverse(
-                "organization-service-detail",
-                kwargs={
-                    "organization_uuid": self.organization.uuid,
-                    "job_uuid": self.owner_organization_job.uuid,
-                    "service_uuid": self.owner_service.uuid,
-                },
-            )
-        )
-
-        self.assertEqual(response.status_code, status.HTTP_404_NOT_FOUND)
-
-    def test_service_crud_for_organization_owner(self):
-        self.client.force_authenticate(user=self.owner)
-
-        create_response = self.client.post(
-            reverse(
-                "organization-service-list",
-                kwargs={
-                    "organization_uuid": self.organization.uuid,
-                    "job_uuid": self.owner_organization_job.uuid,
-                },
-            ),
-            {
-                "category": str(self.category.uuid),
-                "name": "New Service",
-                "description": "Created via API",
-            },
-            format="json",
-        )
-        self.assertEqual(create_response.status_code, status.HTTP_201_CREATED)
-        created_service_uuid = create_response.data["uuid"]
-        self.assertEqual(create_response.data["organization"], str(self.organization.uuid))
-        self.assertEqual(create_response.data["job"], str(self.owner_organization_job.uuid))
-        self.assertEqual(create_response.data["category"], str(self.category.uuid))
-        self.assertNotIn("id", create_response.data)
-
-        update_response = self.client.patch(
-            reverse(
-                "organization-service-detail",
-                kwargs={
-                    "organization_uuid": self.organization.uuid,
-                    "job_uuid": self.owner_organization_job.uuid,
-                    "service_uuid": created_service_uuid,
-                },
-            ),
-            {"name": "Renamed Service"},
-            format="json",
-        )
-        self.assertEqual(update_response.status_code, status.HTTP_200_OK)
-        self.assertEqual(update_response.data["name"], "Renamed Service")
-
-        delete_response = self.client.delete(
-            reverse(
-                "organization-service-detail",
-                kwargs={
-                    "organization_uuid": self.organization.uuid,
-                    "job_uuid": self.owner_organization_job.uuid,
-                    "service_uuid": created_service_uuid,
-                },
-            )
-        )
-        self.assertEqual(delete_response.status_code, status.HTTP_204_NO_CONTENT)
-        self.assertFalse(Service.objects.filter(uuid=created_service_uuid).exists())
-
-    def test_unapproved_organization_cannot_create_service(self):
-        self.organization.is_approved = False
-        self.organization.save(update_fields=["is_approved"])
-        self.client.force_authenticate(user=self.owner)
-
-        response = self.client.post(
-            reverse(
-                "organization-service-list",
-                kwargs={
-                    "organization_uuid": self.organization.uuid,
-                    "job_uuid": self.owner_organization_job.uuid,
-                },
-            ),
-            {
-                "category": str(self.category.uuid),
-                "name": "Blocked Service",
-                "description": "Created via API",
-            },
-            format="json",
-        )
-
-        self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
-        self.assertEqual(response.data["detail"], "Organization must be approved for this action.")
-
-    @override_settings(BYPASS_ORGANIZATION_VALIDATION=True)
-    def test_bypass_organization_validation_allows_service_creation_for_unapproved_organization(self):
-        self.organization.is_approved = False
-        self.organization.save(update_fields=["is_approved"])
-        self.client.force_authenticate(user=self.owner)
-
-        response = self.client.post(
-            reverse(
-                "organization-service-list",
-                kwargs={
-                    "organization_uuid": self.organization.uuid,
-                    "job_uuid": self.owner_organization_job.uuid,
-                },
-            ),
-            {
-                "category": str(self.category.uuid),
-                "name": "Bypassed Service",
-                "description": "Created via bypass",
-            },
-            format="json",
-        )
-
-        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
-        self.assertTrue(response.data["organization"])
-
-    def test_non_owner_cannot_update_service(self):
-        self.client.force_authenticate(user=self.other_owner)
-        response = self.client.patch(
-            reverse(
-                "organization-service-detail",
-                kwargs={
-                    "organization_uuid": self.organization.uuid,
-                    "job_uuid": self.owner_organization_job.uuid,
-                    "service_uuid": self.owner_service.uuid,
-                },
-            ),
-            {"name": "Hijacked"},
-            format="json",
-        )
-
-        self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
-        self.owner_service.refresh_from_db()
-        self.assertEqual(self.owner_service.name, "Owner Plan")
-
-    def test_non_owner_cannot_delete_service(self):
-        self.client.force_authenticate(user=self.other_owner)
-        response = self.client.delete(
-            reverse(
-                "organization-service-detail",
-                kwargs={
-                    "organization_uuid": self.organization.uuid,
-                    "job_uuid": self.owner_organization_job.uuid,
-                    "service_uuid": self.owner_service.uuid,
-                },
-            )
-        )
-
-        self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
-        self.assertTrue(Service.objects.filter(uuid=self.owner_service.uuid).exists())
-
-    def test_create_service_fails_when_organization_in_url_is_not_owned_by_user(self):
-        self.client.force_authenticate(user=self.user_without_organization)
-        response = self.client.post(
-            reverse(
-                "organization-service-list",
-                kwargs={
-                    "organization_uuid": self.organization.uuid,
-                    "job_uuid": self.owner_organization_job.uuid,
-                },
-            ),
-            {"category": str(self.category.uuid), "name": "Invalid Service", "description": ""},
-            format="json",
-        )
-
-        self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
-        self.assertEqual(response.data["detail"], "Organization does not belong to the authenticated user.")
-
-    def test_create_subservice_fails_for_foreign_service(self):
-        self.client.force_authenticate(user=self.owner)
-        initial_count = Subservice.objects.count()
-        response = self.client.post(
-            reverse(
-                "organization-subservice-list",
-                kwargs={
-                    "organization_uuid": self.other_organization.uuid,
-                    "job_uuid": self.other_organization_job.uuid,
-                    "service_uuid": self.other_service.uuid,
-                },
-            ),
-            {
-                "service": str(self.other_service.uuid),
-                "name": "Illegal subservice",
-                "description": "Should fail by ownership",
-            },
-            format="json",
-        )
-
-        self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
-        self.assertEqual(Subservice.objects.count(), initial_count)
-
-    def test_unapproved_organization_cannot_create_subservice(self):
-        self.organization.is_approved = False
-        self.organization.save(update_fields=["is_approved"])
-        self.client.force_authenticate(user=self.owner)
-        initial_count = Subservice.objects.count()
-
-        response = self.client.post(
-            reverse(
-                "organization-subservice-list",
-                kwargs={
-                    "organization_uuid": self.organization.uuid,
-                    "job_uuid": self.owner_organization_job.uuid,
-                    "service_uuid": self.owner_service.uuid,
-                },
-            ),
-            {
-                "service": str(self.owner_service.uuid),
-                "name": "Blocked subservice",
-                "description": "Should fail by approval",
-            },
-            format="json",
-        )
-
-        self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
-        self.assertEqual(response.data["detail"], "Organization must be approved for this action.")
-        self.assertEqual(Subservice.objects.count(), initial_count)
-
-    def test_subservice_list_filters_by_service_uuid_in_path(self):
-        self.client.force_authenticate(user=self.owner)
-        second_service = Service.objects.create(
-            job=self.owner_organization_job,
-            category=self.category,
-            name="Second Service",
-            description="Another owner service",
-        )
-        matching = Subservice.objects.create(
-            service=self.owner_service,
-            name="Matching",
-            description="Visible subservice",
-        )
-        Subservice.objects.create(
-            service=second_service,
-            name="Non Matching",
-            description="Should be excluded",
-        )
-
-        response = self.client.get(
-            reverse(
-                "organization-subservice-list",
-                kwargs={
-                    "organization_uuid": self.organization.uuid,
-                    "job_uuid": self.owner_organization_job.uuid,
-                    "service_uuid": self.owner_service.uuid,
-                },
-            ),
-        )
-
-        self.assertEqual(response.status_code, status.HTTP_200_OK)
-        self.assertEqual(response.data["count"], 2)
-        returned_items = {item["uuid"]: item for item in response.data["results"]}
-        self.assertEqual(set(returned_items), {str(self.owner_subservice.uuid), str(matching.uuid)})
-        self.assertEqual(str(returned_items[str(matching.uuid)]["service"]), str(self.owner_service.uuid))
+    def test_private_service_price_endpoints_exist(self):
         self.assertEqual(
-            returned_items[str(self.owner_subservice.uuid)]["service_prices"],
-            [
-                {
-                    "uuid": str(self.owner_service_price.uuid),
-                    "amount": "49.99",
-                    "currency": "EUR",
-                    "charging_type": ServicePrice.ChargingType.PER_PROJECT,
-                    "effective_from": "2026-01-01",
-                    "effective_to": None,
-                    "created_at": self.owner_service_price.created_at.isoformat().replace("+00:00", "Z"),
-                    "updated_at": self.owner_service_price.updated_at.isoformat().replace("+00:00", "Z"),
-                }
-            ],
-        )
-
-    def test_subservice_retrieve_uses_nested_organization_and_service_uuids(self):
-        self.client.force_authenticate(user=self.owner)
-
-        response = self.client.get(
             reverse(
-                "organization-subservice-detail",
+                "organization-service-price-list",
                 kwargs={
                     "organization_uuid": self.organization.uuid,
                     "job_uuid": self.owner_organization_job.uuid,
                     "service_uuid": self.owner_service.uuid,
-                    "uuid": self.owner_subservice.uuid,
+                    "subservice_uuid": self.owner_subservice.uuid,
                 },
             ),
+            (
+                f"/api/organizations/{self.organization.uuid}/jobs/{self.owner_organization_job.uuid}"
+                f"/services/{self.owner_service.uuid}/subservices/{self.owner_subservice.uuid}/prices/"
+            ),
         )
-
-        self.assertEqual(response.status_code, status.HTTP_200_OK)
-        self.assertEqual(response.data["uuid"], str(self.owner_subservice.uuid))
         self.assertEqual(
-            response.data["service_prices"],
-            [
-                {
-                    "uuid": str(self.owner_service_price.uuid),
-                    "amount": "49.99",
-                    "currency": "EUR",
-                    "charging_type": ServicePrice.ChargingType.PER_PROJECT,
-                    "effective_from": "2026-01-01",
-                    "effective_to": None,
-                    "created_at": self.owner_service_price.created_at.isoformat().replace("+00:00", "Z"),
-                    "updated_at": self.owner_service_price.updated_at.isoformat().replace("+00:00", "Z"),
-                }
-            ],
-        )
-
-    def test_subservice_nested_path_rejects_mismatched_organization_and_service(self):
-        self.client.force_authenticate(user=self.owner)
-
-        response = self.client.get(
             reverse(
-                "organization-subservice-detail",
+                "organization-service-price-detail",
                 kwargs={
                     "organization_uuid": self.organization.uuid,
-                    "job_uuid": self.other_organization_job.uuid,
-                    "service_uuid": self.other_service.uuid,
-                    "uuid": self.other_subservice.uuid,
+                    "job_uuid": self.owner_organization_job.uuid,
+                    "service_uuid": self.owner_service.uuid,
+                    "subservice_uuid": self.owner_subservice.uuid,
+                    "price_uuid": self.owner_service_price.uuid,
                 },
+            ),
+            (
+                f"/api/organizations/{self.organization.uuid}/jobs/{self.owner_organization_job.uuid}"
+                f"/services/{self.owner_service.uuid}/subservices/{self.owner_subservice.uuid}"
+                f"/prices/{self.owner_service_price.uuid}/"
             ),
         )
 
-        self.assertEqual(response.status_code, status.HTTP_404_NOT_FOUND)
-
-    def test_service_price_endpoints_do_not_exist(self):
-        with self.assertRaises(NoReverseMatch):
-            reverse("organization-service-price-list")
-
-        with self.assertRaises(NoReverseMatch):
-            reverse("organization-service-price-detail", kwargs={"uuid": self.owner_service_price.uuid})
+    def test_public_nested_subservice_and_price_endpoints_exist(self):
+        self.assertEqual(
+            reverse(
+                "public-subservice-list",
+                kwargs={
+                    "organization_uuid": self.organization.uuid,
+                    "service_uuid": self.owner_service.uuid,
+                },
+            ),
+            f"/api/organizations/{self.organization.uuid}/services/{self.owner_service.uuid}/subservices/",
+        )
+        self.assertEqual(
+            reverse(
+                "public-service-price-list",
+                kwargs={
+                    "organization_uuid": self.organization.uuid,
+                    "service_uuid": self.owner_service.uuid,
+                    "subservice_uuid": self.owner_subservice.uuid,
+                },
+            ),
+            (
+                f"/api/organizations/{self.organization.uuid}/services/{self.owner_service.uuid}"
+                f"/subservices/{self.owner_subservice.uuid}/prices/"
+            ),
+        )
 
     def test_organization_public_retrieve_is_throttled(self):
         cache.clear()
@@ -1148,6 +828,137 @@ class OrganizationApiTests(APITestCase):
             [str(newest.uuid), str(older.uuid), str(self.announcement.uuid)],
         )
 
+    def test_public_announcement_detail_is_available_by_organization_and_uuid(self):
+        response = self.client.get(
+            reverse(
+                "public-announcement-detail",
+                kwargs={
+                    "organization_uuid": self.organization.uuid,
+                    "uuid": self.announcement.uuid,
+                },
+            )
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.data["uuid"], str(self.announcement.uuid))
+        self.assertEqual(response.data["organization"], str(self.organization.uuid))
+        self.assertEqual(response.data["services"][0]["uuid"], str(self.owner_service.uuid))
+        self.assertEqual(
+            response.data["services"][0]["subservices"][0]["uuid"],
+            str(self.owner_subservice.uuid),
+        )
+        self.assertEqual(
+            response.data["services"][0]["subservices"][0]["service_prices"][0]["uuid"],
+            str(self.owner_service_price.uuid),
+        )
+
+    def test_public_announcement_detail_hides_unapproved_organization(self):
+        self.organization.is_approved = False
+        self.organization.save(update_fields=["is_approved"])
+
+        response = self.client.get(
+            reverse(
+                "public-announcement-detail",
+                kwargs={
+                    "organization_uuid": self.organization.uuid,
+                    "uuid": self.announcement.uuid,
+                },
+            )
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_404_NOT_FOUND)
+
+    def test_public_subservice_list_is_available_by_organization_and_service(self):
+        response = self.client.get(
+            reverse(
+                "public-subservice-list",
+                kwargs={
+                    "organization_uuid": self.organization.uuid,
+                    "service_uuid": self.owner_service.uuid,
+                },
+            )
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.data["count"], 1)
+        self.assertEqual(response.data["results"][0]["uuid"], str(self.owner_subservice.uuid))
+
+    def test_public_subservice_retrieve_is_available_by_nested_uuids(self):
+        response = self.client.get(
+            reverse(
+                "public-subservice-detail",
+                kwargs={
+                    "organization_uuid": self.organization.uuid,
+                    "service_uuid": self.owner_service.uuid,
+                    "subservice_uuid": self.owner_subservice.uuid,
+                },
+            )
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.data["uuid"], str(self.owner_subservice.uuid))
+        self.assertEqual(str(response.data["service"]), str(self.owner_service.uuid))
+
+    def test_public_service_price_list_is_available_by_nested_uuids(self):
+        response = self.client.get(
+            reverse(
+                "public-service-price-list",
+                kwargs={
+                    "organization_uuid": self.organization.uuid,
+                    "service_uuid": self.owner_service.uuid,
+                    "subservice_uuid": self.owner_subservice.uuid,
+                },
+            )
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.data["count"], 1)
+        self.assertEqual(response.data["results"][0]["uuid"], str(self.owner_service_price.uuid))
+
+    def test_public_service_price_retrieve_is_available_by_nested_uuids(self):
+        response = self.client.get(
+            reverse(
+                "public-service-price-detail",
+                kwargs={
+                    "organization_uuid": self.organization.uuid,
+                    "service_uuid": self.owner_service.uuid,
+                    "subservice_uuid": self.owner_subservice.uuid,
+                    "price_uuid": self.owner_service_price.uuid,
+                },
+            )
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.data["uuid"], str(self.owner_service_price.uuid))
+        self.assertEqual(response.data["subservice"], str(self.owner_subservice.uuid))
+
+    def test_public_subservices_and_prices_hide_unapproved_organization(self):
+        self.organization.is_approved = False
+        self.organization.save(update_fields=["is_approved"])
+
+        subservice_response = self.client.get(
+            reverse(
+                "public-subservice-list",
+                kwargs={
+                    "organization_uuid": self.organization.uuid,
+                    "service_uuid": self.owner_service.uuid,
+                },
+            )
+        )
+        price_response = self.client.get(
+            reverse(
+                "public-service-price-list",
+                kwargs={
+                    "organization_uuid": self.organization.uuid,
+                    "service_uuid": self.owner_service.uuid,
+                    "subservice_uuid": self.owner_subservice.uuid,
+                },
+            )
+        )
+
+        self.assertEqual(subservice_response.status_code, status.HTTP_404_NOT_FOUND)
+        self.assertEqual(price_response.status_code, status.HTTP_404_NOT_FOUND)
+
     def test_public_announcement_route_is_not_available_under_organizations_prefix(self):
         response = self.client.get("/api/organizations/announcements/")
 
@@ -1262,7 +1073,17 @@ class OrganizationApiTests(APITestCase):
         self.assertEqual(created.organization, self.organization)
         self.assertEqual(response.data["organization"], str(self.organization.uuid))
         self.assertEqual(response.data["category"], str(self.category.uuid))
-        self.assertEqual(response.data["services"], [str(self.owner_service.uuid)])
+        self.assertEqual(len(response.data["services"]), 1)
+        self.assertEqual(response.data["services"][0]["uuid"], str(self.owner_service.uuid))
+        self.assertEqual(len(response.data["services"][0]["subservices"]), 1)
+        self.assertEqual(
+            response.data["services"][0]["subservices"][0]["uuid"],
+            str(self.owner_subservice.uuid),
+        )
+        self.assertEqual(
+            response.data["services"][0]["subservices"][0]["service_prices"][0]["uuid"],
+            str(self.owner_service_price.uuid),
+        )
         self.assertEqual(response.data["view_count"], 0)
         self.assertNotIn("review", response.data)
 
@@ -1318,6 +1139,151 @@ class OrganizationApiTests(APITestCase):
             response.data["services"][0],
             "Services must belong to the organization in the URL.",
         )
+
+    def test_organization_owner_can_manage_service_prices(self):
+        self.client.force_authenticate(user=self.owner)
+        list_url = reverse(
+            "organization-service-price-list",
+            kwargs={
+                "organization_uuid": self.organization.uuid,
+                "job_uuid": self.owner_organization_job.uuid,
+                "service_uuid": self.owner_service.uuid,
+                "subservice_uuid": self.owner_subservice.uuid,
+            },
+        )
+
+        list_response = self.client.get(list_url)
+        create_response = self.client.post(
+            list_url,
+            {
+                "subservice": str(self.owner_subservice.uuid),
+                "amount": "79.99",
+                "currency": "EUR",
+                "charging_type": ServicePrice.ChargingType.PER_HOUR,
+                "effective_from": "2026-02-01",
+            },
+            format="json",
+        )
+
+        created_uuid = create_response.data["uuid"]
+        detail_url = reverse(
+            "organization-service-price-detail",
+            kwargs={
+                "organization_uuid": self.organization.uuid,
+                "job_uuid": self.owner_organization_job.uuid,
+                "service_uuid": self.owner_service.uuid,
+                "subservice_uuid": self.owner_subservice.uuid,
+                "price_uuid": created_uuid,
+            },
+        )
+        update_response = self.client.patch(
+            detail_url,
+            {"amount": "89.99"},
+            format="json",
+        )
+        delete_response = self.client.delete(detail_url)
+
+        self.assertEqual(list_response.status_code, status.HTTP_200_OK)
+        self.assertEqual(list_response.data["count"], 1)
+        self.assertEqual(create_response.status_code, status.HTTP_201_CREATED)
+        self.assertEqual(create_response.data["amount"], "79.99")
+        self.assertEqual(update_response.status_code, status.HTTP_200_OK)
+        self.assertEqual(update_response.data["amount"], "89.99")
+        self.assertEqual(delete_response.status_code, status.HTTP_204_NO_CONTENT)
+        self.assertFalse(ServicePrice.objects.filter(uuid=created_uuid).exists())
+
+    def test_service_price_create_rejects_subservice_from_another_organization(self):
+        self.client.force_authenticate(user=self.owner)
+
+        response = self.client.post(
+            reverse(
+                "organization-service-price-list",
+                kwargs={
+                    "organization_uuid": self.organization.uuid,
+                    "job_uuid": self.owner_organization_job.uuid,
+                    "service_uuid": self.owner_service.uuid,
+                    "subservice_uuid": self.owner_subservice.uuid,
+                },
+            ),
+            {
+                "subservice": str(self.other_subservice.uuid),
+                "amount": "79.99",
+                "currency": "EUR",
+                "charging_type": ServicePrice.ChargingType.PER_PROJECT,
+                "effective_from": "2026-02-01",
+            },
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertEqual(
+            response.data["subservice"],
+            "Subservice must match the subservice in the URL.",
+        )
+
+    def test_non_owner_cannot_access_private_service_price_endpoints(self):
+        self.client.force_authenticate(user=self.other_owner)
+        list_url = reverse(
+            "organization-service-price-list",
+            kwargs={
+                "organization_uuid": self.organization.uuid,
+                "job_uuid": self.owner_organization_job.uuid,
+                "service_uuid": self.owner_service.uuid,
+                "subservice_uuid": self.owner_subservice.uuid,
+            },
+        )
+        detail_url = reverse(
+            "organization-service-price-detail",
+            kwargs={
+                "organization_uuid": self.organization.uuid,
+                "job_uuid": self.owner_organization_job.uuid,
+                "service_uuid": self.owner_service.uuid,
+                "subservice_uuid": self.owner_subservice.uuid,
+                "price_uuid": self.owner_service_price.uuid,
+            },
+        )
+
+        list_response = self.client.get(list_url)
+        update_response = self.client.patch(
+            detail_url,
+            {"amount": "59.99"},
+            format="json",
+        )
+        delete_response = self.client.delete(detail_url)
+
+        self.assertEqual(list_response.status_code, status.HTTP_404_NOT_FOUND)
+        self.assertEqual(update_response.status_code, status.HTTP_404_NOT_FOUND)
+        self.assertEqual(delete_response.status_code, status.HTTP_404_NOT_FOUND)
+        self.owner_service_price.refresh_from_db()
+        self.assertEqual(str(self.owner_service_price.amount), "49.99")
+
+    def test_unapproved_organization_cannot_create_service_price(self):
+        self.organization.is_approved = False
+        self.organization.save(update_fields=["is_approved"])
+        self.client.force_authenticate(user=self.owner)
+
+        response = self.client.post(
+            reverse(
+                "organization-service-price-list",
+                kwargs={
+                    "organization_uuid": self.organization.uuid,
+                    "job_uuid": self.owner_organization_job.uuid,
+                    "service_uuid": self.owner_service.uuid,
+                    "subservice_uuid": self.owner_subservice.uuid,
+                },
+            ),
+            {
+                "subservice": str(self.owner_subservice.uuid),
+                "amount": "79.99",
+                "currency": "EUR",
+                "charging_type": ServicePrice.ChargingType.PER_PROJECT,
+                "effective_from": "2026-02-01",
+            },
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
+        self.assertEqual(response.data["detail"], "Organization must be approved for this action.")
 
     def test_announcement_list_hides_foreign_organization_from_authenticated_user(self):
         self.client.force_authenticate(user=self.other_owner)
@@ -1413,171 +1379,6 @@ class OrganizationApiTests(APITestCase):
         self.assertEqual(second_response.status_code, status.HTTP_429_TOO_MANY_REQUESTS)
 
 
-@override_settings(
-    CHANNEL_LAYERS={
-        "default": {
-            "BACKEND": "channels.layers.InMemoryChannelLayer",
-        }
-    }
-)
-class OrganizationSearchWebSocketTests(TransactionTestCase):
-    def setUp(self):
-        cache.clear()
-        user_model = get_user_model()
-        self.owner = user_model.objects.create_user(
-            username="ws-org-owner",
-            email="ws-org-owner@example.com",
-            password="testpass123",
-            email_verified=True,
-        )
-        self.other_owner = user_model.objects.create_user(
-            username="ws-other-owner",
-            email="ws-other-owner@example.com",
-            password="testpass123",
-            email_verified=True,
-        )
-        self.organization = Organization.objects.create(
-            user=self.owner,
-            name="Acme",
-            legal_name="Acme SL",
-            tax_id="A123",
-            billing_email="billing@acme.com",
-            billing_address="Main 1",
-            billing_city="Madrid",
-            billing_country="ES",
-            billing_postal_code="28001",
-        )
-        self.owner_access_token = str(RefreshToken.for_user(self.owner).access_token)
-        Organization.objects.create(
-            user=self.other_owner,
-            name="Beta",
-            legal_name="Beta SL",
-            tax_id="B456",
-            billing_email="billing@beta.com",
-            billing_address="Second 2",
-            billing_city="Barcelona",
-            billing_country="ES",
-            billing_postal_code="08001",
-        )
-        transaction.commit()
-
-    def tearDown(self):
-        cache.clear()
-        connections.close_all()
-        super().tearDown()
-
-    def test_organization_search_websocket_returns_matching_results_for_anonymous_user(self):
-        payload = async_to_sync(self._search_via_websocket)("Acme", authenticated=False)
-
-        self.assertEqual(payload["type"], "search.results")
-        self.assertEqual(payload["query"], "Acme")
-        self.assertEqual(payload["results"], [])
-
-    def test_organization_search_websocket_returns_validation_error_for_empty_query(self):
-        payload = async_to_sync(self._search_via_websocket)("   ")
-
-        self.assertEqual(payload["type"], "search.error")
-        self.assertEqual(payload["errors"]["q"], "This field is required.")
-
-    def test_organization_search_websocket_rejects_short_queries(self):
-        payload = async_to_sync(self._search_via_websocket)("Ac")
-
-        self.assertEqual(payload["type"], "search.error")
-        self.assertEqual(payload["errors"]["q"], "Ensure this field has at least 3 characters.")
-
-    def test_organization_search_websocket_allows_anonymous_connections(self):
-        connected, close_event = async_to_sync(self._connect_websocket)(authenticated=False)
-
-        self.assertTrue(connected)
-        self.assertIsNone(close_event)
-
-    def test_organization_search_websocket_rejects_invalid_origin(self):
-        connected, close_code = async_to_sync(self._connect_websocket)(
-            authenticated=True,
-            origin="http://evil.example.com",
-        )
-
-        self.assertFalse(connected)
-        self.assertEqual(close_code, 1000)
-
-    def test_organization_search_websocket_rate_limits_requests(self):
-        with override_settings(
-            ORGANIZATION_SEARCH_WS_RATE_LIMIT=1,
-            ORGANIZATION_SEARCH_WS_RATE_WINDOW=60,
-        ):
-            first_payload, second_payload = async_to_sync(
-                self._rate_limited_search_via_websocket
-            )(authenticated=False)
-
-        self.assertEqual(first_payload["type"], "search.results")
-        self.assertEqual(second_payload["type"], "search.error")
-        self.assertEqual(second_payload["errors"]["detail"], "Rate limit exceeded.")
-
-    def _ws_application(self):
-        websocket_app = URLRouter(websocket_urlpatterns)
-        if JOBS_INSTALLED:
-            websocket_app = JWTAuthMiddlewareStack(websocket_app)
-        return AllowedHostsOriginValidator(websocket_app)
-
-    async def _connect_websocket(self, authenticated=True, origin="http://localhost"):
-        path = "/ws/organization/search/"
-        headers = [(b"origin", origin.encode("utf-8"))]
-        if authenticated and JOBS_INSTALLED:
-            headers.append((b"authorization", f"Bearer {self.owner_access_token}".encode("utf-8")))
-        communicator = WebsocketCommunicator(self._ws_application(), path, headers=headers)
-        connected, close_code = await communicator.connect()
-        try:
-            if connected:
-                try:
-                    return connected, await communicator.receive_output(timeout=0.2)
-                except TimeoutError:
-                    return connected, None
-            return connected, close_code
-        finally:
-            if connected:
-                try:
-                    await communicator.disconnect()
-                except asyncio.CancelledError:
-                    pass
-            try:
-                await communicator.wait()
-            except asyncio.CancelledError:
-                pass
-
-    async def _search_via_websocket(self, query, authenticated=True, origin="http://localhost"):
-        path = "/ws/organization/search/"
-        headers = [(b"origin", origin.encode("utf-8"))]
-        if authenticated and JOBS_INSTALLED:
-            headers.append((b"authorization", f"Bearer {self.owner_access_token}".encode("utf-8")))
-        communicator = WebsocketCommunicator(self._ws_application(), path, headers=headers)
-        connected, _ = await communicator.connect()
-        self.assertTrue(connected)
-
-        try:
-            await communicator.send_json_to({"q": query})
-            return await communicator.receive_json_from()
-        finally:
-            await communicator.disconnect()
-            await communicator.wait()
-
-    async def _rate_limited_search_via_websocket(self, authenticated=True):
-        path = "/ws/organization/search/"
-        headers = [(b"origin", b"http://localhost")]
-        if authenticated and JOBS_INSTALLED:
-            headers.append((b"authorization", f"Bearer {self.owner_access_token}".encode("utf-8")))
-        communicator = WebsocketCommunicator(self._ws_application(), path, headers=headers)
-        connected, _ = await communicator.connect()
-        self.assertTrue(connected)
-
-        try:
-            await communicator.send_json_to({"q": "Acme"})
-            first_payload = await communicator.receive_json_from()
-            await communicator.send_json_to({"q": "Acme"})
-            second_payload = await communicator.receive_json_from()
-            return first_payload, second_payload
-        finally:
-            await communicator.disconnect()
-            await communicator.wait()
 
 
 class AnnouncementSerializerTests(SimpleTestCase):

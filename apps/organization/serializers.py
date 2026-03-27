@@ -153,7 +153,7 @@ class AnnouncementSerializer(serializers.ModelSerializer):
     def to_representation(self, instance):
         data = super().to_representation(instance)
         data["category"] = str(instance.category.uuid)
-        data["services"] = [str(service_uuid) for service_uuid in data["services"]]
+        data["services"] = ServiceSerializer(instance.services.all(), many=True).data
         return data
 
 
@@ -161,6 +161,7 @@ class ServiceSerializer(serializers.ModelSerializer):
     organization = serializers.UUIDField(source="job.organization.uuid", read_only=True)
     job = serializers.UUIDField(source="job.uuid", read_only=True)
     category = serializers.SlugRelatedField(queryset=Category.objects.all(), slug_field="uuid")
+    subservices = serializers.SerializerMethodField()
 
     class Meta:
         model = Service
@@ -169,12 +170,16 @@ class ServiceSerializer(serializers.ModelSerializer):
             "organization",
             "job",
             "category",
+            "subservices",
             "name",
             "description",
             "created_at",
             "updated_at",
         )
         read_only_fields = ("uuid", "organization", "job", "created_at", "updated_at")
+
+    def get_subservices(self, obj):
+        return SubserviceSerializer(obj.subservices.all(), many=True).data
 
     def to_representation(self, instance):
         data = super().to_representation(instance)
@@ -206,12 +211,31 @@ class ServicePriceSerializer(serializers.ModelSerializer):
         read_only_fields = ("uuid", "created_at", "updated_at")
 
 
+class PublicServicePriceSerializer(serializers.ModelSerializer):
+    subservice = serializers.UUIDField(source="subservice.uuid", read_only=True)
+
+    class Meta:
+        model = ServicePrice
+        fields = (
+            "uuid",
+            "subservice",
+            "amount",
+            "currency",
+            "charging_type",
+            "effective_from",
+            "effective_to",
+            "created_at",
+            "updated_at",
+        )
+        read_only_fields = fields
+
+
 class SubserviceSerializer(serializers.ModelSerializer):
     service = serializers.SlugRelatedField(
         queryset=Service.objects.select_related("job", "job__organization"),
         slug_field="uuid",
     )
-    service_prices = ServicePriceSerializer(source="price_table", many=True, read_only=True)
+    service_prices = PublicServicePriceSerializer(source="price_table", many=True, read_only=True)
 
     class Meta:
         model = Subservice
@@ -225,3 +249,8 @@ class SubserviceSerializer(serializers.ModelSerializer):
             "updated_at",
         )
         read_only_fields = ("uuid", "created_at", "updated_at")
+
+    def to_representation(self, instance):
+        data = super().to_representation(instance)
+        data["service"] = str(instance.service.uuid)
+        return data
