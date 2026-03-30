@@ -42,7 +42,7 @@ urlpatterns = [
         name="public-announcement-list",
     ),
     path(
-        "announcements/<uuid:organization_uuid>/<uuid:uuid>/",
+        "announcements/<uuid:uuid>/",
         public_announcement_detail,
         name="public-announcement-detail",
     ),

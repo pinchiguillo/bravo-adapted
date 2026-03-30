@@ -149,11 +149,11 @@ announcement_location_parameter = OpenApiParameter(
 )
 
 announcement_text_parameter = OpenApiParameter(
-    name="announcement",
+    name="title",
     type=str,
     location=OpenApiParameter.QUERY,
     required=False,
-    description="Optional text used to filter announcements by announcement text.",
+    description="Optional text used to filter announcements by title.",
 )
 
 announcement_description_parameter = OpenApiParameter(
@@ -361,7 +361,7 @@ class AnnouncementPublicFilterMixin(AnnouncementQueryParamFilterMixin):
     text_filter_fields = {
         "name": "name",
         "location": "location",
-        "announcement": "announcement",
+        "title": "announcement",
         "description": "description",
         "free_text": "free_text",
     }

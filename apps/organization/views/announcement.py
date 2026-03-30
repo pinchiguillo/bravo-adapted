@@ -37,7 +37,7 @@ from .common import (
     list=extend_schema(
         summary="List public announcements",
         description=(
-            "Lists active announcements. Supports optional filtering by announcement, "
+            "Lists active announcements. Supports optional filtering by title, "
             "organization, category, service, text fields, coordinates presence and "
             "plain text search."
         ),
@@ -88,8 +88,8 @@ class PublicAnnouncementViewSet(
 @extend_schema_view(
     retrieve=extend_schema(
         summary="Get public announcement",
-        description="Returns the details of an active public announcement by organization UUID and announcement UUID.",
-        parameters=[organization_uuid_parameter, announcement_uuid_parameter],
+        description="Returns the details of an active public announcement by announcement UUID.",
+        parameters=[announcement_uuid_parameter],
         auth=[],
     ),
 )
@@ -113,8 +113,9 @@ class PublicAnnouncementDetailViewSet(
     }
 
     def get_queryset(self):
-        organization = self.require_visible_organization()
-        return self.queryset.filter(organization=organization)
+        return self.queryset.filter(
+            **Organization.validated_filter_kwargs(prefix="organization__"),
+        )
 
 
 @extend_schema_view(
@@ -122,7 +123,7 @@ class PublicAnnouncementDetailViewSet(
         summary="List announcements",
         description=(
             "Lists announcements for the organization specified in the URL. Supports "
-            "optional filtering by announcement, category, service, status, text fields, "
+            "optional filtering by title, category, service, status, text fields, "
             "coordinates presence and plain text search."
         ),
         parameters=[
@@ -178,7 +179,7 @@ class AnnouncementViewSet(
     text_filter_fields = {
         "name": "name",
         "location": "location",
-        "announcement": "announcement",
+        "title": "announcement",
         "description": "description",
         "free_text": "free_text",
     }
