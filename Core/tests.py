@@ -93,6 +93,10 @@ class OpenApiSecuritySchemaTests(SimpleTestCase):
         schema = SchemaGenerator().get_schema(request=None, public=True)
         return schema["paths"][path][method]
 
+    @staticmethod
+    def _reverse_path(name, **kwargs):
+        return reverse(name, kwargs=kwargs)
+
     def test_public_endpoints_do_not_require_auth_in_schema(self):
         public_operations = (
             ("/api/auth/login/", "post"),
@@ -111,7 +115,7 @@ class OpenApiSecuritySchemaTests(SimpleTestCase):
     def test_private_endpoints_keep_jwt_auth_in_schema(self):
         private_operations = (
             ("/api/auth/me/", "get"),
-            ("/api/organizations/me/", "get"),
+            (self._reverse_path("organization-me"), "get"),
         )
 
         for path, method in private_operations:

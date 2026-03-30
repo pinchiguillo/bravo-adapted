@@ -1,6 +1,6 @@
 from datetime import date
 from types import SimpleNamespace
-from unittest import skipUnless
+from unittest import SkipTest, skipUnless
 from unittest.mock import patch
 
 from asgiref.sync import async_to_sync
@@ -31,10 +31,14 @@ from apps.organization.models import (
     Subservice,
 )
 
-from .models import Job
-from .views import JobViewSet, job_search_parameter
-
+JOBS_INSTALLED = django_apps.is_installed("apps.jobs")
 JOB_CHAT_INSTALLED = django_apps.is_installed("apps.job_chat")
+
+if JOBS_INSTALLED:
+    from .models import Job
+    from .views import JobViewSet, job_search_parameter
+else:
+    raise SkipTest("jobs app disabled")
 
 if JOB_CHAT_INSTALLED:
     from apps.job_chat.models import JobChatAttachment, JobChatMessage

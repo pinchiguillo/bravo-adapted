@@ -1,5 +1,7 @@
+from unittest import SkipTest
 from unittest.mock import patch
 
+from django.apps import apps as django_apps
 from django.contrib.auth import get_user_model
 from django.core.cache import cache
 from django.test import override_settings
@@ -8,13 +10,18 @@ from rest_framework import status
 from rest_framework.test import APIRequestFactory, APITestCase
 from rest_framework.throttling import ScopedRateThrottle
 
-from .models import (
-    RgpdAnonymousConsent,
-    RgpdAnonymousConsentEvent,
-    RgpdConsent,
-    RgpdConsentEvent,
-)
-from .views import RgpdAnonymousConsentViewSet
+RGPD_INSTALLED = django_apps.is_installed("apps.rgpd")
+
+if RGPD_INSTALLED:
+    from .models import (
+        RgpdAnonymousConsent,
+        RgpdAnonymousConsentEvent,
+        RgpdConsent,
+        RgpdConsentEvent,
+    )
+    from .views import RgpdAnonymousConsentViewSet
+else:
+    raise SkipTest("rgpd app disabled")
 
 
 class RgpdConsentApiTests(APITestCase):

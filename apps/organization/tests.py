@@ -26,6 +26,7 @@ from .models import (
     ServicePrice,
     Subservice,
 )
+from .permissions import IsOrganizationResourceOwner
 from .views import OrganizationViewSet
 
 JOBS_INSTALLED = django_apps.is_installed("apps.jobs")
@@ -565,6 +566,90 @@ class OrganizationApiTests(APITestCase):
         self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
         self.assertTrue(Organization.objects.filter(uuid=self.organization.uuid).exists())
 
+    def test_organization_resource_owner_permission_allows_owner_organization_resource(self):
+        request = RequestFactory().patch("/")
+        request.user = self.owner
+
+        allowed = IsOrganizationResourceOwner().has_object_permission(
+            request,
+            None,
+            self.organization,
+        )
+
+        self.assertTrue(allowed)
+
+    def test_organization_resource_owner_permission_allows_owner_service_resource(self):
+        request = RequestFactory().patch("/")
+        request.user = self.owner
+
+        allowed = IsOrganizationResourceOwner().has_object_permission(
+            request,
+            None,
+            self.owner_service,
+        )
+
+        self.assertTrue(allowed)
+
+    def test_organization_resource_owner_permission_allows_owner_announcement_resource(self):
+        request = RequestFactory().patch("/")
+        request.user = self.owner
+
+        allowed = IsOrganizationResourceOwner().has_object_permission(
+            request,
+            None,
+            self.announcement,
+        )
+
+        self.assertTrue(allowed)
+
+    def test_organization_resource_owner_permission_allows_owner_subservice_resource(self):
+        request = RequestFactory().patch("/")
+        request.user = self.owner
+
+        allowed = IsOrganizationResourceOwner().has_object_permission(
+            request,
+            None,
+            self.owner_subservice,
+        )
+
+        self.assertTrue(allowed)
+
+    def test_organization_resource_owner_permission_allows_owner_service_price_resource(self):
+        request = RequestFactory().patch("/")
+        request.user = self.owner
+
+        allowed = IsOrganizationResourceOwner().has_object_permission(
+            request,
+            None,
+            self.owner_service_price,
+        )
+
+        self.assertTrue(allowed)
+
+    def test_organization_resource_owner_permission_denies_foreign_resource(self):
+        request = RequestFactory().patch("/")
+        request.user = self.other_owner
+
+        allowed = IsOrganizationResourceOwner().has_object_permission(
+            request,
+            None,
+            self.owner_service,
+        )
+
+        self.assertFalse(allowed)
+
+    def test_organization_resource_owner_permission_denies_anonymous_user(self):
+        request = RequestFactory().patch("/")
+        request.user = AnonymousUser()
+
+        allowed = IsOrganizationResourceOwner().has_object_permission(
+            request,
+            None,
+            self.organization,
+        )
+
+        self.assertFalse(allowed)
+
     def test_private_job_routes_do_not_exist(self):
         with self.assertRaises(NoReverseMatch):
             reverse("organization-job-list", kwargs={"organization_uuid": self.organization.uuid})
@@ -936,7 +1021,7 @@ class OrganizationApiTests(APITestCase):
             {
                 "name": "plumber",
                 "location": "valencia",
-                "announcement": "fontaneria",
+                "title": "fontaneria",
                 "description": "fugas",
                 "free_text": "hoy",
             },
@@ -988,14 +1073,11 @@ class OrganizationApiTests(APITestCase):
             [str(newest.uuid), str(older.uuid), str(self.announcement.uuid)],
         )
 
-    def test_public_announcement_detail_is_available_by_organization_and_uuid(self):
+    def test_public_announcement_detail_is_available_by_uuid(self):
         response = self.client.get(
             reverse(
                 "public-announcement-detail",
-                kwargs={
-                    "organization_uuid": self.organization.uuid,
-                    "uuid": self.announcement.uuid,
-                },
+                kwargs={"uuid": self.announcement.uuid},
             )
         )
 
@@ -1020,10 +1102,7 @@ class OrganizationApiTests(APITestCase):
         response = self.client.get(
             reverse(
                 "public-announcement-detail",
-                kwargs={
-                    "organization_uuid": self.organization.uuid,
-                    "uuid": self.announcement.uuid,
-                },
+                kwargs={"uuid": self.announcement.uuid},
             )
         )
 
@@ -1277,7 +1356,7 @@ class OrganizationApiTests(APITestCase):
             {
                 "name": "gardening",
                 "location": "alcob",
-                "announcement": "jardineria",
+                "title": "jardineria",
                 "description": "poda",
                 "free_text": "domingos",
             },
@@ -1371,7 +1450,7 @@ class OrganizationApiTests(APITestCase):
                 "services": [str(self.owner_service.uuid)],
                 "name": "Emergency Plumbing",
                 "location": "Madrid Centro",
-                "announcement": "Atencion 24 horas",
+                "title": "Atencion 24 horas",
                 "status": Announcement.Status.ACTIVE,
                 "description": "Servicio urgente",
                 "free_text": "Atendemos festivos",
@@ -1387,6 +1466,8 @@ class OrganizationApiTests(APITestCase):
         self.assertEqual(response.data["organization"], str(self.organization.uuid))
         self.assertEqual(response.data["category"], str(self.category.uuid))
         self.assertEqual(response.data["lowest_price"], "49.99")
+        self.assertEqual(response.data["title"], "Atencion 24 horas")
+        self.assertNotIn("announcement", response.data)
         self.assertEqual(len(response.data["services"]), 1)
         self.assertEqual(response.data["services"][0]["uuid"], str(self.owner_service.uuid))
         self.assertEqual(len(response.data["services"][0]["subservices"]), 1)
@@ -1416,10 +1497,7 @@ class OrganizationApiTests(APITestCase):
         response = self.client.get(
             reverse(
                 "public-announcement-detail",
-                kwargs={
-                    "organization_uuid": self.organization.uuid,
-                    "uuid": announcement_without_prices.uuid,
-                },
+                kwargs={"uuid": announcement_without_prices.uuid},
             )
         )
 
@@ -1441,7 +1519,7 @@ class OrganizationApiTests(APITestCase):
                 "services": [str(self.owner_service.uuid)],
                 "name": "Emergency Plumbing",
                 "location": "Madrid Centro",
-                "announcement": "Atencion 24 horas",
+                "title": "Atencion 24 horas",
                 "status": Announcement.Status.ACTIVE,
                 "description": "Servicio urgente",
                 "free_text": "Atendemos festivos",
@@ -1465,7 +1543,7 @@ class OrganizationApiTests(APITestCase):
                 "services": [str(self.other_service.uuid)],
                 "name": "Invalid Announcement",
                 "location": "Madrid",
-                "announcement": "No valida",
+                "title": "No valida",
                 "status": Announcement.Status.ACTIVE,
                 "description": "Should fail",
                 "free_text": "",
@@ -1478,6 +1556,29 @@ class OrganizationApiTests(APITestCase):
             response.data["services"][0],
             "Services must belong to the organization in the URL.",
         )
+
+    def test_announcement_create_requires_description_and_free_text(self):
+        self.client.force_authenticate(user=self.owner)
+
+        response = self.client.post(
+            reverse(
+                "organization-announcement-list",
+                kwargs={"organization_uuid": self.organization.uuid},
+            ),
+            {
+                "category": str(self.category.uuid),
+                "services": [str(self.owner_service.uuid)],
+                "name": "Invalid Announcement",
+                "location": "Madrid",
+                "title": "No valida",
+                "status": Announcement.Status.ACTIVE,
+            },
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn("description", response.data)
+        self.assertIn("free_text", response.data)
 
     def test_announcement_list_hides_foreign_organization_from_authenticated_user(self):
         self.client.force_authenticate(user=self.other_owner)
@@ -1583,6 +1684,17 @@ class AnnouncementSerializerTests(SimpleTestCase):
 
         self.assertNotIn("review", serializer.get_fields())
 
+    def test_announcement_serializer_uses_title_and_requires_text_fields(self):
+        from .serializers import AnnouncementSerializer
+
+        serializer = AnnouncementSerializer()
+
+        self.assertIn("title", serializer.get_fields())
+        self.assertNotIn("announcement", serializer.get_fields())
+        self.assertTrue(serializer.get_fields()["title"].required)
+        self.assertTrue(serializer.get_fields()["description"].required)
+        self.assertTrue(serializer.get_fields()["free_text"].required)
+
     def test_serializer_returns_hardcoded_images_list(self):
         from .serializers import AnnouncementSerializer
 
@@ -1600,6 +1712,13 @@ class AnnouncementSerializerTests(SimpleTestCase):
 
         self.assertIn("subservice", serializer.get_fields())
         self.assertFalse(serializer.get_fields()["subservice"].read_only)
+
+    def test_service_serializer_requires_description(self):
+        from .serializers import ServiceSerializer
+
+        serializer = ServiceSerializer()
+
+        self.assertTrue(serializer.get_fields()["description"].required)
 
 
 class AnnouncementViewCountMiddlewareTests(APITestCase):
