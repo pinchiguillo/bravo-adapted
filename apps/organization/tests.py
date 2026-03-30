@@ -26,6 +26,7 @@ from .models import (
     ServicePrice,
     Subservice,
 )
+from .permissions import IsOrganizationResourceOwner
 from .views import OrganizationViewSet
 
 JOBS_INSTALLED = django_apps.is_installed("apps.jobs")
@@ -564,6 +565,90 @@ class OrganizationApiTests(APITestCase):
 
         self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
         self.assertTrue(Organization.objects.filter(uuid=self.organization.uuid).exists())
+
+    def test_organization_resource_owner_permission_allows_owner_organization_resource(self):
+        request = RequestFactory().patch("/")
+        request.user = self.owner
+
+        allowed = IsOrganizationResourceOwner().has_object_permission(
+            request,
+            None,
+            self.organization,
+        )
+
+        self.assertTrue(allowed)
+
+    def test_organization_resource_owner_permission_allows_owner_service_resource(self):
+        request = RequestFactory().patch("/")
+        request.user = self.owner
+
+        allowed = IsOrganizationResourceOwner().has_object_permission(
+            request,
+            None,
+            self.owner_service,
+        )
+
+        self.assertTrue(allowed)
+
+    def test_organization_resource_owner_permission_allows_owner_announcement_resource(self):
+        request = RequestFactory().patch("/")
+        request.user = self.owner
+
+        allowed = IsOrganizationResourceOwner().has_object_permission(
+            request,
+            None,
+            self.announcement,
+        )
+
+        self.assertTrue(allowed)
+
+    def test_organization_resource_owner_permission_allows_owner_subservice_resource(self):
+        request = RequestFactory().patch("/")
+        request.user = self.owner
+
+        allowed = IsOrganizationResourceOwner().has_object_permission(
+            request,
+            None,
+            self.owner_subservice,
+        )
+
+        self.assertTrue(allowed)
+
+    def test_organization_resource_owner_permission_allows_owner_service_price_resource(self):
+        request = RequestFactory().patch("/")
+        request.user = self.owner
+
+        allowed = IsOrganizationResourceOwner().has_object_permission(
+            request,
+            None,
+            self.owner_service_price,
+        )
+
+        self.assertTrue(allowed)
+
+    def test_organization_resource_owner_permission_denies_foreign_resource(self):
+        request = RequestFactory().patch("/")
+        request.user = self.other_owner
+
+        allowed = IsOrganizationResourceOwner().has_object_permission(
+            request,
+            None,
+            self.owner_service,
+        )
+
+        self.assertFalse(allowed)
+
+    def test_organization_resource_owner_permission_denies_anonymous_user(self):
+        request = RequestFactory().patch("/")
+        request.user = AnonymousUser()
+
+        allowed = IsOrganizationResourceOwner().has_object_permission(
+            request,
+            None,
+            self.organization,
+        )
+
+        self.assertFalse(allowed)
 
     def test_private_job_routes_do_not_exist(self):
         with self.assertRaises(NoReverseMatch):
