@@ -1,3 +1,4 @@
+from django.db.models import Min
 from rest_framework import serializers
 
 from .models import (
@@ -93,8 +94,13 @@ class ServiceCatalogSerializer(serializers.ModelSerializer):
 
 
 class AnnouncementSerializer(serializers.ModelSerializer):
+    HARDCODED_IMAGE_URL = "https://cdn.bravo.example.com/IMG_1715.JPEG"
+    HARDCODED_IMAGE_COUNT = 4
+
     organization = serializers.UUIDField(source="organization.uuid", read_only=True)
     category = serializers.SlugRelatedField(queryset=Category.objects.all(), slug_field="uuid")
+    images = serializers.SerializerMethodField()
+    lowest_price = serializers.SerializerMethodField()
     services = serializers.SlugRelatedField(
         many=True,
         queryset=Service.objects.select_related("organization", "service_catalog"),
@@ -108,6 +114,8 @@ class AnnouncementSerializer(serializers.ModelSerializer):
             "uuid",
             "organization",
             "category",
+            "images",
+            "lowest_price",
             "services",
             "name",
             "location",
@@ -149,6 +157,17 @@ class AnnouncementSerializer(serializers.ModelSerializer):
         if invalid_services:
             raise serializers.ValidationError("Services must belong to the organization in the URL.")
         return value
+
+    def get_lowest_price(self, obj):
+        lowest_price = obj.services.aggregate(
+            min_amount=Min("subservices__price_table__amount")
+        )["min_amount"]
+        if lowest_price is None:
+            return None
+        return f"{lowest_price:.2f}"
+
+    def get_images(self, obj):
+        return [self.HARDCODED_IMAGE_URL] * self.HARDCODED_IMAGE_COUNT
 
     def to_representation(self, instance):
         data = super().to_representation(instance)
