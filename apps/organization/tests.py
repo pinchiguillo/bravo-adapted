@@ -1002,6 +1002,7 @@ class OrganizationApiTests(APITestCase):
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertEqual(response.data["uuid"], str(self.announcement.uuid))
         self.assertEqual(response.data["organization"], str(self.organization.uuid))
+        self.assertEqual(response.data["lowest_price"], "49.99")
         self.assertEqual(response.data["services"][0]["uuid"], str(self.owner_service.uuid))
         self.assertEqual(
             response.data["services"][0]["subservices"][0]["uuid"],
@@ -1385,6 +1386,7 @@ class OrganizationApiTests(APITestCase):
         self.assertEqual(created.organization, self.organization)
         self.assertEqual(response.data["organization"], str(self.organization.uuid))
         self.assertEqual(response.data["category"], str(self.category.uuid))
+        self.assertEqual(response.data["lowest_price"], "49.99")
         self.assertEqual(len(response.data["services"]), 1)
         self.assertEqual(response.data["services"][0]["uuid"], str(self.owner_service.uuid))
         self.assertEqual(len(response.data["services"][0]["subservices"]), 1)
@@ -1398,6 +1400,31 @@ class OrganizationApiTests(APITestCase):
         )
         self.assertEqual(response.data["view_count"], 0)
         self.assertNotIn("review", response.data)
+
+    def test_public_announcement_detail_returns_null_lowest_price_when_no_prices_exist(self):
+        announcement_without_prices = Announcement.objects.create(
+            organization=self.organization,
+            category=self.category,
+            name="No Price Announcement",
+            location="Madrid",
+            announcement="Sin tarifas publicadas",
+            status=Announcement.Status.ACTIVE,
+            description="Servicio sin precios",
+            free_text="Consulta presupuesto",
+        )
+
+        response = self.client.get(
+            reverse(
+                "public-announcement-detail",
+                kwargs={
+                    "organization_uuid": self.organization.uuid,
+                    "uuid": announcement_without_prices.uuid,
+                },
+            )
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertIsNone(response.data["lowest_price"])
 
     def test_unapproved_organization_cannot_create_announcement(self):
         self.organization.is_approved = False
@@ -1555,6 +1582,16 @@ class AnnouncementSerializerTests(SimpleTestCase):
         serializer = AnnouncementSerializer()
 
         self.assertNotIn("review", serializer.get_fields())
+
+    def test_serializer_returns_hardcoded_images_list(self):
+        from .serializers import AnnouncementSerializer
+
+        serializer = AnnouncementSerializer()
+
+        self.assertEqual(
+            serializer.get_images(obj=None),
+            [AnnouncementSerializer.HARDCODED_IMAGE_URL] * AnnouncementSerializer.HARDCODED_IMAGE_COUNT,
+        )
 
     def test_service_price_serializer_accepts_subservice_for_write(self):
         from .serializers import ServicePriceSerializer
