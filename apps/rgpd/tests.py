@@ -1,5 +1,5 @@
-from unittest.mock import patch
 from unittest import SkipTest
+from unittest.mock import patch
 
 from django.apps import apps as django_apps
 from django.contrib.auth import get_user_model
