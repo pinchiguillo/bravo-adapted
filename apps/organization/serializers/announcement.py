@@ -10,6 +10,7 @@ class AnnouncementSerializer(serializers.ModelSerializer):
     HARDCODED_IMAGE_COUNT = 4
 
     organization = serializers.UUIDField(source="organization.uuid", read_only=True)
+    title = serializers.CharField(source="announcement")
     category = serializers.SlugRelatedField(queryset=Category.objects.all(), slug_field="uuid")
     images = serializers.SerializerMethodField()
     lowest_price = serializers.SerializerMethodField()
@@ -31,7 +32,7 @@ class AnnouncementSerializer(serializers.ModelSerializer):
             "services",
             "name",
             "location",
-            "announcement",
+            "title",
             "status",
             "description",
             "free_text",
@@ -48,6 +49,10 @@ class AnnouncementSerializer(serializers.ModelSerializer):
             "created_at",
             "updated_at",
         )
+        extra_kwargs = {
+            "description": {"required": True, "allow_blank": False},
+            "free_text": {"required": True, "allow_blank": False},
+        }
 
     def validate(self, attrs):
         attrs = super().validate(attrs)

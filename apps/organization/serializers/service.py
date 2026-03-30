@@ -95,6 +95,9 @@ class ServiceSerializer(serializers.ModelSerializer):
             "updated_at",
         )
         read_only_fields = ("uuid", "organization", "created_at", "updated_at")
+        extra_kwargs = {
+            "description": {"required": True, "allow_blank": False},
+        }
 
     def get_subservices(self, obj):
         return SubserviceSerializer(obj.subservices.all(), many=True).data
