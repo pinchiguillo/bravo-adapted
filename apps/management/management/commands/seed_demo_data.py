@@ -440,9 +440,6 @@ class Command(BaseCommand):
                         "longitude": announcement_data["longitude"],
                     },
                 )
-                announcement.services.set(
-                    organization.services.filter(name__in=announcement_data["service_names"])
-                )
                 if announcement_created:
                     counters["announcements"] += 1
 
