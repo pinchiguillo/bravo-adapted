@@ -6,8 +6,10 @@ from .views import (
     AnnouncementImageViewSet,
     AnnouncementViewSet,
     CategoryViewSet,
+    OrganizationAnnouncementImageBase64ViewSet,
     OrganizationViewSet,
     PublicAnnouncementDetailViewSet,
+    PublicAnnouncementImageBase64ViewSet,
     PublicAnnouncementViewSet,
     ServicePriceViewSet,
     ServiceCatalogViewSet,
@@ -28,6 +30,8 @@ announcement_detail = AnnouncementViewSet.as_view(
 )
 announcement_image_list = AnnouncementImageViewSet.as_view({"get": "list", "post": "create"})
 announcement_image_detail = AnnouncementImageViewSet.as_view({"delete": "destroy"})
+announcement_image_base64 = OrganizationAnnouncementImageBase64ViewSet.as_view({"get": "retrieve"})
+public_announcement_image_base64 = PublicAnnouncementImageBase64ViewSet.as_view({"get": "retrieve"})
 subservice_list = SubserviceViewSet.as_view({"get": "list", "post": "create"})
 subservice_detail = SubserviceViewSet.as_view(
     {"get": "retrieve", "put": "update", "patch": "partial_update", "delete": "destroy"}
@@ -75,6 +79,11 @@ urlpatterns = [
         name="public-announcement-detail",
     ),
     path(
+        "announcements/<uuid:uuid>/images/<uuid:image_uuid>/base64/",
+        public_announcement_image_base64,
+        name="public-announcement-image-base64",
+    ),
+    path(
         "organizations/<uuid:organization_uuid>/announcements/",
         announcement_list,
         name="organization-announcement-list",
@@ -93,5 +102,10 @@ urlpatterns = [
         "organizations/<uuid:organization_uuid>/announcements/<uuid:uuid>/images/<uuid:image_uuid>/",
         announcement_image_detail,
         name="organization-announcement-image-detail",
+    ),
+    path(
+        "organizations/<uuid:organization_uuid>/announcements/<uuid:uuid>/images/<uuid:image_uuid>/base64/",
+        announcement_image_base64,
+        name="organization-announcement-image-base64",
     ),
 ] + router.urls

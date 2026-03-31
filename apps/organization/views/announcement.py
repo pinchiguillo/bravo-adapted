@@ -1,3 +1,5 @@
+import base64
+
 from drf_spectacular.utils import extend_schema, extend_schema_view
 from rest_framework import mixins, permissions, status, viewsets
 from rest_framework.exceptions import NotFound, PermissionDenied
@@ -9,7 +11,11 @@ from common.throttling import ActionScopedRateThrottleMixin
 
 from ..models import Announcement, AnnouncementImage, Organization
 from ..permissions import IsOrganizationResourceOwner
-from ..serializers import AnnouncementImageSerializer, AnnouncementSerializer
+from ..serializers import (
+    AnnouncementImageBase64Serializer,
+    AnnouncementImageSerializer,
+    AnnouncementSerializer,
+)
 from .common import (
     AnnouncementPublicFilterMixin,
     AnnouncementQueryParamFilterMixin,
@@ -316,6 +322,13 @@ class AnnouncementImageViewSet(
             return [IsActiveAccount(), IsOrganizationResourceOwner()]
         return [IsActiveAccount()]
 
+    def get_serializer_context(self):
+        context = super().get_serializer_context()
+        organization = self.get_url_organization()
+        if organization is not None:
+            context["organization"] = organization
+        return context
+
     def create(self, request, *args, **kwargs):
         announcement = self._get_announcement(for_write=True)
         serializer = self.get_serializer(data=request.data)
@@ -351,3 +364,108 @@ class AnnouncementImageViewSet(
             self.ensure_organization_is_approved_for_write(organization)
 
         return announcement
+
+
+class AnnouncementImageBase64ResponseMixin:
+    serializer_class = AnnouncementImageBase64Serializer
+
+    def _build_base64_response(self, image):
+        with image.image.open("rb") as image_file:
+            encoded_data = base64.b64encode(image_file.read()).decode("ascii")
+
+        serializer = self.get_serializer(image, context={"encoded_data": encoded_data})
+        return Response(serializer.data, status=status.HTTP_200_OK)
+
+
+@extend_schema(tags=["Announcements"])
+@extend_schema_view(
+    retrieve=extend_schema(
+        tags=["Announcements"],
+        summary="Get public announcement image as base64",
+        description=(
+            "Reads an image from the active public announcement and returns its content "
+            "encoded as base64."
+        ),
+        parameters=[announcement_uuid_parameter],
+        auth=[],
+    ),
+)
+class PublicAnnouncementImageBase64ViewSet(
+    AnnouncementImageBase64ResponseMixin,
+    ActionScopedRateThrottleMixin,
+    mixins.RetrieveModelMixin,
+    viewsets.GenericViewSet,
+):
+    permission_classes = [permissions.AllowAny]
+    queryset = AnnouncementImage.objects.select_related("announcement", "announcement__organization").filter(
+        announcement__status=Announcement.Status.ACTIVE,
+        **Organization.validated_filter_kwargs(prefix="announcement__organization__"),
+    )
+    lookup_field = "uuid"
+    lookup_url_kwarg = "image_uuid"
+    throttle_scope_prefix = "organization"
+    throttle_scope_action_map = {"retrieve": "organization_public_read"}
+
+    def get_object(self):
+        image = (
+            self.get_queryset()
+            .filter(announcement__uuid=self.kwargs["uuid"], uuid=self.kwargs["image_uuid"])
+            .first()
+        )
+        if image is None:
+            raise NotFound("Announcement image not found.")
+        return image
+
+    def retrieve(self, request, *args, **kwargs):
+        return self._build_base64_response(self.get_object())
+
+
+@extend_schema(tags=["Announcements"])
+@extend_schema_view(
+    retrieve=extend_schema(
+        tags=["Announcements"],
+        summary="Get announcement image as base64",
+        description=(
+            "Reads an image from an announcement owned by the organization in the URL "
+            "and returns its content encoded as base64."
+        ),
+        parameters=[organization_uuid_parameter, announcement_uuid_parameter],
+    ),
+)
+class OrganizationAnnouncementImageBase64ViewSet(
+    AnnouncementImageBase64ResponseMixin,
+    OrganizationVisibilityMixin,
+    ActionScopedRateThrottleMixin,
+    mixins.RetrieveModelMixin,
+    viewsets.GenericViewSet,
+):
+    permission_classes = [IsActiveAccount]
+    queryset = AnnouncementImage.objects.select_related("announcement", "announcement__organization")
+    lookup_field = "uuid"
+    lookup_url_kwarg = "image_uuid"
+    throttle_scope_prefix = "organization"
+    throttle_scope_action_map = {"retrieve": "organization_authenticated_read"}
+
+    def get_object(self):
+        organization = self.get_url_organization()
+        if organization is None:
+            raise NotFound("Organization not found.")
+
+        user = self.request.user
+        if not (getattr(user, "is_staff", False) or organization.user_id == user.id):
+            raise NotFound("Organization not found.")
+
+        image = (
+            self.queryset.filter(
+                announcement__organization=organization,
+                announcement__uuid=self.kwargs["uuid"],
+                uuid=self.kwargs["image_uuid"],
+            )
+            .first()
+        )
+        if image is None:
+            raise NotFound("Announcement image not found.")
+        return image
+
+    def retrieve(self, request, *args, **kwargs):
+        return self._build_base64_response(self.get_object())

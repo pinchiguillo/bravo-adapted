@@ -1,3 +1,4 @@
+import base64
 import io
 import uuid
 from datetime import date
@@ -1671,11 +1672,13 @@ class AnnouncementSerializerTests(SimpleTestCase):
     def test_announcement_image_serializer_normalizes_absolute_storage_url_to_public_s3_path(self):
         from .serializers import AnnouncementImageSerializer
 
+        announcement_uuid = uuid.uuid4()
         image = type(
             "ImageStub",
             (),
             {
                 "uuid": uuid.uuid4(),
+                "announcement": type("AnnouncementStub", (), {"uuid": announcement_uuid})(),
                 "image": type(
                     "FileStub",
                     (),
@@ -1693,6 +1696,10 @@ class AnnouncementSerializerTests(SimpleTestCase):
         self.assertEqual(
             serializer.data["image_url"],
             "http://testserver/s3/bravo-media/announcements/test.png?signature=abc",
+        )
+        self.assertEqual(
+            serializer.data["base64_url"],
+            f"http://testserver/api/announcements/{announcement_uuid}/images/{image.uuid}/base64/",
         )
         self.assertEqual(serializer.data["filename"], "test.png")
 
@@ -1833,6 +1840,11 @@ class AnnouncementImageApiTests(APITestCase):
         image_io.seek(0)
         return SimpleUploadedFile(name, image_io.getvalue(), content_type="image/png")
 
+    def _make_png_bytes(self):
+        image_io = io.BytesIO()
+        Image.new("RGBA", (1, 1), (255, 0, 0, 255)).save(image_io, format="PNG")
+        return image_io.getvalue()
+
     def test_owner_can_upload_announcement_image(self):
         self.client.force_authenticate(user=self.owner)
 
@@ -1851,7 +1863,13 @@ class AnnouncementImageApiTests(APITestCase):
         self.assertEqual(response.status_code, status.HTTP_201_CREATED)
         self.assertEqual(AnnouncementImage.objects.count(), 1)
         self.assertIn("image_url", response.data)
+        self.assertIn("base64_url", response.data)
         self.assertIn("/s3/test-bucket/organization-announcements/", response.data["image_url"])
+        self.assertIn(
+            f"/api/organizations/{self.organization.uuid}/announcements/{self.announcement.uuid}/images/",
+            response.data["base64_url"],
+        )
+        self.assertTrue(response.data["base64_url"].endswith("/base64/"))
         self.assertTrue(response.data["filename"].startswith("announcement"))
         self.assertTrue(response.data["filename"].endswith(".png"))
 
@@ -1889,8 +1907,103 @@ class AnnouncementImageApiTests(APITestCase):
             "/s3/test-bucket/organization-announcements/",
             response.data["images"][0]["image_url"],
         )
+        self.assertIn(
+            f"/api/announcements/{self.announcement.uuid}/images/",
+            response.data["images"][0]["base64_url"],
+        )
+        self.assertTrue(response.data["images"][0]["base64_url"].endswith("/base64/"))
         self.assertTrue(response.data["images"][0]["filename"].startswith("detail"))
         self.assertTrue(response.data["images"][0]["filename"].endswith(".png"))
+
+    def test_owner_can_get_announcement_image_as_base64(self):
+        image_bytes = self._make_png_bytes()
+        image = AnnouncementImage.objects.create(
+            announcement=self.announcement,
+            image=SimpleUploadedFile("inline.png", image_bytes, content_type="image/png"),
+        )
+        self.client.force_authenticate(user=self.owner)
+
+        response = self.client.get(
+            reverse(
+                "organization-announcement-image-base64",
+                kwargs={
+                    "organization_uuid": self.organization.uuid,
+                    "uuid": self.announcement.uuid,
+                    "image_uuid": image.uuid,
+                },
+            )
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.data["uuid"], str(image.uuid))
+        self.assertTrue(response.data["filename"].startswith("inline"))
+        self.assertTrue(response.data["filename"].endswith(".png"))
+        self.assertEqual(response.data["content_type"], "image/png")
+        self.assertEqual(
+            response.data["data"],
+            base64.b64encode(image_bytes).decode("ascii"),
+        )
+
+    def test_non_owner_cannot_get_announcement_image_as_base64(self):
+        image = AnnouncementImage.objects.create(
+            announcement=self.announcement,
+            image=self._make_png_upload(name="inline.png"),
+        )
+        self.client.force_authenticate(user=self.other_user)
+
+        response = self.client.get(
+            reverse(
+                "organization-announcement-image-base64",
+                kwargs={
+                    "organization_uuid": self.organization.uuid,
+                    "uuid": self.announcement.uuid,
+                    "image_uuid": image.uuid,
+                },
+            )
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_404_NOT_FOUND)
+
+    def test_public_can_get_active_announcement_image_as_base64(self):
+        image_bytes = self._make_png_bytes()
+        image = AnnouncementImage.objects.create(
+            announcement=self.announcement,
+            image=SimpleUploadedFile("public-inline.png", image_bytes, content_type="image/png"),
+        )
+
+        response = self.client.get(
+            reverse(
+                "public-announcement-image-base64",
+                kwargs={"uuid": self.announcement.uuid, "image_uuid": image.uuid},
+            )
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.data["uuid"], str(image.uuid))
+        self.assertTrue(response.data["filename"].startswith("public-inline"))
+        self.assertTrue(response.data["filename"].endswith(".png"))
+        self.assertEqual(response.data["content_type"], "image/png")
+        self.assertEqual(
+            response.data["data"],
+            base64.b64encode(image_bytes).decode("ascii"),
+        )
+
+    def test_public_base64_returns_404_for_inactive_announcement(self):
+        self.announcement.status = Announcement.Status.CLOSED
+        self.announcement.save(update_fields=["status"])
+        image = AnnouncementImage.objects.create(
+            announcement=self.announcement,
+            image=self._make_png_upload(name="closed.png"),
+        )
+
+        response = self.client.get(
+            reverse(
+                "public-announcement-image-base64",
+                kwargs={"uuid": self.announcement.uuid, "image_uuid": image.uuid},
+            )
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_404_NOT_FOUND)
 
     def test_upload_rejects_invalid_content_type(self):
         self.client.force_authenticate(user=self.owner)
