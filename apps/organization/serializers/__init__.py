@@ -1,5 +1,5 @@
-from .announcement import AnnouncementSerializer
-from .catalog import CategorySerializer, ServiceCatalogSerializer
+from .announcement import AnnouncementImageSerializer, AnnouncementSerializer
+from .catalog import AllowedCitySerializer, CategorySerializer, ServiceCatalogSerializer
 from .organization import (
     OrganizationPublicSerializer,
     OrganizationRatingMixin,
@@ -13,6 +13,8 @@ from .service import (
 )
 
 __all__ = [
+    "AllowedCitySerializer",
+    "AnnouncementImageSerializer",
     "AnnouncementSerializer",
     "CategorySerializer",
     "OrganizationPublicSerializer",

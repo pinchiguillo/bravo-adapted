@@ -70,6 +70,8 @@ Este archivo levanta:
 - `redis` como channel layer para websockets
 - `localstack` para S3/SES simulados
 
+`APP_MODE` se lee desde entorno; en `compose.prod.yml` y `compose.prod-watchtower.yml` el valor por defecto es `production`.
+
 El orden de arranque queda definido así:
 
 - `postgres`, `redis` y `localstack`
@@ -81,6 +83,8 @@ En `compose.prod.yml`, `nginx` es el único servicio publicado al host y expone:
 
 - `http://localhost:8000/` hacia `app`
 - `http://localhost:8000/s3/...` hacia `localstack`
+
+El backend construye por defecto las URLs públicas de media contra `/s3/<bucket>/...`, mientras que las conexiones internas de storage siguen yendo a `localstack:4566`.
 
 ### Cloudflare Tunnel opcional
 

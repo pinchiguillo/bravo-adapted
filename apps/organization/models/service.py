@@ -2,47 +2,16 @@ import uuid
 
 from django.db import models
 
-
-class Service(models.Model):
+class Subservice(models.Model):
     uuid = models.UUIDField(default=uuid.uuid4, unique=True, editable=False)
-    organization = models.ForeignKey(
-        "organization.Organization",
+    announcement = models.ForeignKey(
+        "organization.Announcement",
         on_delete=models.CASCADE,
-        related_name="services",
+        related_name="subservices",
     )
     service_catalog = models.ForeignKey(
         "organization.ServiceCatalog",
         on_delete=models.PROTECT,
-        related_name="services",
-    )
-    category = models.ForeignKey(
-        "organization.Category",
-        on_delete=models.PROTECT,
-        related_name="services",
-    )
-    name = models.CharField(max_length=120)
-    description = models.TextField(blank=True)
-    created_at = models.DateTimeField(auto_now_add=True)
-    updated_at = models.DateTimeField(auto_now=True)
-
-    class Meta:
-        constraints = [
-            models.UniqueConstraint(
-                fields=["organization", "service_catalog"],
-                name="unique_organization_service_catalog",
-            )
-        ]
-        ordering = ["organization_id", "name"]
-
-    def __str__(self):
-        return f"{self.organization_id}:{self.name}"
-
-
-class Subservice(models.Model):
-    uuid = models.UUIDField(default=uuid.uuid4, unique=True, editable=False)
-    service = models.ForeignKey(
-        "organization.Service",
-        on_delete=models.CASCADE,
         related_name="subservices",
     )
     name = models.CharField(max_length=120)
@@ -53,14 +22,14 @@ class Subservice(models.Model):
     class Meta:
         constraints = [
             models.UniqueConstraint(
-                fields=["service", "name"],
-                name="unique_service_subservice_name",
+                fields=["announcement", "service_catalog", "name"],
+                name="unique_announcement_service_catalog_subservice_name",
             )
         ]
-        ordering = ["service_id", "name"]
+        ordering = ["announcement_id", "service_catalog_id", "name"]
 
     def __str__(self):
-        return f"{self.service_id}:{self.name}"
+        return f"{self.announcement_id}:{self.service_catalog_id}:{self.name}"
 
 
 class ServicePrice(models.Model):

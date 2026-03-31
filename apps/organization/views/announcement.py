@@ -1,13 +1,15 @@
 from drf_spectacular.utils import extend_schema, extend_schema_view
-from rest_framework import mixins, permissions, viewsets
+from rest_framework import mixins, permissions, status, viewsets
 from rest_framework.exceptions import NotFound, PermissionDenied
+from rest_framework.parsers import FormParser, MultiPartParser
+from rest_framework.response import Response
 
 from common.permissions import IsActiveAccount
 from common.throttling import ActionScopedRateThrottleMixin
 
-from ..models import Announcement, Organization
+from ..models import Announcement, AnnouncementImage, Organization
 from ..permissions import IsOrganizationResourceOwner
-from ..serializers import AnnouncementSerializer
+from ..serializers import AnnouncementImageSerializer, AnnouncementSerializer
 from .common import (
     AnnouncementPublicFilterMixin,
     AnnouncementQueryParamFilterMixin,
@@ -33,8 +35,10 @@ from .common import (
 )
 
 
+@extend_schema(tags=["Announcements"])
 @extend_schema_view(
     list=extend_schema(
+        tags=["Announcements"],
         summary="List public announcements",
         description=(
             "Lists active announcements. Supports optional filtering by title, "
@@ -70,7 +74,7 @@ class PublicAnnouncementViewSet(
     permission_classes = [permissions.AllowAny]
     queryset = (
         Announcement.objects.select_related("organization", "category")
-        .prefetch_related("services")
+        .prefetch_related("images", "subservices__service_catalog__category", "subservices__price_table")
         .filter(
             status=Announcement.Status.ACTIVE,
             **Organization.validated_filter_kwargs(prefix="organization__"),
@@ -85,8 +89,10 @@ class PublicAnnouncementViewSet(
         return self.filter_announcements(self.queryset).order_by("-created_at", "-id")
 
 
+@extend_schema(tags=["Announcements"])
 @extend_schema_view(
     retrieve=extend_schema(
+        tags=["Announcements"],
         summary="Get public announcement",
         description="Returns the details of an active public announcement by announcement UUID.",
         parameters=[announcement_uuid_parameter],
@@ -103,7 +109,7 @@ class PublicAnnouncementDetailViewSet(
     permission_classes = [permissions.AllowAny]
     queryset = (
         Announcement.objects.select_related("organization", "category")
-        .prefetch_related("services")
+        .prefetch_related("images", "subservices__service_catalog__category", "subservices__price_table")
         .filter(status=Announcement.Status.ACTIVE)
     )
     lookup_field = "uuid"
@@ -118,8 +124,10 @@ class PublicAnnouncementDetailViewSet(
         )
 
 
+@extend_schema(tags=["Announcements"])
 @extend_schema_view(
     list=extend_schema(
+        tags=["Announcements"],
         summary="List announcements",
         description=(
             "Lists announcements for the organization specified in the URL. Supports "
@@ -145,26 +153,25 @@ class PublicAnnouncementDetailViewSet(
         ],
     ),
     create=extend_schema(
+        tags=["Announcements"],
         summary="Create announcement",
         description="Creates an announcement for the organization specified in the URL.",
         parameters=[organization_uuid_parameter],
     ),
-    retrieve=extend_schema(
-        summary="Get announcement",
-        description="Returns the details of an announcement belonging to the organization specified in the URL.",
-        parameters=[organization_uuid_parameter, announcement_uuid_parameter],
-    ),
     update=extend_schema(
+        tags=["Announcements"],
         summary="Replace announcement",
         description="Fully replaces an announcement owned by the organization specified in the URL.",
         parameters=[organization_uuid_parameter, announcement_uuid_parameter],
     ),
     partial_update=extend_schema(
+        tags=["Announcements"],
         summary="Update announcement",
         description="Partially updates an announcement owned by the organization specified in the URL.",
         parameters=[organization_uuid_parameter, announcement_uuid_parameter],
     ),
     destroy=extend_schema(
+        tags=["Announcements"],
         summary="Delete announcement",
         description="Deletes an announcement owned by the organization specified in the URL.",
         parameters=[organization_uuid_parameter, announcement_uuid_parameter],
@@ -190,19 +197,20 @@ class AnnouncementViewSet(
         "description",
         "free_text",
         "category__name",
-        "services__name",
+        "subservices__service_catalog__name",
         "status",
     )
-    search_uuid_fields = ("uuid", "category__uuid", "services__uuid")
+    search_uuid_fields = ("uuid", "category__uuid", "subservices__service_catalog__uuid")
 
     serializer_class = AnnouncementSerializer
     permission_classes = [IsActiveAccount]
-    queryset = Announcement.objects.select_related("organization", "category").prefetch_related("services")
+    queryset = Announcement.objects.select_related("organization", "category").prefetch_related(
+        "images", "subservices__service_catalog__category", "subservices__price_table"
+    )
     lookup_field = "uuid"
     throttle_scope_prefix = "organization"
     throttle_scope_action_map = {
         "list": "organization_authenticated_read",
-        "retrieve": "organization_authenticated_read",
         "create": "organization_write",
         "update": "organization_write",
         "partial_update": "organization_write",
@@ -227,7 +235,7 @@ class AnnouncementViewSet(
             (
                 ("uuid", "uuids", "uuid"),
                 ("category", "categories", "category__uuid"),
-                ("service", "services", "services__uuid"),
+                ("service", "services", "subservices__service_catalog__uuid"),
                 ("status", "statuses", "status"),
             ),
         )
@@ -260,3 +268,86 @@ class AnnouncementViewSet(
     def perform_destroy(self, instance):
         self.ensure_organization_is_approved_for_write(instance.organization)
         super().perform_destroy(instance)
+
+
+@extend_schema_view(
+    list=extend_schema(
+        summary="List announcement images",
+        description="Lists images attached to an announcement owned by the organization in the URL.",
+        parameters=[organization_uuid_parameter, announcement_uuid_parameter],
+    ),
+    create=extend_schema(
+        summary="Upload announcement image",
+        description="Uploads an image for an announcement owned by the organization in the URL.",
+        parameters=[organization_uuid_parameter, announcement_uuid_parameter],
+    ),
+    destroy=extend_schema(
+        summary="Delete announcement image",
+        description="Deletes an image from an announcement owned by the organization in the URL.",
+        parameters=[organization_uuid_parameter, announcement_uuid_parameter],
+    ),
+)
+class AnnouncementImageViewSet(
+    OrganizationVisibilityMixin,
+    ActionScopedRateThrottleMixin,
+    mixins.ListModelMixin,
+    mixins.CreateModelMixin,
+    mixins.DestroyModelMixin,
+    viewsets.GenericViewSet,
+):
+    serializer_class = AnnouncementImageSerializer
+    permission_classes = [IsActiveAccount]
+    parser_classes = [MultiPartParser, FormParser]
+    lookup_field = "uuid"
+    lookup_url_kwarg = "image_uuid"
+    throttle_scope_prefix = "organization"
+    throttle_scope_action_map = {
+        "list": "organization_authenticated_read",
+        "create": "organization_write",
+        "destroy": "organization_write",
+    }
+
+    def get_queryset(self):
+        announcement = self._get_announcement()
+        return AnnouncementImage.objects.filter(announcement=announcement)
+
+    def get_permissions(self):
+        if self.action == "destroy":
+            return [IsActiveAccount(), IsOrganizationResourceOwner()]
+        return [IsActiveAccount()]
+
+    def create(self, request, *args, **kwargs):
+        announcement = self._get_announcement(for_write=True)
+        serializer = self.get_serializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        image = serializer.save(announcement=announcement)
+        response_serializer = self.get_serializer(image)
+        return Response(response_serializer.data, status=status.HTTP_201_CREATED)
+
+    def perform_destroy(self, instance):
+        announcement = self._get_announcement(for_write=True)
+        if instance.announcement_id != announcement.id:
+            raise NotFound("Announcement image not found.")
+        instance.delete()
+
+    def _get_announcement(self, for_write=False):
+        organization = self.get_url_organization()
+        if organization is None:
+            raise NotFound("Organization not found.")
+
+        user = self.request.user
+        if not (getattr(user, "is_staff", False) or organization.user_id == user.id):
+            raise NotFound("Organization not found.")
+
+        announcement = (
+            Announcement.objects.select_related("organization")
+            .filter(uuid=self.kwargs["uuid"], organization=organization)
+            .first()
+        )
+        if announcement is None:
+            raise NotFound("Announcement not found.")
+
+        if for_write and not getattr(user, "is_staff", False):
+            self.ensure_organization_is_approved_for_write(organization)
+
+        return announcement

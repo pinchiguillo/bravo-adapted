@@ -28,6 +28,7 @@ from .utils import (
 )
 
 
+@extend_schema(tags=["RGPD"])
 class RgpdConsentViewSet(ActionScopedRateThrottleMixin, viewsets.GenericViewSet):
     queryset = RgpdConsent.objects.select_related("user")
     serializer_class = RgpdConsentSerializer

@@ -1,14 +1,42 @@
 openapi: 3.0.3
 info:
   title: Bravo API
-  version: 0.0.2
+  version: 0.0.8
   description: OpenAPI documentation for the Bravo backend.
 paths:
+  /api/allowed-cities/:
+    get:
+      operationId: allowed_cities_list
+      description: Returns the public allowed cities catalog.
+      summary: List allowed cities
+      parameters:
+      - name: page
+        required: false
+        in: query
+        description: A page number within the paginated result set.
+        schema:
+          type: integer
+      - name: page_size
+        required: false
+        in: query
+        description: Number of results to return per page.
+        schema:
+          type: integer
+      tags:
+      - Catalog
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedAllowedCityList'
+          description: ''
   /api/announcements/:
     get:
       operationId: announcements_list
-      description: Lists active announcements. Supports optional filtering by category
-        UUIDs and plain text search.
+      description: Lists active announcements. Supports optional filtering by title,
+        organization, category, service, text fields, coordinates presence and plain
+        text search.
       summary: List public announcements
       parameters:
       - in: query
@@ -26,6 +54,47 @@ paths:
         schema:
           type: string
         description: Single category UUID filter kept for backwards compatibility.
+      - in: query
+        name: description
+        schema:
+          type: string
+        description: Optional text used to filter announcements by description.
+      - in: query
+        name: free_text
+        schema:
+          type: string
+        description: Optional text used to filter announcements by free text.
+      - in: query
+        name: has_coordinates
+        schema:
+          type: boolean
+        description: Optional boolean filter to include only announcements with or
+          without coordinates.
+      - in: query
+        name: location
+        schema:
+          type: string
+        description: Optional text used to filter announcements by location.
+      - in: query
+        name: name
+        schema:
+          type: string
+        description: Optional text used to filter announcements by name.
+      - in: query
+        name: organization
+        schema:
+          type: string
+        description: Single organization UUID filter.
+      - in: query
+        name: organizations
+        schema:
+          type: array
+          items:
+            type: string
+            format: uuid
+        description: Optional list of organization UUIDs used to filter announcements.
+        explode: true
+        style: form
       - name: page
         required: false
         in: query
@@ -44,14 +113,499 @@ paths:
           type: string
         description: Optional text used to filter announcements by their visible text
           fields.
+      - in: query
+        name: service
+        schema:
+          type: string
+        description: Single service catalog UUID filter.
+      - in: query
+        name: services
+        schema:
+          type: array
+          items:
+            type: string
+            format: uuid
+        description: Optional list of service catalog UUIDs used to filter announcements.
+        explode: true
+        style: form
+      - in: query
+        name: title
+        schema:
+          type: string
+        description: Optional text used to filter announcements by title.
+      - in: query
+        name: uuid
+        schema:
+          type: string
+        description: Single announcement UUID filter.
       tags:
-      - announcements
+      - Announcements
       responses:
         '200':
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/PaginatedAnnouncementList'
+          description: ''
+  /api/announcements/{announcement_uuid}/subservices/:
+    get:
+      operationId: announcements_subservices_list
+      description: Lists the subservices of the announcement specified in the URL.
+      summary: List subservices
+      parameters:
+      - in: path
+        name: announcement_uuid
+        schema:
+          type: string
+        description: UUID of the announcement that owns the nested resource.
+        required: true
+      - name: page
+        required: false
+        in: query
+        description: A page number within the paginated result set.
+        schema:
+          type: integer
+      - name: page_size
+        required: false
+        in: query
+        description: Number of results to return per page.
+        schema:
+          type: integer
+      tags:
+      - Services
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedSubserviceList'
+          description: ''
+    post:
+      operationId: announcements_subservices_create
+      description: Creates a subservice associated with the announcement specified
+        in the URL.
+      summary: Create subservice
+      parameters:
+      - in: path
+        name: announcement_uuid
+        schema:
+          type: string
+        description: UUID of the announcement that owns the nested resource.
+        required: true
+      tags:
+      - Services
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Subservice'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/Subservice'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/Subservice'
+        required: true
+      security:
+      - jwtAuth: []
+      responses:
+        '201':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Subservice'
+          description: ''
+  /api/announcements/{announcement_uuid}/subservices/{subservice_uuid}/:
+    get:
+      operationId: announcements_subservices_retrieve
+      description: Returns the details of a subservice belonging to the announcement
+        specified in the URL.
+      summary: Get subservice
+      parameters:
+      - in: path
+        name: announcement_uuid
+        schema:
+          type: string
+        description: UUID of the announcement that owns the nested resource.
+        required: true
+      - in: path
+        name: subservice_uuid
+        schema:
+          type: string
+        description: UUID of the subservice.
+        required: true
+      tags:
+      - Services
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Subservice'
+          description: ''
+    put:
+      operationId: announcements_subservices_update
+      description: Fully replaces a subservice of the announcement specified in the
+        URL.
+      summary: Replace subservice
+      parameters:
+      - in: path
+        name: announcement_uuid
+        schema:
+          type: string
+        description: UUID of the announcement that owns the nested resource.
+        required: true
+      - in: path
+        name: subservice_uuid
+        schema:
+          type: string
+          format: uuid
+        required: true
+      tags:
+      - Services
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Subservice'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/Subservice'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/Subservice'
+        required: true
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Subservice'
+          description: ''
+    patch:
+      operationId: announcements_subservices_partial_update
+      description: Partially updates a subservice of the announcement specified in
+        the URL.
+      summary: Update subservice
+      parameters:
+      - in: path
+        name: announcement_uuid
+        schema:
+          type: string
+        description: UUID of the announcement that owns the nested resource.
+        required: true
+      - in: path
+        name: subservice_uuid
+        schema:
+          type: string
+          format: uuid
+        required: true
+      tags:
+      - Services
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PatchedSubservice'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/PatchedSubservice'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/PatchedSubservice'
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Subservice'
+          description: ''
+    delete:
+      operationId: announcements_subservices_destroy
+      description: Deletes a subservice of the announcement specified in the URL.
+      summary: Delete subservice
+      parameters:
+      - in: path
+        name: announcement_uuid
+        schema:
+          type: string
+        description: UUID of the announcement that owns the nested resource.
+        required: true
+      - in: path
+        name: subservice_uuid
+        schema:
+          type: string
+          format: uuid
+        required: true
+      tags:
+      - Services
+      security:
+      - jwtAuth: []
+      responses:
+        '204':
+          description: No response body
+  /api/announcements/{announcement_uuid}/subservices/{subservice_uuid}/prices/:
+    get:
+      operationId: announcements_subservices_prices_list
+      description: Lists the service prices of the subservice specified in the URL.
+      summary: List service prices
+      parameters:
+      - in: path
+        name: announcement_uuid
+        schema:
+          type: string
+        description: UUID of the announcement that owns the nested resource.
+        required: true
+      - name: page
+        required: false
+        in: query
+        description: A page number within the paginated result set.
+        schema:
+          type: integer
+      - name: page_size
+        required: false
+        in: query
+        description: Number of results to return per page.
+        schema:
+          type: integer
+      - in: path
+        name: subservice_uuid
+        schema:
+          type: string
+        description: UUID of the subservice.
+        required: true
+      tags:
+      - Services
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedServicePriceList'
+          description: ''
+    post:
+      operationId: announcements_subservices_prices_create
+      description: Creates a service price for the subservice specified in the URL.
+      summary: Create service price
+      parameters:
+      - in: path
+        name: announcement_uuid
+        schema:
+          type: string
+        description: UUID of the announcement that owns the nested resource.
+        required: true
+      - in: path
+        name: subservice_uuid
+        schema:
+          type: string
+        description: UUID of the subservice.
+        required: true
+      tags:
+      - Services
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ServicePrice'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/ServicePrice'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/ServicePrice'
+        required: true
+      security:
+      - jwtAuth: []
+      responses:
+        '201':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ServicePrice'
+          description: ''
+  /api/announcements/{announcement_uuid}/subservices/{subservice_uuid}/prices/{price_uuid}/:
+    get:
+      operationId: announcements_subservices_prices_retrieve
+      description: Returns a public service price belonging to the subservice specified
+        in the URL.
+      summary: Get service price
+      parameters:
+      - in: path
+        name: announcement_uuid
+        schema:
+          type: string
+        description: UUID of the announcement that owns the nested resource.
+        required: true
+      - in: path
+        name: price_uuid
+        schema:
+          type: string
+        description: Service price identifier.
+        required: true
+      - in: path
+        name: subservice_uuid
+        schema:
+          type: string
+        description: UUID of the subservice.
+        required: true
+      tags:
+      - Services
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ServicePrice'
+          description: ''
+    put:
+      operationId: announcements_subservices_prices_update
+      description: Fully replaces a service price belonging to the subservice specified
+        in the URL.
+      summary: Replace service price
+      parameters:
+      - in: path
+        name: announcement_uuid
+        schema:
+          type: string
+        description: UUID of the announcement that owns the nested resource.
+        required: true
+      - in: path
+        name: price_uuid
+        schema:
+          type: string
+        description: Service price identifier.
+        required: true
+      - in: path
+        name: subservice_uuid
+        schema:
+          type: string
+        description: UUID of the subservice.
+        required: true
+      tags:
+      - Services
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ServicePrice'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/ServicePrice'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/ServicePrice'
+        required: true
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ServicePrice'
+          description: ''
+    patch:
+      operationId: announcements_subservices_prices_partial_update
+      description: Partially updates a service price belonging to the subservice specified
+        in the URL.
+      summary: Update service price
+      parameters:
+      - in: path
+        name: announcement_uuid
+        schema:
+          type: string
+        description: UUID of the announcement that owns the nested resource.
+        required: true
+      - in: path
+        name: price_uuid
+        schema:
+          type: string
+        description: Service price identifier.
+        required: true
+      - in: path
+        name: subservice_uuid
+        schema:
+          type: string
+        description: UUID of the subservice.
+        required: true
+      tags:
+      - Services
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PatchedServicePrice'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/PatchedServicePrice'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/PatchedServicePrice'
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ServicePrice'
+          description: ''
+    delete:
+      operationId: announcements_subservices_prices_destroy
+      description: Deletes a service price belonging to the subservice specified in
+        the URL.
+      summary: Delete service price
+      parameters:
+      - in: path
+        name: announcement_uuid
+        schema:
+          type: string
+        description: UUID of the announcement that owns the nested resource.
+        required: true
+      - in: path
+        name: price_uuid
+        schema:
+          type: string
+        description: Service price identifier.
+        required: true
+      - in: path
+        name: subservice_uuid
+        schema:
+          type: string
+        description: UUID of the subservice.
+        required: true
+      tags:
+      - Services
+      security:
+      - jwtAuth: []
+      responses:
+        '204':
+          description: No response body
+  /api/announcements/{uuid}/:
+    get:
+      operationId: announcements_retrieve
+      description: Returns the details of an active public announcement by announcement
+        UUID.
+      summary: Get public announcement
+      parameters:
+      - in: path
+        name: uuid
+        schema:
+          type: string
+        description: UUID of the announcement.
+        required: true
+      tags:
+      - Announcements
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Announcement'
           description: ''
   /api/auth/login/:
     post:
@@ -60,7 +614,7 @@ paths:
         access and refresh tokens.
       summary: Login
       tags:
-      - auth
+      - Auth
       requestBody:
         content:
           application/json:
@@ -87,7 +641,7 @@ paths:
         the request.
       summary: Get authenticated user
       tags:
-      - auth
+      - Auth
       security:
       - jwtAuth: []
       responses:
@@ -104,7 +658,7 @@ paths:
         the response also includes JWT tokens.
       summary: Register user
       tags:
-      - auth
+      - Auth
       requestBody:
         content:
           application/json:
@@ -130,7 +684,7 @@ paths:
       description: Receives a valid refresh token and returns a new JWT access token.
       summary: Refresh token
       tags:
-      - auth
+      - Auth
       requestBody:
         content:
           application/json:
@@ -157,7 +711,7 @@ paths:
         and returns JWT tokens.
       summary: Verify email
       tags:
-      - auth
+      - Auth
       requestBody:
         content:
           application/json:
@@ -177,6 +731,321 @@ paths:
               schema:
                 $ref: '#/components/schemas/VerifyEmail'
           description: ''
+  /api/categories/:
+    get:
+      operationId: categories_list
+      description: Returns the public categories catalog.
+      summary: List categories
+      parameters:
+      - name: page
+        required: false
+        in: query
+        description: A page number within the paginated result set.
+        schema:
+          type: integer
+      - name: page_size
+        required: false
+        in: query
+        description: Number of results to return per page.
+        schema:
+          type: integer
+      tags:
+      - Catalog
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedCategoryList'
+          description: ''
+  /api/management/allowed-cities/:
+    get:
+      operationId: management_allowed_cities_list
+      parameters:
+      - name: page
+        required: false
+        in: query
+        description: A page number within the paginated result set.
+        schema:
+          type: integer
+      - name: page_size
+        required: false
+        in: query
+        description: Number of results to return per page.
+        schema:
+          type: integer
+      tags:
+      - Management / Allowed Cities
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedManagementAllowedCityList'
+          description: ''
+    post:
+      operationId: management_allowed_cities_create
+      tags:
+      - Management / Allowed Cities
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ManagementAllowedCity'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/ManagementAllowedCity'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/ManagementAllowedCity'
+        required: true
+      security:
+      - jwtAuth: []
+      responses:
+        '201':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ManagementAllowedCity'
+          description: ''
+  /api/management/allowed-cities/{uuid}/:
+    get:
+      operationId: management_allowed_cities_retrieve
+      parameters:
+      - in: path
+        name: uuid
+        schema:
+          type: string
+          format: uuid
+        required: true
+      tags:
+      - Management / Allowed Cities
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ManagementAllowedCity'
+          description: ''
+    put:
+      operationId: management_allowed_cities_update
+      parameters:
+      - in: path
+        name: uuid
+        schema:
+          type: string
+          format: uuid
+        required: true
+      tags:
+      - Management / Allowed Cities
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ManagementAllowedCity'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/ManagementAllowedCity'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/ManagementAllowedCity'
+        required: true
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ManagementAllowedCity'
+          description: ''
+    patch:
+      operationId: management_allowed_cities_partial_update
+      parameters:
+      - in: path
+        name: uuid
+        schema:
+          type: string
+          format: uuid
+        required: true
+      tags:
+      - Management / Allowed Cities
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PatchedManagementAllowedCity'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/PatchedManagementAllowedCity'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/PatchedManagementAllowedCity'
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ManagementAllowedCity'
+          description: ''
+  /api/management/categories/:
+    get:
+      operationId: management_categories_list
+      parameters:
+      - name: page
+        required: false
+        in: query
+        description: A page number within the paginated result set.
+        schema:
+          type: integer
+      - name: page_size
+        required: false
+        in: query
+        description: Number of results to return per page.
+        schema:
+          type: integer
+      tags:
+      - Management / Categories
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedManagementCategoryList'
+          description: ''
+    post:
+      operationId: management_categories_create
+      tags:
+      - Management / Categories
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ManagementCategory'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/ManagementCategory'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/ManagementCategory'
+        required: true
+      security:
+      - jwtAuth: []
+      responses:
+        '201':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ManagementCategory'
+          description: ''
+  /api/management/categories/{uuid}/:
+    get:
+      operationId: management_categories_retrieve
+      parameters:
+      - in: path
+        name: uuid
+        schema:
+          type: string
+          format: uuid
+        required: true
+      tags:
+      - Management / Categories
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ManagementCategory'
+          description: ''
+    put:
+      operationId: management_categories_update
+      parameters:
+      - in: path
+        name: uuid
+        schema:
+          type: string
+          format: uuid
+        required: true
+      tags:
+      - Management / Categories
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ManagementCategory'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/ManagementCategory'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/ManagementCategory'
+        required: true
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ManagementCategory'
+          description: ''
+    patch:
+      operationId: management_categories_partial_update
+      parameters:
+      - in: path
+        name: uuid
+        schema:
+          type: string
+          format: uuid
+        required: true
+      tags:
+      - Management / Categories
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PatchedManagementCategory'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/PatchedManagementCategory'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/PatchedManagementCategory'
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ManagementCategory'
+          description: ''
+    delete:
+      operationId: management_categories_destroy
+      parameters:
+      - in: path
+        name: uuid
+        schema:
+          type: string
+          format: uuid
+        required: true
+      tags:
+      - Management / Categories
+      security:
+      - jwtAuth: []
+      responses:
+        '204':
+          description: No response body
   /api/management/feature-flags/:
     get:
       operationId: management_feature_flags_list
@@ -194,7 +1063,7 @@ paths:
         schema:
           type: integer
       tags:
-      - management
+      - Management / Feature Flags
       security:
       - jwtAuth: []
       responses:
@@ -207,7 +1076,7 @@ paths:
     post:
       operationId: management_feature_flags_create
       tags:
-      - management
+      - Management / Feature Flags
       requestBody:
         content:
           application/json:
@@ -240,7 +1109,7 @@ paths:
           format: uuid
         required: true
       tags:
-      - management
+      - Management / Feature Flags
       security:
       - jwtAuth: []
       responses:
@@ -260,7 +1129,7 @@ paths:
           format: uuid
         required: true
       tags:
-      - management
+      - Management / Feature Flags
       requestBody:
         content:
           application/json:
@@ -292,7 +1161,7 @@ paths:
           format: uuid
         required: true
       tags:
-      - management
+      - Management / Feature Flags
       requestBody:
         content:
           application/json:
@@ -325,7 +1194,7 @@ paths:
           format: uuid
         required: true
       tags:
-      - management
+      - Management / Feature Flags
       requestBody:
         content:
           application/json:
@@ -359,7 +1228,7 @@ paths:
           format: uuid
         required: true
       tags:
-      - management
+      - Management / Feature Flags
       requestBody:
         content:
           application/json:
@@ -398,7 +1267,7 @@ paths:
         schema:
           type: integer
       tags:
-      - management
+      - Management / Organizations
       security:
       - jwtAuth: []
       responses:
@@ -411,7 +1280,7 @@ paths:
     post:
       operationId: management_organizations_create
       tags:
-      - management
+      - Management / Organizations
       requestBody:
         content:
           application/json:
@@ -444,7 +1313,7 @@ paths:
           format: uuid
         required: true
       tags:
-      - management
+      - Management / Organizations
       security:
       - jwtAuth: []
       responses:
@@ -464,7 +1333,7 @@ paths:
           format: uuid
         required: true
       tags:
-      - management
+      - Management / Organizations
       requestBody:
         content:
           application/json:
@@ -496,7 +1365,7 @@ paths:
           format: uuid
         required: true
       tags:
-      - management
+      - Management / Organizations
       requestBody:
         content:
           application/json:
@@ -529,7 +1398,7 @@ paths:
           format: uuid
         required: true
       tags:
-      - management
+      - Management / Organizations
       requestBody:
         content:
           application/json:
@@ -563,7 +1432,7 @@ paths:
           format: uuid
         required: true
       tags:
-      - management
+      - Management / Organizations
       requestBody:
         content:
           application/json:
@@ -597,7 +1466,7 @@ paths:
           format: uuid
         required: true
       tags:
-      - management
+      - Management / Organizations
       requestBody:
         content:
           application/json:
@@ -622,7 +1491,15 @@ paths:
   /api/management/users/:
     get:
       operationId: management_users_list
+      description: Returns the paginated list of managed users with optional search
+        and filters.
+      summary: List managed users
       parameters:
+      - in: query
+        name: email_verified
+        schema:
+          type: boolean
+        description: Exact boolean filter for email verification status.
       - name: page
         required: false
         in: query
@@ -635,8 +1512,19 @@ paths:
         description: Number of results to return per page.
         schema:
           type: integer
+      - in: query
+        name: search
+        schema:
+          type: string
+        description: Free text search over uuid, username, email, first name and last
+          name.
+      - in: query
+        name: status
+        schema:
+          type: string
+        description: Exact user status filter.
       tags:
-      - management
+      - Management / Users
       security:
       - jwtAuth: []
       responses:
@@ -649,7 +1537,7 @@ paths:
     post:
       operationId: management_users_create
       tags:
-      - management
+      - Management / Users
       requestBody:
         content:
           application/json:
@@ -682,7 +1570,7 @@ paths:
           format: uuid
         required: true
       tags:
-      - management
+      - Management / Users
       security:
       - jwtAuth: []
       responses:
@@ -702,7 +1590,7 @@ paths:
           format: uuid
         required: true
       tags:
-      - management
+      - Management / Users
       requestBody:
         content:
           application/json:
@@ -734,7 +1622,7 @@ paths:
           format: uuid
         required: true
       tags:
-      - management
+      - Management / Users
       requestBody:
         content:
           application/json:
@@ -767,7 +1655,7 @@ paths:
           format: uuid
         required: true
       tags:
-      - management
+      - Management / Users
       requestBody:
         content:
           application/json:
@@ -801,7 +1689,7 @@ paths:
           format: uuid
         required: true
       tags:
-      - management
+      - Management / Users
       requestBody:
         content:
           application/json:
@@ -835,7 +1723,7 @@ paths:
           format: uuid
         required: true
       tags:
-      - management
+      - Management / Users
       requestBody:
         content:
           application/json:
@@ -863,7 +1751,7 @@ paths:
       description: Creates an organization associated with the authenticated user.
       summary: Create organization
       tags:
-      - organizations
+      - Organizations
       requestBody:
         content:
           application/json:
@@ -891,6 +1779,8 @@ paths:
     get:
       operationId: organizations_announcements_list
       description: Lists announcements for the organization specified in the URL.
+        Supports optional filtering by title, category, service, status, text fields,
+        coordinates presence and plain text search.
       summary: List announcements
       parameters:
       - in: query
@@ -903,6 +1793,37 @@ paths:
         description: Optional list of category UUIDs used to filter announcements.
         explode: true
         style: form
+      - in: query
+        name: category
+        schema:
+          type: string
+        description: Single category UUID filter kept for backwards compatibility.
+      - in: query
+        name: description
+        schema:
+          type: string
+        description: Optional text used to filter announcements by description.
+      - in: query
+        name: free_text
+        schema:
+          type: string
+        description: Optional text used to filter announcements by free text.
+      - in: query
+        name: has_coordinates
+        schema:
+          type: boolean
+        description: Optional boolean filter to include only announcements with or
+          without coordinates.
+      - in: query
+        name: location
+        schema:
+          type: string
+        description: Optional text used to filter announcements by location.
+      - in: query
+        name: name
+        schema:
+          type: string
+        description: Optional text used to filter announcements by name.
       - in: path
         name: organization_uuid
         schema:
@@ -927,8 +1848,47 @@ paths:
           type: string
         description: Optional text used to filter announcements by their visible text
           fields.
+      - in: query
+        name: service
+        schema:
+          type: string
+        description: Single service catalog UUID filter.
+      - in: query
+        name: services
+        schema:
+          type: array
+          items:
+            type: string
+            format: uuid
+        description: Optional list of service catalog UUIDs used to filter announcements.
+        explode: true
+        style: form
+      - in: query
+        name: status
+        schema:
+          type: string
+        description: Single announcement status filter.
+      - in: query
+        name: statuses
+        schema:
+          type: array
+          items:
+            type: string
+        description: Optional list of announcement statuses used to filter announcements.
+        explode: true
+        style: form
+      - in: query
+        name: title
+        schema:
+          type: string
+        description: Optional text used to filter announcements by title.
+      - in: query
+        name: uuid
+        schema:
+          type: string
+        description: Single announcement UUID filter.
       tags:
-      - organizations
+      - Announcements
       security:
       - jwtAuth: []
       responses:
@@ -950,7 +1910,7 @@ paths:
         description: UUID of the organization that owns the nested resource.
         required: true
       tags:
-      - organizations
+      - Announcements
       requestBody:
         content:
           application/json:
@@ -973,35 +1933,6 @@ paths:
                 $ref: '#/components/schemas/Announcement'
           description: ''
   /api/organizations/{organization_uuid}/announcements/{uuid}/:
-    get:
-      operationId: organizations_announcements_retrieve
-      description: Returns the details of an announcement belonging to the organization
-        specified in the URL.
-      summary: Get announcement
-      parameters:
-      - in: path
-        name: organization_uuid
-        schema:
-          type: string
-        description: UUID of the organization that owns the nested resource.
-        required: true
-      - in: path
-        name: uuid
-        schema:
-          type: string
-        description: UUID of the announcement.
-        required: true
-      tags:
-      - organizations
-      security:
-      - jwtAuth: []
-      responses:
-        '200':
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Announcement'
-          description: ''
     put:
       operationId: organizations_announcements_update
       description: Fully replaces an announcement owned by the organization specified
@@ -1021,7 +1952,7 @@ paths:
         description: UUID of the announcement.
         required: true
       tags:
-      - organizations
+      - Announcements
       requestBody:
         content:
           application/json:
@@ -1062,7 +1993,7 @@ paths:
         description: UUID of the announcement.
         required: true
       tags:
-      - organizations
+      - Announcements
       requestBody:
         content:
           application/json:
@@ -1102,460 +2033,19 @@ paths:
         description: UUID of the announcement.
         required: true
       tags:
-      - organizations
+      - Announcements
       security:
       - jwtAuth: []
       responses:
         '204':
           description: No response body
-  /api/organizations/{organization_uuid}/jobs/:
+  /api/organizations/{organization_uuid}/announcements/{uuid}/images/:
     get:
-      operationId: organizations_jobs_list
-      description: Lists the jobs of the organization specified in the URL.
-      summary: List organization jobs
-      parameters:
-      - in: path
-        name: organization_uuid
-        schema:
-          type: string
-        description: UUID of the organization that owns the nested resource.
-        required: true
-      - name: page
-        required: false
-        in: query
-        description: A page number within the paginated result set.
-        schema:
-          type: integer
-      - name: page_size
-        required: false
-        in: query
-        description: Number of results to return per page.
-        schema:
-          type: integer
-      tags:
-      - organizations
-      responses:
-        '200':
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/PaginatedOrganizationJobList'
-          description: ''
-    post:
-      operationId: organizations_jobs_create
-      description: Creates an organization job in the organization specified in the
-        URL if it belongs to the authenticated user.
-      summary: Create organization job
-      parameters:
-      - in: path
-        name: organization_uuid
-        schema:
-          type: string
-        description: UUID of the organization that owns the nested resource.
-        required: true
-      tags:
-      - organizations
-      requestBody:
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/OrganizationJob'
-          application/x-www-form-urlencoded:
-            schema:
-              $ref: '#/components/schemas/OrganizationJob'
-          multipart/form-data:
-            schema:
-              $ref: '#/components/schemas/OrganizationJob'
-        required: true
-      security:
-      - jwtAuth: []
-      responses:
-        '201':
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/OrganizationJob'
-          description: ''
-  /api/organizations/{organization_uuid}/jobs/{job_uuid}/:
-    get:
-      operationId: organizations_jobs_retrieve
-      description: Returns the details of a job belonging to the organization specified
+      operationId: organizations_announcements_images_list
+      description: Lists images attached to an announcement owned by the organization
         in the URL.
-      summary: Get organization job
+      summary: List announcement images
       parameters:
-      - in: path
-        name: job_uuid
-        schema:
-          type: string
-        description: UUID of the organization job that owns the service.
-        required: true
-      - in: path
-        name: organization_uuid
-        schema:
-          type: string
-        description: UUID of the organization that owns the nested resource.
-        required: true
-      tags:
-      - organizations
-      responses:
-        '200':
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/OrganizationJob'
-          description: ''
-    put:
-      operationId: organizations_jobs_update
-      description: Fully replaces a job in the organization specified in the URL.
-      summary: Replace organization job
-      parameters:
-      - in: path
-        name: job_uuid
-        schema:
-          type: string
-        description: UUID of the organization job that owns the service.
-        required: true
-      - in: path
-        name: organization_uuid
-        schema:
-          type: string
-        description: UUID of the organization that owns the nested resource.
-        required: true
-      tags:
-      - organizations
-      requestBody:
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/OrganizationJob'
-          application/x-www-form-urlencoded:
-            schema:
-              $ref: '#/components/schemas/OrganizationJob'
-          multipart/form-data:
-            schema:
-              $ref: '#/components/schemas/OrganizationJob'
-        required: true
-      security:
-      - jwtAuth: []
-      responses:
-        '200':
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/OrganizationJob'
-          description: ''
-    patch:
-      operationId: organizations_jobs_partial_update
-      description: Partially updates a job in the organization specified in the URL.
-      summary: Update organization job
-      parameters:
-      - in: path
-        name: job_uuid
-        schema:
-          type: string
-        description: UUID of the organization job that owns the service.
-        required: true
-      - in: path
-        name: organization_uuid
-        schema:
-          type: string
-        description: UUID of the organization that owns the nested resource.
-        required: true
-      tags:
-      - organizations
-      requestBody:
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/PatchedOrganizationJob'
-          application/x-www-form-urlencoded:
-            schema:
-              $ref: '#/components/schemas/PatchedOrganizationJob'
-          multipart/form-data:
-            schema:
-              $ref: '#/components/schemas/PatchedOrganizationJob'
-      security:
-      - jwtAuth: []
-      responses:
-        '200':
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/OrganizationJob'
-          description: ''
-    delete:
-      operationId: organizations_jobs_destroy
-      description: Deletes a job in the organization specified in the URL.
-      summary: Delete organization job
-      parameters:
-      - in: path
-        name: job_uuid
-        schema:
-          type: string
-        description: UUID of the organization job that owns the service.
-        required: true
-      - in: path
-        name: organization_uuid
-        schema:
-          type: string
-        description: UUID of the organization that owns the nested resource.
-        required: true
-      tags:
-      - organizations
-      security:
-      - jwtAuth: []
-      responses:
-        '204':
-          description: No response body
-  /api/organizations/{organization_uuid}/jobs/{job_uuid}/services/:
-    get:
-      operationId: organizations_jobs_services_list
-      description: Lists the services of the organization job specified in the URL.
-      summary: List services
-      parameters:
-      - in: path
-        name: job_uuid
-        schema:
-          type: string
-        description: UUID of the organization job that owns the service.
-        required: true
-      - in: path
-        name: organization_uuid
-        schema:
-          type: string
-        description: UUID of the organization that owns the nested resource.
-        required: true
-      - name: page
-        required: false
-        in: query
-        description: A page number within the paginated result set.
-        schema:
-          type: integer
-      - name: page_size
-        required: false
-        in: query
-        description: Number of results to return per page.
-        schema:
-          type: integer
-      tags:
-      - organizations
-      responses:
-        '200':
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/PaginatedServiceList'
-          description: ''
-    post:
-      operationId: organizations_jobs_services_create
-      description: Creates a service in the organization job specified in the URL
-        if it belongs to the authenticated user.
-      summary: Create service
-      parameters:
-      - in: path
-        name: job_uuid
-        schema:
-          type: string
-        description: UUID of the organization job that owns the service.
-        required: true
-      - in: path
-        name: organization_uuid
-        schema:
-          type: string
-        description: UUID of the organization that owns the nested resource.
-        required: true
-      tags:
-      - organizations
-      requestBody:
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/Service'
-          application/x-www-form-urlencoded:
-            schema:
-              $ref: '#/components/schemas/Service'
-          multipart/form-data:
-            schema:
-              $ref: '#/components/schemas/Service'
-        required: true
-      security:
-      - jwtAuth: []
-      responses:
-        '201':
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Service'
-          description: ''
-  /api/organizations/{organization_uuid}/jobs/{job_uuid}/services/{service_uuid}/:
-    get:
-      operationId: organizations_jobs_services_retrieve
-      description: Returns the details of a service belonging to the organization
-        job specified in the URL.
-      summary: Get service
-      parameters:
-      - in: path
-        name: job_uuid
-        schema:
-          type: string
-        description: UUID of the organization job that owns the service.
-        required: true
-      - in: path
-        name: organization_uuid
-        schema:
-          type: string
-        description: UUID of the organization that owns the nested resource.
-        required: true
-      - in: path
-        name: service_uuid
-        schema:
-          type: string
-        description: UUID of the service that owns the nested subservice.
-        required: true
-      tags:
-      - organizations
-      responses:
-        '200':
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Service'
-          description: ''
-    put:
-      operationId: organizations_jobs_services_update
-      description: Fully replaces a service in the organization job specified in the
-        URL.
-      summary: Replace service
-      parameters:
-      - in: path
-        name: job_uuid
-        schema:
-          type: string
-        description: UUID of the organization job that owns the service.
-        required: true
-      - in: path
-        name: organization_uuid
-        schema:
-          type: string
-        description: UUID of the organization that owns the nested resource.
-        required: true
-      - in: path
-        name: service_uuid
-        schema:
-          type: string
-        description: UUID of the service that owns the nested subservice.
-        required: true
-      tags:
-      - organizations
-      requestBody:
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/Service'
-          application/x-www-form-urlencoded:
-            schema:
-              $ref: '#/components/schemas/Service'
-          multipart/form-data:
-            schema:
-              $ref: '#/components/schemas/Service'
-        required: true
-      security:
-      - jwtAuth: []
-      responses:
-        '200':
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Service'
-          description: ''
-    patch:
-      operationId: organizations_jobs_services_partial_update
-      description: Partially updates a service in the organization job specified in
-        the URL.
-      summary: Update service
-      parameters:
-      - in: path
-        name: job_uuid
-        schema:
-          type: string
-        description: UUID of the organization job that owns the service.
-        required: true
-      - in: path
-        name: organization_uuid
-        schema:
-          type: string
-        description: UUID of the organization that owns the nested resource.
-        required: true
-      - in: path
-        name: service_uuid
-        schema:
-          type: string
-        description: UUID of the service that owns the nested subservice.
-        required: true
-      tags:
-      - organizations
-      requestBody:
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/PatchedService'
-          application/x-www-form-urlencoded:
-            schema:
-              $ref: '#/components/schemas/PatchedService'
-          multipart/form-data:
-            schema:
-              $ref: '#/components/schemas/PatchedService'
-      security:
-      - jwtAuth: []
-      responses:
-        '200':
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Service'
-          description: ''
-    delete:
-      operationId: organizations_jobs_services_destroy
-      description: Deletes a service in the organization job specified in the URL.
-      summary: Delete service
-      parameters:
-      - in: path
-        name: job_uuid
-        schema:
-          type: string
-        description: UUID of the organization job that owns the service.
-        required: true
-      - in: path
-        name: organization_uuid
-        schema:
-          type: string
-        description: UUID of the organization that owns the nested resource.
-        required: true
-      - in: path
-        name: service_uuid
-        schema:
-          type: string
-        description: UUID of the service that owns the nested subservice.
-        required: true
-      tags:
-      - organizations
-      security:
-      - jwtAuth: []
-      responses:
-        '204':
-          description: No response body
-  /api/organizations/{organization_uuid}/jobs/{job_uuid}/services/{service_uuid}/subservices/:
-    get:
-      operationId: organizations_jobs_services_subservices_list
-      description: Lists the subservices of the service specified in the URL.
-      summary: List subservices
-      parameters:
-      - in: path
-        name: job_uuid
-        schema:
-          type: string
-        description: UUID of the organization job that owns the service.
-        required: true
       - in: path
         name: organization_uuid
         schema:
@@ -1575,10 +2065,10 @@ paths:
         schema:
           type: integer
       - in: path
-        name: service_uuid
+        name: uuid
         schema:
           type: string
-        description: UUID of the service that owns the nested subservice.
+        description: UUID of the announcement.
         required: true
       tags:
       - organizations
@@ -1589,68 +2079,14 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/PaginatedSubserviceList'
+                $ref: '#/components/schemas/PaginatedAnnouncementImageList'
           description: ''
     post:
-      operationId: organizations_jobs_services_subservices_create
-      description: Creates a subservice associated with the service specified in the
-        URL.
-      summary: Create subservice
-      parameters:
-      - in: path
-        name: job_uuid
-        schema:
-          type: string
-        description: UUID of the organization job that owns the service.
-        required: true
-      - in: path
-        name: organization_uuid
-        schema:
-          type: string
-        description: UUID of the organization that owns the nested resource.
-        required: true
-      - in: path
-        name: service_uuid
-        schema:
-          type: string
-        description: UUID of the service that owns the nested subservice.
-        required: true
-      tags:
-      - organizations
-      requestBody:
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/Subservice'
-          application/x-www-form-urlencoded:
-            schema:
-              $ref: '#/components/schemas/Subservice'
-          multipart/form-data:
-            schema:
-              $ref: '#/components/schemas/Subservice'
-        required: true
-      security:
-      - jwtAuth: []
-      responses:
-        '201':
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Subservice'
-          description: ''
-  /api/organizations/{organization_uuid}/jobs/{job_uuid}/services/{service_uuid}/subservices/{uuid}/:
-    get:
-      operationId: organizations_jobs_services_subservices_retrieve
-      description: Returns the details of a subservice belonging to the service specified
+      operationId: organizations_announcements_images_create
+      description: Uploads an image for an announcement owned by the organization
         in the URL.
-      summary: Get subservice
+      summary: Upload announcement image
       parameters:
-      - in: path
-        name: job_uuid
-        schema:
-          type: string
-        description: UUID of the organization job that owns the service.
-        required: true
       - in: path
         name: organization_uuid
         schema:
@@ -1658,142 +2094,43 @@ paths:
         description: UUID of the organization that owns the nested resource.
         required: true
       - in: path
-        name: service_uuid
-        schema:
-          type: string
-        description: UUID of the service that owns the nested subservice.
-        required: true
-      - in: path
         name: uuid
         schema:
           type: string
-          format: uuid
-        required: true
-      tags:
-      - organizations
-      security:
-      - jwtAuth: []
-      responses:
-        '200':
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Subservice'
-          description: ''
-    put:
-      operationId: organizations_jobs_services_subservices_update
-      description: Fully replaces a subservice of the service specified in the URL.
-      summary: Replace subservice
-      parameters:
-      - in: path
-        name: job_uuid
-        schema:
-          type: string
-        description: UUID of the organization job that owns the service.
-        required: true
-      - in: path
-        name: organization_uuid
-        schema:
-          type: string
-        description: UUID of the organization that owns the nested resource.
-        required: true
-      - in: path
-        name: service_uuid
-        schema:
-          type: string
-        description: UUID of the service that owns the nested subservice.
-        required: true
-      - in: path
-        name: uuid
-        schema:
-          type: string
-          format: uuid
+        description: UUID of the announcement.
         required: true
       tags:
       - organizations
       requestBody:
         content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/Subservice'
-          application/x-www-form-urlencoded:
-            schema:
-              $ref: '#/components/schemas/Subservice'
           multipart/form-data:
             schema:
-              $ref: '#/components/schemas/Subservice'
+              $ref: '#/components/schemas/AnnouncementImage'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/AnnouncementImage'
         required: true
       security:
       - jwtAuth: []
       responses:
-        '200':
+        '201':
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/Subservice'
+                $ref: '#/components/schemas/AnnouncementImage'
           description: ''
-    patch:
-      operationId: organizations_jobs_services_subservices_partial_update
-      description: Partially updates a subservice of the service specified in the
-        URL.
-      summary: Update subservice
-      parameters:
-      - in: path
-        name: job_uuid
-        schema:
-          type: string
-        description: UUID of the organization job that owns the service.
-        required: true
-      - in: path
-        name: organization_uuid
-        schema:
-          type: string
-        description: UUID of the organization that owns the nested resource.
-        required: true
-      - in: path
-        name: service_uuid
-        schema:
-          type: string
-        description: UUID of the service that owns the nested subservice.
-        required: true
-      - in: path
-        name: uuid
-        schema:
-          type: string
-          format: uuid
-        required: true
-      tags:
-      - organizations
-      requestBody:
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/PatchedSubservice'
-          application/x-www-form-urlencoded:
-            schema:
-              $ref: '#/components/schemas/PatchedSubservice'
-          multipart/form-data:
-            schema:
-              $ref: '#/components/schemas/PatchedSubservice'
-      security:
-      - jwtAuth: []
-      responses:
-        '200':
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Subservice'
-          description: ''
+  /api/organizations/{organization_uuid}/announcements/{uuid}/images/{image_uuid}/:
     delete:
-      operationId: organizations_jobs_services_subservices_destroy
-      description: Deletes a subservice of the service specified in the URL.
-      summary: Delete subservice
+      operationId: organizations_announcements_images_destroy
+      description: Deletes an image from an announcement owned by the organization
+        in the URL.
+      summary: Delete announcement image
       parameters:
       - in: path
-        name: job_uuid
+        name: image_uuid
         schema:
           type: string
-        description: UUID of the organization job that owns the service.
+          format: uuid
         required: true
       - in: path
         name: organization_uuid
@@ -1802,16 +2139,10 @@ paths:
         description: UUID of the organization that owns the nested resource.
         required: true
       - in: path
-        name: service_uuid
-        schema:
-          type: string
-        description: UUID of the service that owns the nested subservice.
-        required: true
-      - in: path
         name: uuid
         schema:
           type: string
-          format: uuid
+        description: UUID of the announcement.
         required: true
       tags:
       - organizations
@@ -1833,7 +2164,7 @@ paths:
           format: uuid
         required: true
       tags:
-      - organizations
+      - Organizations
       responses:
         '200':
           content:
@@ -1841,20 +2172,29 @@ paths:
               schema:
                 $ref: '#/components/schemas/OrganizationPublic'
           description: ''
-    patch:
-      operationId: organizations_partial_update
-      description: Partially updates an organization. Only allowed for its authenticated
-        owner.
-      summary: Update organization
-      parameters:
-      - in: path
-        name: uuid
-        schema:
-          type: string
-          format: uuid
-        required: true
+  /api/organizations/me/:
+    get:
+      operationId: organizations_me_retrieve
+      description: Returns the organization associated with the authenticated user.
+      summary: Get my organization
       tags:
-      - organizations
+      - Organizations
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Organization'
+          description: ''
+    patch:
+      operationId: organizations_me_partial_update
+      description: Partially updates the organization associated with the authenticated
+        user.
+      summary: Update my organization
+      tags:
+      - Organizations
       requestBody:
         content:
           application/json:
@@ -1876,152 +2216,16 @@ paths:
                 $ref: '#/components/schemas/Organization'
           description: ''
     delete:
-      operationId: organizations_destroy
-      description: Deletes an organization. Only allowed for its authenticated owner.
-      summary: Delete organization
-      parameters:
-      - in: path
-        name: uuid
-        schema:
-          type: string
-          format: uuid
-        required: true
+      operationId: organizations_me_destroy
+      description: Deletes the organization associated with the authenticated user.
+      summary: Delete my organization
       tags:
-      - organizations
+      - Organizations
       security:
       - jwtAuth: []
       responses:
         '204':
           description: No response body
-  /api/organizations/categories/:
-    get:
-      operationId: organizations_categories_list
-      description: Returns the categories catalog available to authenticated users.
-      summary: List categories
-      parameters:
-      - name: page
-        required: false
-        in: query
-        description: A page number within the paginated result set.
-        schema:
-          type: integer
-      - name: page_size
-        required: false
-        in: query
-        description: Number of results to return per page.
-        schema:
-          type: integer
-      tags:
-      - organizations
-      security:
-      - jwtAuth: []
-      responses:
-        '200':
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/PaginatedCategoryList'
-          description: ''
-  /api/organizations/categories/{uuid}/:
-    get:
-      operationId: organizations_categories_retrieve
-      description: Returns the details of a category identified by UUID.
-      summary: Get category
-      parameters:
-      - in: path
-        name: uuid
-        schema:
-          type: string
-          format: uuid
-        required: true
-      tags:
-      - organizations
-      security:
-      - jwtAuth: []
-      responses:
-        '200':
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Category'
-          description: ''
-  /api/organizations/me/:
-    get:
-      operationId: organizations_me_retrieve
-      description: Returns the organization associated with the authenticated user.
-      summary: Get my organization
-      tags:
-      - organizations
-      security:
-      - jwtAuth: []
-      responses:
-        '200':
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Organization'
-          description: ''
-    patch:
-      operationId: organizations_me_partial_update
-      description: Partially updates the organization associated with the authenticated
-        user.
-      summary: Update my organization
-      tags:
-      - organizations
-      requestBody:
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/PatchedOrganization'
-          application/x-www-form-urlencoded:
-            schema:
-              $ref: '#/components/schemas/PatchedOrganization'
-          multipart/form-data:
-            schema:
-              $ref: '#/components/schemas/PatchedOrganization'
-      security:
-      - jwtAuth: []
-      responses:
-        '200':
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Organization'
-          description: ''
-  /api/organizations/search/:
-    get:
-      operationId: organizations_search_list
-      description: Searches organizations. Only available to admin users.
-      summary: Search organizations
-      parameters:
-      - name: page
-        required: false
-        in: query
-        description: A page number within the paginated result set.
-        schema:
-          type: integer
-      - name: page_size
-        required: false
-        in: query
-        description: Number of results to return per page.
-        schema:
-          type: integer
-      - in: query
-        name: search
-        schema:
-          type: string
-        description: Search term with at least 3 characters to filter organizations.
-      tags:
-      - organizations
-      security:
-      - jwtAuth: []
-      responses:
-        '200':
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/PaginatedOrganizationList'
-          description: ''
   /api/schema/:
     get:
       operationId: schema_retrieve
@@ -2167,6 +2371,33 @@ paths:
                 type: object
                 additionalProperties: {}
           description: ''
+  /api/services/:
+    get:
+      operationId: services_list
+      description: Returns the public fixed services catalog.
+      summary: List services
+      parameters:
+      - name: page
+        required: false
+        in: query
+        description: A page number within the paginated result set.
+        schema:
+          type: integer
+      - name: page_size
+        required: false
+        in: query
+        description: Number of results to return per page.
+        schema:
+          type: integer
+      tags:
+      - Catalog
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedServiceCatalogList'
+          description: ''
 components:
   schemas:
     AccountStatusEnum:
@@ -2179,6 +2410,19 @@ components:
         * `active` - Active
         * `inactive` - Inactive
         * `suspended` - Suspended
+    AllowedCity:
+      type: object
+      properties:
+        uuid:
+          type: string
+          format: uuid
+          readOnly: true
+        name:
+          type: string
+          maxLength: 120
+      required:
+      - name
+      - uuid
     Announcement:
       type: object
       properties:
@@ -2193,20 +2437,28 @@ components:
         category:
           type: string
           format: uuid
+        images:
+          type: array
+          items:
+            $ref: '#/components/schemas/AnnouncementImage'
+          readOnly: true
+        lowest_price:
+          type: string
+          nullable: true
+          readOnly: true
         services:
           type: array
           items:
-            type: string
-            format: uuid
+            $ref: '#/components/schemas/Service'
+          readOnly: true
         name:
           type: string
           maxLength: 255
         location:
           type: string
           maxLength: 255
-        announcement:
+        title:
           type: string
-          maxLength: 255
         status:
           $ref: '#/components/schemas/AnnouncementStatusEnum'
         description:
@@ -2235,15 +2487,49 @@ components:
           format: date-time
           readOnly: true
       required:
-      - announcement
       - category
       - created_at
+      - description
+      - free_text
+      - images
       - location
+      - lowest_price
       - name
       - organization
+      - services
+      - title
       - updated_at
       - uuid
       - view_count
+    AnnouncementImage:
+      type: object
+      properties:
+        uuid:
+          type: string
+          format: uuid
+          readOnly: true
+        image:
+          type: string
+          format: uri
+          writeOnly: true
+        image_url:
+          type: string
+          format: uri
+          nullable: true
+          readOnly: true
+        filename:
+          type: string
+          readOnly: true
+        created_at:
+          type: string
+          format: date-time
+          readOnly: true
+      required:
+      - created_at
+      - filename
+      - image
+      - image_url
+      - uuid
     AnnouncementStatusEnum:
       enum:
       - closed
@@ -2264,8 +2550,6 @@ components:
         name:
           type: string
           maxLength: 120
-        description:
-          type: string
       required:
       - name
       - uuid
@@ -2293,6 +2577,34 @@ components:
       required:
       - email
       - password
+    ManagementAllowedCity:
+      type: object
+      properties:
+        uuid:
+          type: string
+          format: uuid
+          readOnly: true
+        name:
+          type: string
+          maxLength: 120
+      required:
+      - name
+      - uuid
+    ManagementCategory:
+      type: object
+      properties:
+        uuid:
+          type: string
+          format: uuid
+          readOnly: true
+        name:
+          type: string
+          maxLength: 120
+        description:
+          type: string
+      required:
+      - name
+      - uuid
     ManagementFeatureFlag:
       type: object
       properties:
@@ -2395,9 +2707,6 @@ components:
     ManagementUser:
       type: object
       properties:
-        id:
-          type: integer
-          readOnly: true
         uuid:
           type: string
           format: uuid
@@ -2437,7 +2746,6 @@ components:
             this instead of deleting accounts.
       required:
       - email
-      - id
       - username
       - uuid
     Organization:
@@ -2505,36 +2813,6 @@ components:
       - updated_at
       - uuid
       - verification_level
-    OrganizationJob:
-      type: object
-      properties:
-        uuid:
-          type: string
-          format: uuid
-          readOnly: true
-        organization:
-          type: string
-          format: uuid
-          readOnly: true
-        name:
-          type: string
-          maxLength: 120
-        description:
-          type: string
-        created_at:
-          type: string
-          format: date-time
-          readOnly: true
-        updated_at:
-          type: string
-          format: date-time
-          readOnly: true
-      required:
-      - created_at
-      - name
-      - organization
-      - updated_at
-      - uuid
     OrganizationPublic:
       type: object
       properties:
@@ -2561,6 +2839,52 @@ components:
       - name
       - rating
       - uuid
+    PaginatedAllowedCityList:
+      type: object
+      required:
+      - count
+      - results
+      properties:
+        count:
+          type: integer
+          example: 123
+        next:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=4
+        previous:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=2
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/AllowedCity'
+    PaginatedAnnouncementImageList:
+      type: object
+      required:
+      - count
+      - results
+      properties:
+        count:
+          type: integer
+          example: 123
+        next:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=4
+        previous:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=2
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/AnnouncementImage'
     PaginatedAnnouncementList:
       type: object
       required:
@@ -2607,6 +2931,52 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/Category'
+    PaginatedManagementAllowedCityList:
+      type: object
+      required:
+      - count
+      - results
+      properties:
+        count:
+          type: integer
+          example: 123
+        next:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=4
+        previous:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=2
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/ManagementAllowedCity'
+    PaginatedManagementCategoryList:
+      type: object
+      required:
+      - count
+      - results
+      properties:
+        count:
+          type: integer
+          example: 123
+        next:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=4
+        previous:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=2
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/ManagementCategory'
     PaginatedManagementFeatureFlagList:
       type: object
       required:
@@ -2676,7 +3046,7 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/ManagementUser'
-    PaginatedOrganizationJobList:
+    PaginatedServiceCatalogList:
       type: object
       required:
       - count
@@ -2698,8 +3068,8 @@ components:
         results:
           type: array
           items:
-            $ref: '#/components/schemas/OrganizationJob'
-    PaginatedOrganizationList:
+            $ref: '#/components/schemas/ServiceCatalog'
+    PaginatedServicePriceList:
       type: object
       required:
       - count
@@ -2721,30 +3091,7 @@ components:
         results:
           type: array
           items:
-            $ref: '#/components/schemas/Organization'
-    PaginatedServiceList:
-      type: object
-      required:
-      - count
-      - results
-      properties:
-        count:
-          type: integer
-          example: 123
-        next:
-          type: string
-          nullable: true
-          format: uri
-          example: http://api.example.org/accounts/?page=4
-        previous:
-          type: string
-          nullable: true
-          format: uri
-          example: http://api.example.org/accounts/?page=2
-        results:
-          type: array
-          items:
-            $ref: '#/components/schemas/Service'
+            $ref: '#/components/schemas/ServicePrice'
     PaginatedSubserviceList:
       type: object
       required:
@@ -2782,20 +3129,28 @@ components:
         category:
           type: string
           format: uuid
+        images:
+          type: array
+          items:
+            $ref: '#/components/schemas/AnnouncementImage'
+          readOnly: true
+        lowest_price:
+          type: string
+          nullable: true
+          readOnly: true
         services:
           type: array
           items:
-            type: string
-            format: uuid
+            $ref: '#/components/schemas/Service'
+          readOnly: true
         name:
           type: string
           maxLength: 255
         location:
           type: string
           maxLength: 255
-        announcement:
+        title:
           type: string
-          maxLength: 255
         status:
           $ref: '#/components/schemas/AnnouncementStatusEnum'
         description:
@@ -2823,6 +3178,28 @@ components:
           type: string
           format: date-time
           readOnly: true
+    PatchedManagementAllowedCity:
+      type: object
+      properties:
+        uuid:
+          type: string
+          format: uuid
+          readOnly: true
+        name:
+          type: string
+          maxLength: 120
+    PatchedManagementCategory:
+      type: object
+      properties:
+        uuid:
+          type: string
+          format: uuid
+          readOnly: true
+        name:
+          type: string
+          maxLength: 120
+        description:
+          type: string
     PatchedManagementFeatureFlag:
       type: object
       properties:
@@ -2905,9 +3282,6 @@ components:
     PatchedManagementUser:
       type: object
       properties:
-        id:
-          type: integer
-          readOnly: true
         uuid:
           type: string
           format: uuid
@@ -2995,53 +3369,33 @@ components:
           type: string
           format: date-time
           readOnly: true
-    PatchedOrganizationJob:
+    PatchedServicePrice:
       type: object
       properties:
         uuid:
           type: string
           format: uuid
           readOnly: true
-        organization:
+        subservice:
           type: string
           format: uuid
-          readOnly: true
-        name:
+        amount:
           type: string
-          maxLength: 120
-        description:
+          format: decimal
+          pattern: ^-?\d{0,8}(?:\.\d{0,2})?$
+        currency:
           type: string
-        created_at:
+          default: EUR
+          maxLength: 3
+        charging_type:
+          $ref: '#/components/schemas/ChargingTypeEnum'
+        effective_from:
           type: string
-          format: date-time
-          readOnly: true
-        updated_at:
+          format: date
+        effective_to:
           type: string
-          format: date-time
-          readOnly: true
-    PatchedService:
-      type: object
-      properties:
-        uuid:
-          type: string
-          format: uuid
-          readOnly: true
-        organization:
-          type: string
-          format: uuid
-          readOnly: true
-        job:
-          type: string
-          format: uuid
-          readOnly: true
-        category:
-          type: string
-          format: uuid
-        name:
-          type: string
-          maxLength: 120
-        description:
-          type: string
+          format: date
+          nullable: true
         created_at:
           type: string
           format: date-time
@@ -3057,13 +3411,16 @@ components:
           type: string
           format: uuid
           readOnly: true
-        service:
+        announcement:
+          type: string
+          format: uuid
+        service_catalog:
           type: string
           format: uuid
         service_prices:
           type: array
           items:
-            $ref: '#/components/schemas/ServicePrice'
+            $ref: '#/components/schemas/PublicServicePrice'
           readOnly: true
         name:
           type: string
@@ -3078,6 +3435,56 @@ components:
           type: string
           format: date-time
           readOnly: true
+    PublicServicePrice:
+      type: object
+      properties:
+        uuid:
+          type: string
+          format: uuid
+          readOnly: true
+        subservice:
+          type: string
+          format: uuid
+          readOnly: true
+        amount:
+          type: string
+          format: decimal
+          pattern: ^-?\d{0,8}(?:\.\d{0,2})?$
+          readOnly: true
+        currency:
+          type: string
+          readOnly: true
+        charging_type:
+          allOf:
+          - $ref: '#/components/schemas/ChargingTypeEnum'
+          readOnly: true
+        effective_from:
+          type: string
+          format: date
+          readOnly: true
+        effective_to:
+          type: string
+          format: date
+          readOnly: true
+          nullable: true
+        created_at:
+          type: string
+          format: date-time
+          readOnly: true
+        updated_at:
+          type: string
+          format: date-time
+          readOnly: true
+      required:
+      - amount
+      - charging_type
+      - created_at
+      - currency
+      - effective_from
+      - effective_to
+      - subservice
+      - updated_at
+      - uuid
     Register:
       type: object
       properties:
@@ -3112,37 +3519,39 @@ components:
           type: string
           format: uuid
           readOnly: true
-        organization:
-          type: string
-          format: uuid
-          readOnly: true
-        job:
-          type: string
-          format: uuid
-          readOnly: true
         category:
-          type: string
-          format: uuid
+          allOf:
+          - $ref: '#/components/schemas/Category'
+          readOnly: true
+        subservices:
+          type: array
+          items:
+            $ref: '#/components/schemas/Subservice'
+          readOnly: true
         name:
           type: string
-          maxLength: 120
+          readOnly: true
         description:
           type: string
-        created_at:
-          type: string
-          format: date-time
-          readOnly: true
-        updated_at:
-          type: string
-          format: date-time
           readOnly: true
       required:
       - category
-      - created_at
-      - job
+      - description
       - name
-      - organization
-      - updated_at
+      - subservices
+      - uuid
+    ServiceCatalog:
+      type: object
+      properties:
+        uuid:
+          type: string
+          format: uuid
+          readOnly: true
+        name:
+          type: string
+          readOnly: true
+      required:
+      - name
       - uuid
     ServicePrice:
       type: object
@@ -3154,7 +3563,6 @@ components:
         subservice:
           type: string
           format: uuid
-          writeOnly: true
         amount:
           type: string
           format: decimal
@@ -3193,13 +3601,16 @@ components:
           type: string
           format: uuid
           readOnly: true
-        service:
+        announcement:
+          type: string
+          format: uuid
+        service_catalog:
           type: string
           format: uuid
         service_prices:
           type: array
           items:
-            $ref: '#/components/schemas/ServicePrice'
+            $ref: '#/components/schemas/PublicServicePrice'
           readOnly: true
         name:
           type: string
@@ -3217,7 +3628,7 @@ components:
       required:
       - created_at
       - name
-      - service
+      - service_catalog
       - service_prices
       - updated_at
       - uuid
@@ -3235,9 +3646,6 @@ components:
     User:
       type: object
       properties:
-        id:
-          type: integer
-          readOnly: true
         uuid:
           type: string
           format: uuid
@@ -3281,7 +3689,6 @@ components:
           readOnly: true
       required:
       - email
-      - id
       - is_provider
       - permissions
       - preferencias
@@ -3300,3 +3707,16 @@ components:
       type: http
       scheme: bearer
       bearerFormat: JWT
+tags:
+- name: Auth
+- name: Catalog
+- name: Announcements
+- name: Organizations
+- name: Services
+- name: Management / Users
+- name: Management / Organizations
+- name: Management / Jobs
+- name: Management / Feature Flags
+- name: Management / Categories
+- name: Management / Allowed Cities
+- name: RGPD

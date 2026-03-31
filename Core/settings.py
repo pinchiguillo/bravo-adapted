@@ -149,6 +149,7 @@ AWS_S3_ENDPOINT_URL = (
 )
 AWS_SES_ENDPOINT_URL = os.getenv("AWS_SES_ENDPOINT_URL") or os.getenv("LOCALSTACK_ENDPOINT")
 AWS_STORAGE_BUCKET_NAME = os.getenv("AWS_STORAGE_BUCKET_NAME", "bravo-media")
+MEDIA_PUBLIC_BASE_URL = os.getenv("MEDIA_PUBLIC_BASE_URL", "/s3")
 USE_S3_STORAGE = env_bool("USE_S3_STORAGE", default=True)
 if not USE_S3_STORAGE:
     raise ImproperlyConfigured("USE_S3_STORAGE must remain enabled in this project.")
@@ -159,6 +160,13 @@ JOB_CHAT_ATTACHMENT_URL_TTL_SECONDS = env_int("JOB_CHAT_ATTACHMENT_URL_TTL_SECON
 JOB_CHAT_ATTACHMENT_ALLOWED_CONTENT_TYPES = env_list(
     "JOB_CHAT_ATTACHMENT_ALLOWED_CONTENT_TYPES",
     default=["application/pdf", "image/jpeg", "image/png", "text/plain"],
+)
+ORGANIZATION_ANNOUNCEMENT_IMAGE_MAX_BYTES = env_int(
+    "ORGANIZATION_ANNOUNCEMENT_IMAGE_MAX_BYTES", 5 * 1024 * 1024
+)
+ORGANIZATION_ANNOUNCEMENT_IMAGE_ALLOWED_CONTENT_TYPES = env_list(
+    "ORGANIZATION_ANNOUNCEMENT_IMAGE_ALLOWED_CONTENT_TYPES",
+    default=["image/jpeg", "image/png"],
 )
 ORGANIZATION_ANNOUNCEMENT_VIEW_TTL_SECONDS = env_int(
     "ORGANIZATION_ANNOUNCEMENT_VIEW_TTL_SECONDS",
@@ -360,7 +368,9 @@ if USE_S3_STORAGE:
             "BACKEND": "django.contrib.staticfiles.storage.StaticFilesStorage"
         },
     }
-    if AWS_S3_ENDPOINT_URL:
+    if MEDIA_PUBLIC_BASE_URL:
+        MEDIA_URL = f"{MEDIA_PUBLIC_BASE_URL.rstrip('/')}/{AWS_STORAGE_BUCKET_NAME}/"
+    elif AWS_S3_ENDPOINT_URL:
         MEDIA_URL = f"{AWS_S3_ENDPOINT_URL.rstrip('/')}/{AWS_STORAGE_BUCKET_NAME}/"
     else:
         MEDIA_URL = f"https://{AWS_STORAGE_BUCKET_NAME}.s3.amazonaws.com/"
@@ -423,8 +433,26 @@ SPECTACULAR_SETTINGS = {
     "TITLE": "Bravo API",
     "DESCRIPTION": "OpenAPI documentation for the Bravo backend.",
     "VERSION": read_project_version(),
+    "TAGS": [
+        {"name": "Auth"},
+        {"name": "Catalog"},
+        {"name": "Announcements"},
+        {"name": "Organizations"},
+        {"name": "Services"},
+        {"name": "Management / Users"},
+        {"name": "Management / Organizations"},
+        {"name": "Management / Jobs"},
+        {"name": "Management / Feature Flags"},
+        {"name": "Management / Categories"},
+        {"name": "Management / Allowed Cities"},
+        {"name": "RGPD"},
+    ],
     "ENUM_NAME_OVERRIDES": {
         "AccountStatusEnum": "apps.auth.models.CustomUser.Status",
+    },
+    "SWAGGER_UI_SETTINGS": {
+        "deepLinking": True,
+        "operationsSorter": "alpha",
     },
 }
 

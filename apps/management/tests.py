@@ -14,6 +14,7 @@ from rest_framework.test import APITestCase
 from apps.management.feature_flags import is_feature_enabled
 from apps.management.models import FeatureFlag
 from apps.organization.models import (
+    AllowedCity,
     Announcement,
     AnnouncementReview,
     Category,
@@ -385,6 +386,162 @@ class ManagementOrganizationListApiTests(APITestCase):
         self.assertEqual(response.data["results"][0]["uuid"], str(self.organization.uuid))
 
 
+class ManagementUserListApiTests(APITestCase):
+    def setUp(self):
+        user_model = get_user_model()
+        self.admin_user = user_model.objects.create_user(
+            username="management-users-admin",
+            email="management-users-admin@example.com",
+            password="testpass123",
+            is_staff=True,
+        )
+        self.regular_user = user_model.objects.create_user(
+            username="management-users-regular",
+            email="management-users-regular@example.com",
+            password="testpass123",
+        )
+        self.alpha_user = user_model.objects.create_user(
+            username="mario-admin",
+            email="mario@example.com",
+            password="testpass123",
+            first_name="Mario",
+            last_name="Rossi",
+            email_verified=True,
+            status=user_model.Status.ACTIVE,
+        )
+        self.beta_user = user_model.objects.create_user(
+            username="lucia-ops",
+            email="lucia@example.com",
+            password="testpass123",
+            first_name="Lucia",
+            last_name="Lopez",
+            email_verified=False,
+            status=user_model.Status.ACTIVE,
+        )
+        self.gamma_user = user_model.objects.create_user(
+            username="paused-user",
+            email="paused@example.com",
+            password="testpass123",
+            first_name="Paula",
+            last_name="Suspendida",
+            email_verified=False,
+            status=user_model.Status.SUSPENDED,
+        )
+
+    def test_admin_can_search_users_by_username(self):
+        self.client.force_authenticate(user=self.admin_user)
+
+        response = self.client.get(reverse("management-users-list"), {"search": "mario"})
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.data["count"], 1)
+        self.assertEqual(response.data["results"][0]["uuid"], str(self.alpha_user.uuid))
+
+    def test_admin_can_search_users_by_email(self):
+        self.client.force_authenticate(user=self.admin_user)
+
+        response = self.client.get(reverse("management-users-list"), {"search": "lucia@example.com"})
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.data["count"], 1)
+        self.assertEqual(response.data["results"][0]["uuid"], str(self.beta_user.uuid))
+
+    def test_admin_can_search_users_by_uuid(self):
+        self.client.force_authenticate(user=self.admin_user)
+
+        response = self.client.get(
+            reverse("management-users-list"),
+            {"search": str(self.gamma_user.uuid)},
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.data["count"], 1)
+        self.assertEqual(response.data["results"][0]["uuid"], str(self.gamma_user.uuid))
+
+    def test_admin_can_filter_users_by_status(self):
+        self.client.force_authenticate(user=self.admin_user)
+
+        response = self.client.get(reverse("management-users-list"), {"status": "suspended"})
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.data["count"], 1)
+        self.assertEqual(response.data["results"][0]["uuid"], str(self.gamma_user.uuid))
+
+    def test_admin_can_filter_users_by_email_verified_true(self):
+        self.client.force_authenticate(user=self.admin_user)
+
+        response = self.client.get(reverse("management-users-list"), {"email_verified": "true"})
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.data["count"], 1)
+        self.assertEqual(response.data["results"][0]["uuid"], str(self.alpha_user.uuid))
+
+    def test_admin_can_filter_users_by_email_verified_false(self):
+        self.client.force_authenticate(user=self.admin_user)
+
+        response = self.client.get(reverse("management-users-list"), {"email_verified": "false"})
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        returned_uuids = {item["uuid"] for item in response.data["results"]}
+        self.assertEqual(response.data["count"], 4)
+        self.assertSetEqual(
+            returned_uuids,
+            {
+                str(self.regular_user.uuid),
+                str(self.beta_user.uuid),
+                str(self.gamma_user.uuid),
+                str(self.admin_user.uuid),
+            },
+        )
+
+    def test_admin_can_combine_filters_with_pagination(self):
+        self.client.force_authenticate(user=self.admin_user)
+        user_model = get_user_model()
+        first_match = user_model.objects.create_user(
+            username="lucia-extra-1",
+            email="lucia-extra-1@example.com",
+            password="testpass123",
+            first_name="Lucia",
+            email_verified=True,
+            status=user_model.Status.ACTIVE,
+        )
+        second_match = user_model.objects.create_user(
+            username="lucia-extra-2",
+            email="lucia-extra-2@example.com",
+            password="testpass123",
+            first_name="Lucia",
+            email_verified=True,
+            status=user_model.Status.ACTIVE,
+        )
+
+        response = self.client.get(
+            reverse("management-users-list"),
+            {
+                "search": "lucia",
+                "status": user_model.Status.ACTIVE,
+                "email_verified": "true",
+                "page": 2,
+                "page_size": 1,
+            },
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.data["count"], 2)
+        self.assertEqual(len(response.data["results"]), 1)
+        self.assertEqual(response.data["results"][0]["uuid"], str(second_match.uuid))
+        self.assertNotEqual(response.data["results"][0]["uuid"], str(first_match.uuid))
+
+    def test_non_admin_access_remains_rejected_for_filtered_list(self):
+        self.client.force_authenticate(user=self.regular_user)
+
+        response = self.client.get(
+            reverse("management-users-list"),
+            {"search": "mario", "status": "active", "email_verified": "true"},
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
+
+
 class ManagementFeatureFlagApiTests(APITestCase):
     def setUp(self):
         user_model = get_user_model()
@@ -545,6 +702,66 @@ class ManagementCategoryApiTests(APITestCase):
         self.client.force_authenticate(user=self.regular_user)
 
         response = self.client.get(reverse("management-categories-list"))
+
+        self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
+
+
+class ManagementAllowedCityApiTests(APITestCase):
+    def setUp(self):
+        user_model = get_user_model()
+        self.admin_user = user_model.objects.create_user(
+            username="management-allowed-city-admin",
+            email="management-allowed-city-admin@example.com",
+            password="testpass123",
+            is_staff=True,
+        )
+        self.regular_user = user_model.objects.create_user(
+            username="management-allowed-city-user",
+            email="management-allowed-city-user@example.com",
+            password="testpass123",
+        )
+        self.allowed_city = AllowedCity.objects.create(name="Madrid")
+
+    def test_admin_can_list_allowed_cities(self):
+        self.client.force_authenticate(user=self.admin_user)
+
+        response = self.client.get(reverse("management-allowed-cities-list"))
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        returned_uuids = {item["uuid"] for item in response.data["results"]}
+        self.assertGreaterEqual(response.data["count"], 1)
+        self.assertIn(str(self.allowed_city.uuid), returned_uuids)
+
+    def test_admin_can_create_and_update_allowed_cities(self):
+        self.client.force_authenticate(user=self.admin_user)
+
+        create_response = self.client.post(
+            reverse("management-allowed-cities-list"),
+            {"name": "Barcelona"},
+            format="json",
+        )
+
+        self.assertEqual(create_response.status_code, status.HTTP_201_CREATED)
+        created_uuid = create_response.data["uuid"]
+
+        retrieve_response = self.client.get(
+            reverse("management-allowed-cities-detail", kwargs={"uuid": created_uuid})
+        )
+        self.assertEqual(retrieve_response.status_code, status.HTTP_200_OK)
+        self.assertEqual(retrieve_response.data["name"], "Barcelona")
+
+        update_response = self.client.patch(
+            reverse("management-allowed-cities-detail", kwargs={"uuid": created_uuid}),
+            {"name": "Valencia"},
+            format="json",
+        )
+        self.assertEqual(update_response.status_code, status.HTTP_200_OK)
+        self.assertEqual(update_response.data["name"], "Valencia")
+
+    def test_non_staff_cannot_manage_allowed_cities(self):
+        self.client.force_authenticate(user=self.regular_user)
+
+        response = self.client.get(reverse("management-allowed-cities-list"))
 
         self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
 
@@ -754,6 +971,7 @@ class SeedFixedTablesCommandTests(APITestCase):
 
         call_command("seed_fixed_tables", stdout=out)
 
+        allowed_city_names = set(AllowedCity.objects.values_list("name", flat=True))
         seeded_category_names = set(
             Category.objects.filter(name__in={"Reformas", "Mantenimiento"}).values_list(
                 "name", flat=True
@@ -766,6 +984,10 @@ class SeedFixedTablesCommandTests(APITestCase):
             flag.key: flag.is_active for flag in FeatureFlag.objects.order_by("key")
         }
 
+        self.assertEqual(len(allowed_city_names), 50)
+        self.assertIn("Madrid", allowed_city_names)
+        self.assertIn("València", allowed_city_names)
+        self.assertIn("Vitoria-Gasteiz", allowed_city_names)
         self.assertEqual(seeded_category_names, {"Mantenimiento", "Reformas"})
         self.assertTrue(Category.objects.filter(name="General").exists())
         self.assertEqual(
@@ -780,11 +1002,13 @@ class SeedFixedTablesCommandTests(APITestCase):
                 "job_chat_uploads": True,
             },
         )
+        self.assertIn("allowed_cities_created=50", out.getvalue())
         self.assertIn("categories_created=2", out.getvalue())
         self.assertIn("service_catalogs_created=4", out.getvalue())
         self.assertIn("feature_flags_created=3", out.getvalue())
 
     def test_seed_fixed_tables_is_idempotent_and_updates_existing_records(self):
+        AllowedCity.objects.create(name="Madrid")
         category = Category.objects.create(
             name="Reformas",
             description="Descripcion desactualizada",
@@ -816,6 +1040,7 @@ class SeedFixedTablesCommandTests(APITestCase):
         catalog.refresh_from_db()
         job_chat_flag = FeatureFlag.objects.get(key="job_chat")
 
+        self.assertEqual(AllowedCity.objects.count(), 50)
         self.assertEqual(Category.objects.count(), 3)
         self.assertEqual(ServiceCatalog.objects.count(), 4)
         self.assertEqual(FeatureFlag.objects.count(), 3)
@@ -834,6 +1059,8 @@ class SeedFixedTablesCommandTests(APITestCase):
         )
         self.assertTrue(job_chat_flag.is_active)
         self.assertEqual(job_chat_flag.name, "Job chat")
+        self.assertIn("allowed_cities_created=0", second_out.getvalue())
+        self.assertIn("allowed_cities_updated=0", second_out.getvalue())
         self.assertIn("categories_created=0", second_out.getvalue())
         self.assertIn("categories_updated=0", second_out.getvalue())
         self.assertIn("service_catalogs_created=0", second_out.getvalue())

@@ -20,7 +20,6 @@ class Announcement(models.Model):
         on_delete=models.PROTECT,
         related_name="announcements",
     )
-    services = models.ManyToManyField("organization.Service", related_name="announcements", blank=True)
     name = models.CharField(max_length=255)
     location = models.CharField(max_length=255)
     announcement = models.CharField(max_length=255)
@@ -51,6 +50,23 @@ class Announcement(models.Model):
 
     def __str__(self):
         return f"{self.organization_id}:{self.name}"
+
+
+class AnnouncementImage(models.Model):
+    uuid = models.UUIDField(default=uuid.uuid4, unique=True, editable=False)
+    announcement = models.ForeignKey(
+        "organization.Announcement",
+        on_delete=models.CASCADE,
+        related_name="images",
+    )
+    image = models.ImageField(upload_to="organization-announcements/%Y/%m/%d/")
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["created_at", "id"]
+
+    def __str__(self):
+        return f"{self.announcement_id}:image:{self.id}"
 
 
 class AnnouncementReview(models.Model):

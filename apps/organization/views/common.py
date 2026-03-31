@@ -7,7 +7,7 @@ from rest_framework.exceptions import NotFound, PermissionDenied, ValidationErro
 from ..models import Organization
 
 service_price_uuid_parameter = OpenApiParameter(
-    name="uuid",
+    name="price_uuid",
     type=str,
     location=OpenApiParameter.PATH,
     required=True,
@@ -28,6 +28,14 @@ announcement_uuid_parameter = OpenApiParameter(
     location=OpenApiParameter.PATH,
     required=True,
     description="UUID of the announcement.",
+)
+
+announcement_nested_uuid_parameter = OpenApiParameter(
+    name="announcement_uuid",
+    type=str,
+    location=OpenApiParameter.PATH,
+    required=True,
+    description="UUID of the announcement that owns the nested resource.",
 )
 
 service_uuid_parameter = OpenApiParameter(
@@ -52,14 +60,6 @@ category_uuid_parameter = OpenApiParameter(
     location=OpenApiParameter.PATH,
     required=True,
     description="UUID of the category.",
-)
-
-organization_search_parameter = OpenApiParameter(
-    name="search",
-    type=str,
-    location=OpenApiParameter.QUERY,
-    required=False,
-    description="Search term with at least 3 characters to filter organizations.",
 )
 
 announcement_category_parameter = OpenApiParameter(
@@ -101,7 +101,7 @@ announcement_service_parameter = OpenApiParameter(
     type=str,
     location=OpenApiParameter.QUERY,
     required=False,
-    description="Single service UUID filter.",
+    description="Single service catalog UUID filter.",
 )
 
 announcement_services_parameter = OpenApiParameter(
@@ -111,7 +111,7 @@ announcement_services_parameter = OpenApiParameter(
     required=False,
     explode=True,
     style="form",
-    description="Optional list of service UUIDs used to filter announcements.",
+    description="Optional list of service catalog UUIDs used to filter announcements.",
 )
 
 announcement_status_parameter = OpenApiParameter(
@@ -197,41 +197,6 @@ announcement_categories_parameter = OpenApiParameter(
     style="form",
     description="Optional list of category UUIDs used to filter announcements.",
 )
-
-
-class OrganizationSearchMixin:
-    def filter_organizations_by_search(self, queryset):
-        search_query = self.get_search_query()
-        search_filter = (
-            Q(name__icontains=search_query)
-            | Q(legal_name__icontains=search_query)
-            | Q(tax_id__icontains=search_query)
-            | Q(billing_email__icontains=search_query)
-            | Q(user__email__icontains=search_query)
-            | Q(user__username__icontains=search_query)
-        )
-        search_uuid = self.parse_search_uuid(search_query)
-        if search_uuid is not None:
-            search_filter |= Q(uuid=search_uuid)
-        return queryset.filter(search_filter).distinct()
-
-    def get_search_query(self):
-        search_query = str(self.request.query_params.get("search", "")).strip()
-        if not search_query:
-            raise ValidationError({"search": "This query parameter is required."})
-        if len(search_query) < 3:
-            raise ValidationError(
-                {"search": "Ensure this query parameter has at least 3 characters."}
-            )
-        return search_query
-
-    def parse_search_uuid(self, raw_value):
-        try:
-            return uuid.UUID(raw_value)
-        except (TypeError, ValueError, AttributeError):
-            return None
-
-
 class OrganizationVisibilityMixin:
     def get_url_organization(self):
         organization_uuid = self.kwargs.get("organization_uuid")
@@ -350,13 +315,13 @@ class AnnouncementPublicFilterMixin(AnnouncementQueryParamFilterMixin):
         "free_text",
         "organization__name",
         "category__name",
-        "services__name",
+        "subservices__service_catalog__name",
     )
     public_search_uuid_fields = (
         "uuid",
         "organization__uuid",
         "category__uuid",
-        "services__uuid",
+        "subservices__service_catalog__uuid",
     )
     text_filter_fields = {
         "name": "name",
@@ -373,7 +338,7 @@ class AnnouncementPublicFilterMixin(AnnouncementQueryParamFilterMixin):
                 ("uuid", "uuids", "uuid"),
                 ("organization", "organizations", "organization__uuid"),
                 ("category", "categories", "category__uuid"),
-                ("service", "services", "services__uuid"),
+                ("service", "services", "subservices__service_catalog__uuid"),
             ),
         )
         queryset = self._apply_text_filters(queryset)

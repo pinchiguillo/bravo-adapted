@@ -78,7 +78,8 @@ class JobViewSet(ActionScopedRateThrottleMixin, viewsets.ModelViewSet):
         "announcement__organization__user",
         "plan_price",
         "plan_price__subservice",
-        "plan_price__subservice__service",
+        "plan_price__subservice__announcement",
+        "plan_price__subservice__service_catalog",
         "chat",
     )
     lookup_field = "uuid"
