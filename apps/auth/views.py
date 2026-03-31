@@ -18,6 +18,7 @@ from .serializers import (
     VerifyEmailSerializer,
 )
 
+
 @extend_schema(tags=["Auth"])
 class AuthViewSet(viewsets.GenericViewSet):
     queryset = get_user_model().objects.none()

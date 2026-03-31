@@ -14,10 +14,10 @@ from django.core.files.uploadedfile import SimpleUploadedFile
 from django.db.utils import IntegrityError
 from django.test import RequestFactory, SimpleTestCase, override_settings
 from django.urls import NoReverseMatch, reverse
+from PIL import Image
 from rest_framework import status
 from rest_framework.test import APITestCase
 from rest_framework.throttling import SimpleRateThrottle
-from PIL import Image
 
 from .middleware import AnnouncementViewCountMiddleware
 from .models import (
@@ -319,7 +319,7 @@ class OrganizationApiTests(APITestCase):
         )
 
     def test_service_catalog_list_is_paginated(self):
-        second_service_catalog = ServiceCatalog.objects.create(
+        ServiceCatalog.objects.create(
             category=self.category,
             name="Second Category Service",
             description="Second category service",

@@ -2,6 +2,7 @@ import uuid
 
 from django.db import models
 
+
 class Subservice(models.Model):
     uuid = models.UUIDField(default=uuid.uuid4, unique=True, editable=False)
     announcement = models.ForeignKey(
