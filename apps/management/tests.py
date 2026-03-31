@@ -19,7 +19,6 @@ from apps.organization.models import (
     AnnouncementReview,
     Category,
     Organization,
-    Service,
     ServiceCatalog,
     ServicePrice,
     Subservice,
@@ -77,20 +76,21 @@ class ManagementApiTests(APITestCase):
                 name="Managed Category",
                 defaults={"description": "Categoria gestionada"},
             )
+            self.announcement = Announcement.objects.create(
+                organization=self.organization,
+                category=self.category,
+                name="Managed Announcement",
+                location="Madrid",
+                announcement="Managed plan disponible",
+            )
             self.service_catalog = ServiceCatalog.objects.create(
                 category=self.category,
                 name="Managed Plan",
                 description="",
             )
-            self.service = Service.objects.create(
-                organization=self.organization,
-                service_catalog=self.service_catalog,
-                category=self.category,
-                name="Managed Plan",
-                description="",
-            )
             self.subservice = Subservice.objects.create(
-                service=self.service,
+                announcement=self.announcement,
+                service_catalog=self.service_catalog,
                 name="Managed Variant",
                 description="",
             )
@@ -101,14 +101,6 @@ class ManagementApiTests(APITestCase):
                 charging_type=ServicePrice.ChargingType.PER_PROJECT,
                 effective_from=date(2026, 1, 1),
             )
-            self.announcement = Announcement.objects.create(
-                organization=self.organization,
-                category=self.category,
-                name="Managed Announcement",
-                location="Madrid",
-                announcement="Managed plan disponible",
-            )
-            self.announcement.services.add(self.service)
             self.job = Job.objects.create(
                 user=self.staff_candidate,
                 announcement=self.announcement,
@@ -821,7 +813,7 @@ class SeedDemoDataCommandTests(APITestCase):
         user_model = get_user_model()
         self.assertEqual(user_model.objects.count(), 4)
         self.assertEqual(Organization.objects.count(), 2)
-        self.assertEqual(Service.objects.count(), 4)
+        self.assertEqual(ServiceCatalog.objects.count(), 4)
         self.assertEqual(Subservice.objects.count(), 8)
         self.assertEqual(ServicePrice.objects.count(), 8)
         seeded_category_names = set(
@@ -857,7 +849,7 @@ class SeedDemoDataCommandTests(APITestCase):
         user_model = get_user_model()
         self.assertEqual(user_model.objects.count(), 4)
         self.assertEqual(Organization.objects.count(), 2)
-        self.assertEqual(Service.objects.count(), 4)
+        self.assertEqual(ServiceCatalog.objects.count(), 4)
         self.assertEqual(Subservice.objects.count(), 8)
         self.assertEqual(ServicePrice.objects.count(), 8)
         seeded_category_names = set(
@@ -924,11 +916,17 @@ class SeedAnnouncementsCommandTests(APITestCase):
             name="Seed Service",
             description="Seed service",
         )
-        self.service = Service.objects.create(
+        self.existing_announcement = Announcement.objects.create(
             organization=self.active_organization_with_services,
-            service_catalog=self.service_catalog,
             category=self.category,
             name="Seed Service",
+            location="Madrid",
+            announcement="Seed service available",
+        )
+        self.subservice = Subservice.objects.create(
+            announcement=self.existing_announcement,
+            service_catalog=self.service_catalog,
+            name="Seed Variant",
             description="Seed service",
         )
 
@@ -937,7 +935,7 @@ class SeedAnnouncementsCommandTests(APITestCase):
 
         call_command("seed_announcements", stdout=out)
 
-        self.assertEqual(Announcement.objects.count(), 2)
+        self.assertEqual(Announcement.objects.count(), 3)
         serviced_announcement = Announcement.objects.get(
             organization=self.active_organization_with_services,
             name="Seed Org One - Servicio destacado",
@@ -948,9 +946,9 @@ class SeedAnnouncementsCommandTests(APITestCase):
         )
 
         self.assertEqual(serviced_announcement.category, self.category)
-        self.assertEqual(list(serviced_announcement.services.all()), [self.service])
+        self.assertEqual(serviced_announcement.subservices.count(), 0)
         self.assertEqual(fallback_announcement.category.name, "General")
-        self.assertEqual(fallback_announcement.services.count(), 0)
+        self.assertEqual(fallback_announcement.subservices.count(), 0)
         self.assertIn("announcements_created=2", out.getvalue())
 
     def test_seed_announcements_is_idempotent(self):
@@ -960,7 +958,7 @@ class SeedAnnouncementsCommandTests(APITestCase):
         call_command("seed_announcements", stdout=first_out)
         call_command("seed_announcements", stdout=second_out)
 
-        self.assertEqual(Announcement.objects.count(), 2)
+        self.assertEqual(Announcement.objects.count(), 3)
         self.assertIn("announcements_created=0", second_out.getvalue())
         self.assertIn("announcements_updated=2", second_out.getvalue())
 
