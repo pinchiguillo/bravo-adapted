@@ -61,12 +61,12 @@ class JobSerializer(serializers.ModelSerializer):
         announcement = attrs.get("announcement", getattr(self.instance, "announcement", None))
         plan_price = attrs.get("plan_price", getattr(self.instance, "plan_price", None))
         if announcement is not None and plan_price is not None:
-            service = plan_price.subservice.service
-            if service.organization_id != announcement.organization_id:
+            subservice = plan_price.subservice
+            if subservice.announcement.organization_id != announcement.organization_id:
                 raise serializers.ValidationError(
                     {"plan_price": "Plan price does not belong to the selected announcement."}
                 )
-            if not announcement.services.filter(pk=service.pk).exists():
+            if subservice.announcement_id != announcement.id:
                 raise serializers.ValidationError(
                     {"plan_price": "Plan price does not belong to the selected announcement."}
                 )

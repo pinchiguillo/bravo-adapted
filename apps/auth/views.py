@@ -18,7 +18,7 @@ from .serializers import (
     VerifyEmailSerializer,
 )
 
-
+@extend_schema(tags=["Auth"])
 class AuthViewSet(viewsets.GenericViewSet):
     queryset = get_user_model().objects.none()
     serializer_class = UserSerializer
@@ -55,6 +55,7 @@ class AuthViewSet(viewsets.GenericViewSet):
         }
 
     @extend_schema(
+        tags=["Auth"],
         summary="Register user",
         description=(
             "Creates a new user account. When email verification is bypassed, "
@@ -76,6 +77,7 @@ class AuthViewSet(viewsets.GenericViewSet):
         return Response(response_data, status=status.HTTP_201_CREATED)
 
     @extend_schema(
+        tags=["Auth"],
         summary="Login",
         description="Authenticates the user with email and password and returns JWT access and refresh tokens.",
         auth=[],
@@ -87,6 +89,7 @@ class AuthViewSet(viewsets.GenericViewSet):
         return Response(serializer.validated_data, status=status.HTTP_200_OK)
 
     @extend_schema(
+        tags=["Auth"],
         summary="Refresh token",
         description="Receives a valid refresh token and returns a new JWT access token.",
         auth=[],
@@ -101,6 +104,7 @@ class AuthViewSet(viewsets.GenericViewSet):
         return Response(serializer.validated_data, status=status.HTTP_200_OK)
 
     @extend_schema(
+        tags=["Auth"],
         summary="Verify email",
         description="Validates the verification token, marks the user's email as verified and returns JWT tokens.",
         auth=[],
@@ -114,6 +118,7 @@ class AuthViewSet(viewsets.GenericViewSet):
         return Response(response_data, status=status.HTTP_200_OK)
 
     @extend_schema(
+        tags=["Auth"],
         summary="Get authenticated user",
         description="Returns the authenticated user's data based on the token sent in the request.",
     )

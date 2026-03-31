@@ -116,6 +116,8 @@ class OpenApiSecuritySchemaTests(SimpleTestCase):
         private_operations = (
             ("/api/auth/me/", "get"),
             (self._reverse_path("organization-me"), "get"),
+            (self._reverse_path("organization-me"), "patch"),
+            (self._reverse_path("organization-me"), "delete"),
         )
 
         for path, method in private_operations:
@@ -127,6 +129,63 @@ class OpenApiSecuritySchemaTests(SimpleTestCase):
         schema = SchemaGenerator().get_schema(request=None, public=True)
         expected_version = (core_settings.BASE_DIR / "VERSION").read_text(encoding="utf-8").strip()
         self.assertEqual(schema["info"]["version"], expected_version)
+
+    def test_schema_declares_tags_in_expected_order(self):
+        schema = SchemaGenerator().get_schema(request=None, public=True)
+
+        self.assertEqual(
+            [tag["name"] for tag in schema.get("tags", [])],
+            [
+                "Auth",
+                "Catalog",
+                "Announcements",
+                "Organizations",
+                "Services",
+                "Management / Users",
+                "Management / Organizations",
+                "Management / Jobs",
+                "Management / Feature Flags",
+                "Management / Categories",
+                "Management / Allowed Cities",
+                "RGPD",
+            ],
+        )
+
+    def test_management_users_list_documents_search_and_filter_query_params(self):
+        operation = self._get_operation("/api/management/users/", "get")
+
+        parameter_names = {parameter["name"] for parameter in operation.get("parameters", [])}
+
+        self.assertTrue({"search", "status", "email_verified"}.issubset(parameter_names))
+
+    def test_schema_groups_endpoints_by_domain_tags(self):
+        tagged_operations = (
+            ("/api/auth/login/", "post", ["Auth"]),
+            ("/api/categories/", "get", ["Catalog"]),
+            (
+                "/api/announcements/{announcement_uuid}/subservices/",
+                "get",
+                ["Services"],
+            ),
+            ("/api/services/", "get", ["Catalog"]),
+            ("/api/announcements/", "get", ["Announcements"]),
+            ("/api/management/users/", "get", ["Management / Users"]),
+        )
+
+        for path, method, expected_tags in tagged_operations:
+            with self.subTest(path=path, method=method):
+                operation = self._get_operation(path, method)
+                self.assertEqual(operation.get("tags"), expected_tags)
+
+    def test_schema_does_not_expose_organization_search_endpoint(self):
+        schema = SchemaGenerator().get_schema(request=None, public=True)
+
+        self.assertNotIn("/api/organizations/search/", schema["paths"])
+
+    def test_schema_exposes_only_get_for_organization_detail(self):
+        schema = SchemaGenerator().get_schema(request=None, public=True)
+
+        self.assertEqual(set(schema["paths"]["/api/organizations/{uuid}/"].keys()), {"get"})
 
 
 class ApiDocsRoutingTests(SimpleTestCase):

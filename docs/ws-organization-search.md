@@ -113,10 +113,6 @@ Los resultados se ordenan por `name` y se limitan por `ORGANIZATION_SEARCH_WS_RE
 
 `drf-spectacular` documenta los endpoints HTTP de la API, pero no este contrato WebSocket en el esquema OpenAPI actual.
 
-El endpoint REST relacionado para busqueda administrativa sigue documentado en:
-
-- `GET /api/organizations/search/?search=...`
-
 ## Cobertura de tests
 
 La cobertura del socket esta en `backend/organization/tests.py` e incluye:

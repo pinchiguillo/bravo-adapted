@@ -5,7 +5,7 @@ from django.contrib.auth.password_validation import validate_password
 from rest_framework import serializers
 
 from apps.management.models import FeatureFlag
-from apps.organization.models import Announcement, Category, Organization
+from apps.organization.models import AllowedCity, Announcement, Category, Organization
 from apps.organization.serializers import OrganizationRatingMixin
 
 if apps.is_installed("apps.jobs"):
@@ -125,12 +125,12 @@ if apps.is_installed("apps.jobs"):
             announcement = attrs.get("announcement", getattr(self.instance, "announcement", None))
             plan_price = attrs.get("plan_price", getattr(self.instance, "plan_price", None))
             if announcement is not None and plan_price is not None:
-                service = plan_price.subservice.service
-                if service.organization_id != announcement.organization_id:
+                subservice = plan_price.subservice
+                if subservice.announcement.organization_id != announcement.organization_id:
                     raise serializers.ValidationError(
                         {"plan_price": "Plan price does not belong to the selected announcement."}
                     )
-                if not announcement.services.filter(pk=service.pk).exists():
+                if subservice.announcement_id != announcement.id:
                     raise serializers.ValidationError(
                         {"plan_price": "Plan price does not belong to the selected announcement."}
                     )
@@ -166,5 +166,15 @@ class ManagementCategorySerializer(serializers.ModelSerializer):
             "uuid",
             "name",
             "description",
+        )
+        read_only_fields = ("uuid",)
+
+
+class ManagementAllowedCitySerializer(serializers.ModelSerializer):
+    class Meta:
+        model = AllowedCity
+        fields = (
+            "uuid",
+            "name",
         )
         read_only_fields = ("uuid",)

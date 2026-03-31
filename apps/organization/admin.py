@@ -3,7 +3,6 @@ from django.contrib import admin
 from .models import (
     Category,
     Organization,
-    Service,
     ServiceCatalog,
     ServicePrice,
     Subservice,
@@ -28,16 +27,10 @@ class ServiceCatalogAdmin(admin.ModelAdmin):
     search_fields = ("name", "category__name")
 
 
-@admin.register(Service)
-class ServiceAdmin(admin.ModelAdmin):
-    list_display = ("organization", "service_catalog", "name", "created_at")
-    search_fields = ("organization__name", "service_catalog__name", "name")
-
-
 @admin.register(Subservice)
 class SubserviceAdmin(admin.ModelAdmin):
-    list_display = ("service", "name", "created_at")
-    search_fields = ("service__name", "service__organization__name", "name")
+    list_display = ("announcement", "service_catalog", "name", "created_at")
+    search_fields = ("announcement__name", "service_catalog__name", "name")
 
 
 @admin.register(ServicePrice)
@@ -46,6 +39,6 @@ class ServicePriceAdmin(admin.ModelAdmin):
     list_filter = ("currency",)
     search_fields = (
         "subservice__name",
-        "subservice__service__name",
-        "subservice__service__organization__name",
+        "subservice__service_catalog__name",
+        "subservice__announcement__organization__name",
     )

@@ -7,6 +7,7 @@ Este directorio se mantiene con una estructura lógica por dominios para facilit
 - [Setup de desarrollo](setup-dev-env.md)
 - [Variables de entorno](environment-variables.md)
 - [Operación diaria](operacion.md)
+- [Storage S3 para archivos](s3-storage.md)
 
 ## 2) Arquitectura y módulos
 

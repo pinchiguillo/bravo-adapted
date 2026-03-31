@@ -13,7 +13,6 @@ from apps.organization.models import (
     AnnouncementReview,
     Category,
     Organization,
-    Service,
     ServiceCatalog,
     ServicePrice,
     Subservice,
@@ -386,6 +385,7 @@ class Command(BaseCommand):
 
         for organization_data in ORGANIZATIONS:
             owner = users_by_email[organization_data["owner_email"]]
+            service_definitions_by_name = {}
             organization_defaults = {
                 "name": organization_data["name"],
                 "legal_name": organization_data["legal_name"],
@@ -418,39 +418,11 @@ class Command(BaseCommand):
                 if service_catalog_created:
                     counters.setdefault("service_catalogs", 0)
                     counters["service_catalogs"] += 1
-                service, service_created = Service.objects.update_or_create(
-                    organization=organization,
-                    service_catalog=service_catalog,
-                    defaults={
-                        "name": service_data["name"],
-                        "category": service_category,
-                        "description": service_data["description"],
-                    },
-                )
-                if service_created:
-                    counters["services"] += 1
-
-                for subservice_data in service_data["subservices"]:
-                    subservice, subservice_created = Subservice.objects.update_or_create(
-                        service=service,
-                        name=subservice_data["name"],
-                        defaults={"description": subservice_data["description"]},
-                    )
-                    if subservice_created:
-                        counters["subservices"] += 1
-
-                    _, price_created = ServicePrice.objects.update_or_create(
-                        subservice=subservice,
-                        currency="EUR",
-                        effective_from=DEFAULT_PRICE_DATE,
-                        defaults={
-                            "amount": subservice_data["amount"],
-                            "charging_type": ServicePrice.ChargingType.PER_PROJECT,
-                            "effective_to": None,
-                        },
-                    )
-                    if price_created:
-                        counters["prices"] += 1
+                service_definitions_by_name[service_data["name"]] = {
+                    "category": service_category,
+                    "catalog": service_catalog,
+                    "subservices": service_data["subservices"],
+                }
 
             for announcement_data in organization_data.get("announcements", []):
                 category = categories_by_name[announcement_data["category"]]
@@ -474,6 +446,31 @@ class Command(BaseCommand):
                 if announcement_created:
                     counters["announcements"] += 1
 
+                for service_name in announcement_data["service_names"]:
+                    service_definition = service_definitions_by_name[service_name]
+                    for subservice_data in service_definition["subservices"]:
+                        subservice, subservice_created = Subservice.objects.update_or_create(
+                            announcement=announcement,
+                            service_catalog=service_definition["catalog"],
+                            name=subservice_data["name"],
+                            defaults={"description": subservice_data["description"]},
+                        )
+                        if subservice_created:
+                            counters["subservices"] += 1
+
+                        _, price_created = ServicePrice.objects.update_or_create(
+                            subservice=subservice,
+                            currency="EUR",
+                            effective_from=DEFAULT_PRICE_DATE,
+                            defaults={
+                                "amount": subservice_data["amount"],
+                                "charging_type": ServicePrice.ChargingType.PER_PROJECT,
+                                "effective_to": None,
+                            },
+                        )
+                        if price_created:
+                            counters["prices"] += 1
+
                 _, review_created = AnnouncementReview.objects.update_or_create(
                     announcement=announcement,
                     defaults={"content": announcement_data["review_content"]},
@@ -487,22 +484,30 @@ class Command(BaseCommand):
         for job_data in JOBS:
             user = users_by_email[job_data["user_email"]]
             organization = organizations_by_name[job_data["organization_name"]]
-            service = Service.objects.select_related("organization").get(
-                organization=organization,
-                name=job_data["service_name"],
+            service_catalog = ServiceCatalog.objects.select_related("category").get(
+                name=job_data["service_name"]
             )
-            announcement = organization.announcements.filter(services=service).order_by("id").first()
+            announcement = (
+                organization.announcements.filter(subservices__service_catalog=service_catalog)
+                .order_by("id")
+                .first()
+            )
             if announcement is None:
                 announcement = Announcement.objects.create(
                     organization=organization,
-                    category=service.category,
-                    name=f"{service.name} autogenerated announcement",
+                    category=service_catalog.category,
+                    name=f"{service_catalog.name} autogenerated announcement",
                     location=organization.billing_city,
-                    announcement=f"Generated announcement for {service.name}.",
+                    announcement=f"Generated announcement for {service_catalog.name}.",
                     status=Announcement.Status.ACTIVE,
+                    description=f"Generated announcement for {service_catalog.name}.",
+                    free_text="Generated automatically.",
                 )
-                announcement.services.add(service)
-            subservice = service.subservices.get(name=job_data["subservice_name"])
+            subservice = Subservice.objects.get(
+                announcement=announcement,
+                service_catalog=service_catalog,
+                name=job_data["subservice_name"],
+            )
             plan_price = subservice.price_table.get(
                 currency="EUR",
                 effective_from=DEFAULT_PRICE_DATE,
