@@ -6,7 +6,6 @@ from common.permissions import IsActiveAccount
 from common.throttling import ActionScopedRateThrottleMixin
 
 from ..models import Announcement, ServicePrice, Subservice
-from ..permissions import IsOrganizationResourceOwner
 from ..serializers import (
     PublicServicePriceSerializer,
     ServicePriceSerializer,

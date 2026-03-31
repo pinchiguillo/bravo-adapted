@@ -11,8 +11,8 @@ from .views import (
     PublicAnnouncementDetailViewSet,
     PublicAnnouncementImageBase64ViewSet,
     PublicAnnouncementViewSet,
-    ServicePriceViewSet,
     ServiceCatalogViewSet,
+    ServicePriceViewSet,
     SubserviceViewSet,
 )
 

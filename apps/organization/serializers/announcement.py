@@ -1,7 +1,7 @@
+import mimetypes
 import os
 from collections import OrderedDict
 from urllib.parse import urlsplit
-import mimetypes
 
 from django.conf import settings
 from django.db.models import Min
@@ -10,7 +10,7 @@ from django.utils.encoding import filepath_to_uri
 from drf_spectacular.utils import extend_schema_field
 from rest_framework import serializers
 
-from ..models import Announcement, AnnouncementImage, Category, Subservice
+from ..models import Announcement, AnnouncementImage, Category
 from .catalog import CatalogReferenceField
 from .service import ServiceSerializer
 
