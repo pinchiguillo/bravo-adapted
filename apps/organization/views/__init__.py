@@ -1,7 +1,9 @@
 from .announcement import (
     AnnouncementImageViewSet,
     AnnouncementViewSet,
+    OrganizationAnnouncementImageBase64ViewSet,
     PublicAnnouncementDetailViewSet,
+    PublicAnnouncementImageBase64ViewSet,
     PublicAnnouncementViewSet,
 )
 from .catalog import AllowedCityViewSet, CategoryViewSet, ServiceCatalogViewSet
@@ -18,8 +20,10 @@ __all__ = [
     "AnnouncementImageViewSet",
     "AnnouncementViewSet",
     "CategoryViewSet",
+    "OrganizationAnnouncementImageBase64ViewSet",
     "OrganizationViewSet",
     "PublicAnnouncementDetailViewSet",
+    "PublicAnnouncementImageBase64ViewSet",
     "PublicAnnouncementViewSet",
     "PublicServicePriceViewSet",
     "PublicSubserviceViewSet",

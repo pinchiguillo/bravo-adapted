@@ -1,9 +1,11 @@
 import os
 from collections import OrderedDict
 from urllib.parse import urlsplit
+import mimetypes
 
 from django.conf import settings
 from django.db.models import Min
+from django.urls import reverse
 from django.utils.encoding import filepath_to_uri
 from drf_spectacular.utils import extend_schema_field
 from rest_framework import serializers
@@ -16,12 +18,13 @@ from .service import ServiceSerializer
 class AnnouncementImageSerializer(serializers.ModelSerializer):
     image = serializers.ImageField(write_only=True)
     image_url = serializers.SerializerMethodField()
+    base64_url = serializers.SerializerMethodField()
     filename = serializers.SerializerMethodField()
 
     class Meta:
         model = AnnouncementImage
-        fields = ("uuid", "image", "image_url", "filename", "created_at")
-        read_only_fields = ("uuid", "image_url", "filename", "created_at")
+        fields = ("uuid", "image", "image_url", "base64_url", "filename", "created_at")
+        read_only_fields = ("uuid", "image_url", "base64_url", "filename", "created_at")
 
     def validate_image(self, image):
         allowed_content_types = set(
@@ -67,6 +70,30 @@ class AnnouncementImageSerializer(serializers.ModelSerializer):
     def get_filename(self, obj) -> str:
         return os.path.basename(obj.image.name)
 
+    @extend_schema_field(serializers.URLField())
+    def get_base64_url(self, obj) -> str:
+        request = self.context.get("request")
+        organization = self.context.get("organization")
+
+        if organization is None:
+            url = reverse(
+                "public-announcement-image-base64",
+                kwargs={"uuid": obj.announcement.uuid, "image_uuid": obj.uuid},
+            )
+        else:
+            url = reverse(
+                "organization-announcement-image-base64",
+                kwargs={
+                    "organization_uuid": organization.uuid,
+                    "uuid": obj.announcement.uuid,
+                    "image_uuid": obj.uuid,
+                },
+            )
+
+        if request is None:
+            return url
+        return request.build_absolute_uri(url)
+
     def _detect_content_type(self, image):
         image.seek(0)
         sample = image.read(512)
@@ -77,6 +104,23 @@ class AnnouncementImageSerializer(serializers.ModelSerializer):
         if sample.startswith(b"\xff\xd8\xff"):
             return "image/jpeg"
         return "application/octet-stream"
+
+
+class AnnouncementImageBase64Serializer(serializers.Serializer):
+    uuid = serializers.UUIDField(read_only=True)
+    filename = serializers.CharField(read_only=True)
+    content_type = serializers.CharField(read_only=True)
+    data = serializers.CharField(read_only=True)
+
+    def to_representation(self, instance):
+        file_name = getattr(instance.image, "name", "")
+        content_type, _ = mimetypes.guess_type(file_name)
+        return {
+            "uuid": str(instance.uuid),
+            "filename": os.path.basename(file_name),
+            "content_type": content_type or "application/octet-stream",
+            "data": self.context["encoded_data"],
+        }
 
 
 class AnnouncementSerializer(serializers.ModelSerializer):
