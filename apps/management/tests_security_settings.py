@@ -92,6 +92,22 @@ class SecuritySettingsTests(SimpleTestCase):
             os.environ.update(original_env)
             importlib.reload(settings_module)
 
+    def test_default_media_url_uses_public_s3_proxy_path(self):
+        original_env = os.environ.copy()
+        settings_module = importlib.import_module("Core.settings")
+
+        try:
+            os.environ.pop("MEDIA_PUBLIC_BASE_URL", None)
+            os.environ["USE_S3_STORAGE"] = "1"
+            os.environ["AWS_STORAGE_BUCKET_NAME"] = "bravo-media"
+            settings_module = importlib.reload(settings_module)
+
+            self.assertEqual(settings_module.MEDIA_URL, "/s3/bravo-media/")
+        finally:
+            os.environ.clear()
+            os.environ.update(original_env)
+            importlib.reload(settings_module)
+
     def test_rest_framework_default_pagination_is_enabled(self):
         settings_module = importlib.import_module("Core.settings")
 

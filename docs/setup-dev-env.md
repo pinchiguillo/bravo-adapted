@@ -14,6 +14,8 @@ cp example.env .env
 docker compose -f compose.yml up --build
 ```
 
+`example.env` no define `APP_MODE`; en local lo resuelve `compose.yml` con default `development`.
+
 También puedes usar el script de bootstrap:
 
 ```bash

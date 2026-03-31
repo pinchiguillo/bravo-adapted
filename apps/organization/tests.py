@@ -1,3 +1,4 @@
+import io
 import uuid
 from datetime import date
 from unittest import skipUnless
@@ -8,20 +9,23 @@ from django.contrib.auth import get_user_model
 from django.contrib.auth.models import AnonymousUser
 from django.contrib.sessions.middleware import SessionMiddleware
 from django.core.cache import cache
+from django.core.files.uploadedfile import SimpleUploadedFile
 from django.db.utils import IntegrityError
 from django.test import RequestFactory, SimpleTestCase, override_settings
 from django.urls import NoReverseMatch, reverse
 from rest_framework import status
 from rest_framework.test import APITestCase
 from rest_framework.throttling import SimpleRateThrottle
+from PIL import Image
 
 from .middleware import AnnouncementViewCountMiddleware
 from .models import (
+    AllowedCity,
     Announcement,
+    AnnouncementImage,
     AnnouncementReview,
     Category,
     Organization,
-    Service,
     ServiceCatalog,
     ServicePrice,
     Subservice,
@@ -88,6 +92,8 @@ class OrganizationApiTests(APITestCase):
             name="Home Services",
             description="Servicios para el hogar",
         )
+        self.allowed_city = AllowedCity.objects.create(name="Madrid")
+        self.other_allowed_city = AllowedCity.objects.create(name="Barcelona")
         self.other_category = Category.objects.create(
             name="Pet Services",
             description="Servicios para mascotas",
@@ -103,37 +109,6 @@ class OrganizationApiTests(APITestCase):
             description="Other service",
         )
         self.owner_organization_job_uuid = uuid.uuid4()
-        self.owner_service = Service.objects.create(
-            organization=self.organization,
-            service_catalog=self.owner_service_catalog,
-            category=self.category,
-            name="Owner Plan",
-            description="Owner service",
-        )
-        self.owner_subservice = Subservice.objects.create(
-            service=self.owner_service,
-            name="Owner Subservice",
-            description="Owner subservice",
-        )
-        self.owner_service_price = ServicePrice.objects.create(
-            subservice=self.owner_subservice,
-            amount="49.99",
-            currency="EUR",
-            charging_type=ServicePrice.ChargingType.PER_PROJECT,
-            effective_from=date(2026, 1, 1),
-        )
-        self.other_service = Service.objects.create(
-            organization=self.other_organization,
-            service_catalog=self.other_service_catalog,
-            category=self.other_category,
-            name="Other Plan",
-            description="Other service",
-        )
-        self.other_subservice = Subservice.objects.create(
-            service=self.other_service,
-            name="Other Subservice",
-            description="Other subservice",
-        )
         self.announcement = Announcement.objects.create(
             organization=self.organization,
             category=self.category,
@@ -146,7 +121,19 @@ class OrganizationApiTests(APITestCase):
             latitude="40.4168",
             longitude="-3.7038",
         )
-        self.announcement.services.add(self.owner_service)
+        self.owner_subservice = Subservice.objects.create(
+            announcement=self.announcement,
+            service_catalog=self.owner_service_catalog,
+            name="Owner Subservice",
+            description="Owner subservice",
+        )
+        self.owner_service_price = ServicePrice.objects.create(
+            subservice=self.owner_subservice,
+            amount="49.99",
+            currency="EUR",
+            charging_type=ServicePrice.ChargingType.PER_PROJECT,
+            effective_from=date(2026, 1, 1),
+        )
         self.announcement_review = AnnouncementReview.objects.create(
             announcement=self.announcement,
             content="Muy recomendable",
@@ -160,6 +147,12 @@ class OrganizationApiTests(APITestCase):
             status=Announcement.Status.CLOSED,
             description="Paseador con experiencia",
             free_text="Disponible entre semana",
+        )
+        self.other_subservice = Subservice.objects.create(
+            announcement=self.closed_announcement,
+            service_catalog=self.other_service_catalog,
+            name="Other Subservice",
+            description="Other subservice",
         )
 
     def test_organization_retrieve_is_public_by_uuid(self):
@@ -274,44 +267,6 @@ class OrganizationApiTests(APITestCase):
         self.assertEqual(response.data["verification_level"], 4)
         self.assertEqual(response.data["rating"], "3.00")
 
-    def test_organization_search_requires_admin(self):
-        self.client.force_authenticate(user=self.owner)
-        response = self.client.get(reverse("organization-search"), {"search": "Acm"})
-
-        self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
-
-    def test_organization_search_requires_search_query(self):
-        self.client.force_authenticate(user=self.admin_user)
-
-        response = self.client.get(reverse("organization-search"))
-
-        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
-        self.assertEqual(response.data["search"], "This query parameter is required.")
-
-    def test_organization_search_rejects_short_search_query(self):
-        self.client.force_authenticate(user=self.admin_user)
-
-        response = self.client.get(reverse("organization-search"), {"search": "Ac"})
-
-        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
-        self.assertEqual(response.data["search"], "Ensure this query parameter has at least 3 characters.")
-
-    def test_organization_search_is_available_for_admin(self):
-        self.client.force_authenticate(user=self.admin_user)
-        response = self.client.get(reverse("organization-search"), {"search": "Acm"})
-
-        self.assertEqual(response.status_code, status.HTTP_200_OK)
-        self.assertEqual(response.data["count"], 1)
-        self.assertEqual(len(response.data["results"]), 1)
-        self.assertEqual(response.data["results"][0]["uuid"], str(self.organization.uuid))
-
-    def test_organization_search_only_allows_get(self):
-        self.client.force_authenticate(user=self.admin_user)
-
-        response = self.client.post(reverse("organization-search"), {"search": "Acm"}, format="json")
-
-        self.assertEqual(response.status_code, status.HTTP_405_METHOD_NOT_ALLOWED)
-
     def test_organization_root_get_is_not_available_as_list(self):
         self.client.force_authenticate(user=self.admin_user)
 
@@ -323,49 +278,62 @@ class OrganizationApiTests(APITestCase):
         response = self.client.get(reverse("organization-category-list"))
 
         self.assertEqual(response.status_code, status.HTTP_200_OK)
+        for item in response.data["results"]:
+            self.assertEqual(set(item.keys()), {"uuid", "name"})
         returned_uuids = {item["uuid"] for item in response.data["results"]}
         self.assertGreaterEqual(response.data["count"], 2)
         self.assertTrue({str(self.category.uuid), str(self.other_category.uuid)}.issubset(returned_uuids))
+
+    def test_allowed_city_list_is_public_and_read_only(self):
+        response = self.client.get(reverse("organization-allowed-city-list"))
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        for item in response.data["results"]:
+            self.assertEqual(set(item.keys()), {"uuid", "name"})
+        returned_uuids = {item["uuid"] for item in response.data["results"]}
+        self.assertGreaterEqual(response.data["count"], 2)
+        self.assertTrue(
+            {str(self.allowed_city.uuid), str(self.other_allowed_city.uuid)}.issubset(returned_uuids)
+        )
+
+    def test_allowed_city_detail_route_does_not_exist(self):
+        with self.assertRaises(NoReverseMatch):
+            reverse("organization-allowed-city-detail", kwargs={"uuid": self.allowed_city.uuid})
 
     def test_category_detail_route_does_not_exist(self):
         with self.assertRaises(NoReverseMatch):
             reverse("organization-category-detail", kwargs={"uuid": self.category.uuid})
 
-    def test_category_services_list_is_public(self):
-        response = self.client.get(
-            reverse("category-service-list", kwargs={"category_uuid": self.category.uuid})
-        )
+    def test_service_catalog_list_is_public(self):
+        response = self.client.get(reverse("service-catalog-list"))
 
         self.assertEqual(response.status_code, status.HTTP_200_OK)
-        self.assertEqual(response.data["count"], 1)
-        self.assertEqual(response.data["results"][0]["uuid"], str(self.owner_service_catalog.uuid))
-        self.assertEqual(response.data["results"][0]["category"], str(self.category.uuid))
+        for item in response.data["results"]:
+            self.assertEqual(set(item.keys()), {"uuid", "name"})
+        returned_uuids = {item["uuid"] for item in response.data["results"]}
+        self.assertEqual(response.data["count"], 2)
+        self.assertEqual(
+            returned_uuids,
+            {str(self.owner_service_catalog.uuid), str(self.other_service_catalog.uuid)},
+        )
 
-    def test_category_services_list_is_paginated(self):
+    def test_service_catalog_list_is_paginated(self):
         second_service_catalog = ServiceCatalog.objects.create(
             category=self.category,
             name="Second Category Service",
             description="Second category service",
         )
-        Service.objects.create(
-            organization=self.organization,
-            service_catalog=second_service_catalog,
-            category=self.category,
-            name="Second Category Service",
-            description="Second category service",
-        )
 
-        response = self.client.get(
-            reverse("category-service-list", kwargs={"category_uuid": self.category.uuid}),
-            {"page_size": 1},
-        )
+        response = self.client.get(reverse("service-catalog-list"), {"page_size": 1})
 
         self.assertEqual(response.status_code, status.HTTP_200_OK)
-        self.assertEqual(response.data["count"], 2)
+        self.assertEqual(response.data["count"], 3)
         self.assertEqual(len(response.data["results"]), 1)
         self.assertIsNotNone(response.data["next"])
 
-    def test_category_services_list_returns_catalog_without_duplicates_from_organization_services(self):
+    def test_service_catalog_list_returns_fixed_catalog_without_duplicates_from_organization_services(
+        self,
+    ):
         hidden_owner = get_user_model().objects.create_user(
             username="hidden-category-owner",
             email="hidden-category-owner@example.com",
@@ -383,47 +351,43 @@ class OrganizationApiTests(APITestCase):
             billing_postal_code="28001",
             is_approved=False,
         )
-        Service.objects.create(
+        hidden_announcement = Announcement.objects.create(
             organization=hidden_organization,
-            service_catalog=self.owner_service_catalog,
             category=self.category,
-            name="Hidden Service",
+            name="Hidden announcement",
+            location="Madrid",
+            announcement="Hidden announcement",
+            status=Announcement.Status.ACTIVE,
+            description="Should not duplicate catalog",
+            free_text="Hidden",
+        )
+        Subservice.objects.create(
+            announcement=hidden_announcement,
+            service_catalog=self.owner_service_catalog,
+            name="Hidden Subservice",
             description="Should not duplicate catalog",
         )
 
-        response = self.client.get(
-            reverse("category-service-list", kwargs={"category_uuid": self.category.uuid})
-        )
+        response = self.client.get(reverse("service-catalog-list"))
 
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         returned_uuids = {item["uuid"] for item in response.data["results"]}
-        self.assertEqual(returned_uuids, {str(self.owner_service_catalog.uuid)})
-
-    def test_category_services_list_returns_404_for_unknown_category(self):
-        response = self.client.get(
-            reverse(
-                "category-service-list",
-                kwargs={"category_uuid": "00000000-0000-0000-0000-000000000000"},
-            )
-        )
-
-        self.assertEqual(response.status_code, status.HTTP_404_NOT_FOUND)
-
-    def test_organization_search_lists_organizations_for_admin(self):
-        self.client.force_authenticate(user=self.admin_user)
-
-        response = self.client.get(reverse("organization-search"), {"search": "example.com"})
-
-        self.assertEqual(response.status_code, status.HTTP_200_OK)
-        self.assertEqual(response.data["count"], 2)
         self.assertEqual(
-            {item["uuid"] for item in response.data["results"]},
-            {str(self.organization.uuid), str(self.other_organization.uuid)},
+            returned_uuids,
+            {str(self.owner_service_catalog.uuid), str(self.other_service_catalog.uuid)},
         )
+
+    def test_service_catalog_detail_route_does_not_exist(self):
+        with self.assertRaises(NoReverseMatch):
+            reverse("service-catalog-detail", kwargs={"pk": self.owner_service_catalog.uuid})
 
     def test_organization_admin_endpoint_does_not_exist(self):
         with self.assertRaises(NoReverseMatch):
             reverse("organization-admin-list")
+
+    def test_organization_search_endpoint_does_not_exist(self):
+        with self.assertRaises(NoReverseMatch):
+            reverse("organization-search")
 
     def test_authenticated_user_can_create_organization(self):
         self.client.force_authenticate(user=self.user_without_organization)
@@ -496,7 +460,7 @@ class OrganizationApiTests(APITestCase):
         self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
         self.assertEqual(response.data["detail"], "Authenticated user already has an organization.")
 
-    def test_owner_can_update_organization_by_uuid(self):
+    def test_patch_is_not_available_for_organization_detail(self):
         self.client.force_authenticate(user=self.owner)
         response = self.client.patch(
             reverse("organization-detail", kwargs={"uuid": self.organization.uuid}),
@@ -504,9 +468,9 @@ class OrganizationApiTests(APITestCase):
             format="json",
         )
 
-        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.status_code, status.HTTP_405_METHOD_NOT_ALLOWED)
         self.organization.refresh_from_db()
-        self.assertEqual(self.organization.name, "Acme Updated")
+        self.assertEqual(self.organization.name, "Acme")
 
     def test_put_is_not_available_for_organization_detail(self):
         self.client.force_authenticate(user=self.owner)
@@ -530,13 +494,23 @@ class OrganizationApiTests(APITestCase):
         self.organization.refresh_from_db()
         self.assertEqual(self.organization.name, "Acme")
 
-    def test_suspended_owner_cannot_update_organization_by_uuid(self):
+    def test_delete_is_not_available_for_organization_detail(self):
+        self.client.force_authenticate(user=self.owner)
+
+        response = self.client.delete(
+            reverse("organization-detail", kwargs={"uuid": self.organization.uuid})
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_405_METHOD_NOT_ALLOWED)
+        self.assertTrue(Organization.objects.filter(uuid=self.organization.uuid).exists())
+
+    def test_suspended_owner_cannot_update_organization_via_me(self):
         self.owner.status = self.owner.Status.SUSPENDED
         self.owner.save(update_fields=["status"])
         self.client.force_authenticate(user=self.owner)
 
         response = self.client.patch(
-            reverse("organization-detail", kwargs={"uuid": self.organization.uuid}),
+            reverse("organization-me"),
             {"name": "Blocked Update"},
             format="json",
         )
@@ -545,26 +519,13 @@ class OrganizationApiTests(APITestCase):
         self.organization.refresh_from_db()
         self.assertEqual(self.organization.name, "Acme")
 
-    def test_non_owner_cannot_update_organization_by_uuid(self):
-        self.client.force_authenticate(user=self.other_owner)
-        response = self.client.patch(
-            reverse("organization-detail", kwargs={"uuid": self.organization.uuid}),
-            {"name": "Invalid Update"},
-            format="json",
-        )
+    def test_owner_can_delete_organization_via_me(self):
+        self.client.force_authenticate(user=self.owner)
 
-        self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
-        self.organization.refresh_from_db()
-        self.assertEqual(self.organization.name, "Acme")
+        response = self.client.delete(reverse("organization-me"))
 
-    def test_non_owner_cannot_delete_organization_by_uuid(self):
-        self.client.force_authenticate(user=self.other_owner)
-        response = self.client.delete(
-            reverse("organization-detail", kwargs={"uuid": self.organization.uuid})
-        )
-
-        self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
-        self.assertTrue(Organization.objects.filter(uuid=self.organization.uuid).exists())
+        self.assertEqual(response.status_code, status.HTTP_204_NO_CONTENT)
+        self.assertFalse(Organization.objects.filter(uuid=self.organization.uuid).exists())
 
     def test_organization_resource_owner_permission_allows_owner_organization_resource(self):
         request = RequestFactory().patch("/")
@@ -578,14 +539,14 @@ class OrganizationApiTests(APITestCase):
 
         self.assertTrue(allowed)
 
-    def test_organization_resource_owner_permission_allows_owner_service_resource(self):
+    def test_organization_resource_owner_permission_allows_owner_subservice_resource(self):
         request = RequestFactory().patch("/")
         request.user = self.owner
 
         allowed = IsOrganizationResourceOwner().has_object_permission(
             request,
             None,
-            self.owner_service,
+            self.owner_subservice,
         )
 
         self.assertTrue(allowed)
@@ -598,18 +559,6 @@ class OrganizationApiTests(APITestCase):
             request,
             None,
             self.announcement,
-        )
-
-        self.assertTrue(allowed)
-
-    def test_organization_resource_owner_permission_allows_owner_subservice_resource(self):
-        request = RequestFactory().patch("/")
-        request.user = self.owner
-
-        allowed = IsOrganizationResourceOwner().has_object_permission(
-            request,
-            None,
-            self.owner_subservice,
         )
 
         self.assertTrue(allowed)
@@ -633,7 +582,7 @@ class OrganizationApiTests(APITestCase):
         allowed = IsOrganizationResourceOwner().has_object_permission(
             request,
             None,
-            self.owner_service,
+            self.owner_subservice,
         )
 
         self.assertFalse(allowed)
@@ -663,93 +612,72 @@ class OrganizationApiTests(APITestCase):
                 },
             )
 
-        with self.assertRaises(NoReverseMatch):
-            reverse(
-                "organization-service-list",
-                kwargs={
-                    "organization_uuid": self.organization.uuid,
-                    "job_uuid": self.owner_organization_job_uuid,
-                },
-            )
-
-        with self.assertRaises(NoReverseMatch):
-            reverse(
-                "organization-service-detail",
-                kwargs={
-                    "organization_uuid": self.organization.uuid,
-                    "job_uuid": self.owner_organization_job_uuid,
-                    "service_uuid": self.owner_service.uuid,
-                },
-            )
-
-        with self.assertRaises(NoReverseMatch):
+    def test_private_nested_subservice_routes_exist(self):
+        self.assertEqual(
             reverse(
                 "organization-subservice-list",
                 kwargs={
-                    "organization_uuid": self.organization.uuid,
-                    "job_uuid": self.owner_organization_job_uuid,
-                    "service_uuid": self.owner_service.uuid,
+                    "announcement_uuid": self.announcement.uuid,
                 },
-            )
-
-        with self.assertRaises(NoReverseMatch):
+            ),
+            (
+                f"/api/announcements/{self.announcement.uuid}/subservices/"
+            ),
+        )
+        self.assertEqual(
             reverse(
                 "organization-subservice-detail",
                 kwargs={
-                    "organization_uuid": self.organization.uuid,
-                    "job_uuid": self.owner_organization_job_uuid,
-                    "service_uuid": self.owner_service.uuid,
-                    "uuid": self.owner_subservice.uuid,
+                    "announcement_uuid": self.announcement.uuid,
+                    "subservice_uuid": self.owner_subservice.uuid,
                 },
-            )
-
-        with self.assertRaises(NoReverseMatch):
+            ),
+            f"/api/announcements/{self.announcement.uuid}/subservices/{self.owner_subservice.uuid}/",
+        )
+        self.assertEqual(
             reverse(
                 "organization-service-price-list",
                 kwargs={
-                    "organization_uuid": self.organization.uuid,
-                    "job_uuid": self.owner_organization_job_uuid,
-                    "service_uuid": self.owner_service.uuid,
+                    "announcement_uuid": self.announcement.uuid,
                     "subservice_uuid": self.owner_subservice.uuid,
                 },
-            )
-
-        with self.assertRaises(NoReverseMatch):
+            ),
+            f"/api/announcements/{self.announcement.uuid}/subservices/{self.owner_subservice.uuid}/prices/",
+        )
+        self.assertEqual(
             reverse(
                 "organization-service-price-detail",
                 kwargs={
-                    "organization_uuid": self.organization.uuid,
-                    "job_uuid": self.owner_organization_job_uuid,
-                    "service_uuid": self.owner_service.uuid,
+                    "announcement_uuid": self.announcement.uuid,
                     "subservice_uuid": self.owner_subservice.uuid,
                     "price_uuid": self.owner_service_price.uuid,
                 },
-            )
+            ),
+            (
+                f"/api/announcements/{self.announcement.uuid}/subservices/{self.owner_subservice.uuid}"
+                f"/prices/{self.owner_service_price.uuid}/"
+            ),
+        )
 
     def test_public_nested_subservice_and_price_endpoints_exist(self):
         self.assertEqual(
             reverse(
-                "public-subservice-list",
+                "organization-subservice-list",
                 kwargs={
-                    "organization_uuid": self.organization.uuid,
-                    "service_uuid": self.owner_service.uuid,
+                    "announcement_uuid": self.announcement.uuid,
                 },
             ),
-            f"/api/organizations/{self.organization.uuid}/services/{self.owner_service.uuid}/subservices/",
+            f"/api/announcements/{self.announcement.uuid}/subservices/",
         )
         self.assertEqual(
             reverse(
-                "public-service-price-list",
+                "organization-service-price-list",
                 kwargs={
-                    "organization_uuid": self.organization.uuid,
-                    "service_uuid": self.owner_service.uuid,
+                    "announcement_uuid": self.announcement.uuid,
                     "subservice_uuid": self.owner_subservice.uuid,
                 },
             ),
-            (
-                f"/api/organizations/{self.organization.uuid}/services/{self.owner_service.uuid}"
-                f"/subservices/{self.owner_subservice.uuid}/prices/"
-            ),
+            f"/api/announcements/{self.announcement.uuid}/subservices/{self.owner_subservice.uuid}/prices/",
         )
 
     def test_organization_public_retrieve_is_throttled(self):
@@ -785,6 +713,61 @@ class OrganizationApiTests(APITestCase):
         )
 
         self.assertEqual(response.status_code, status.HTTP_401_UNAUTHORIZED)
+
+    def test_owner_can_create_subservice_for_owned_announcement(self):
+        self.client.force_authenticate(user=self.owner)
+
+        response = self.client.post(
+            reverse(
+                "organization-subservice-list",
+                kwargs={
+                    "announcement_uuid": self.announcement.uuid,
+                },
+            ),
+            {
+                "announcement": str(self.announcement.uuid),
+                "service_catalog": str(self.owner_service_catalog.uuid),
+                "name": "Window Cleaning",
+                "description": "Interior and exterior windows",
+            },
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+        self.assertEqual(str(response.data["announcement"]), str(self.announcement.uuid))
+        self.assertEqual(
+            response.data["service_catalog"],
+            {
+                "uuid": str(self.owner_service_catalog.uuid),
+                "name": self.owner_service_catalog.name,
+            },
+        )
+        self.assertEqual(response.data["name"], "Window Cleaning")
+
+    def test_owner_can_create_service_price_for_owned_subservice(self):
+        self.client.force_authenticate(user=self.owner)
+
+        response = self.client.post(
+            reverse(
+                "organization-service-price-list",
+                kwargs={
+                    "announcement_uuid": self.announcement.uuid,
+                    "subservice_uuid": self.owner_subservice.uuid,
+                },
+            ),
+            {
+                "subservice": str(self.owner_subservice.uuid),
+                "amount": "79.99",
+                "currency": "EUR",
+                "charging_type": ServicePrice.ChargingType.PER_PROJECT,
+                "effective_from": "2026-04-01",
+            },
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+        self.assertEqual(response.data["subservice"], str(self.owner_subservice.uuid))
+        self.assertEqual(response.data["amount"], "79.99")
 
     def test_public_announcement_list_allows_anonymous_requests_without_filters(self):
         response = self.client.get(reverse("public-announcement-list"))
@@ -934,7 +917,12 @@ class OrganizationApiTests(APITestCase):
             description="Corte y bano",
             free_text="Guardias fines de semana",
         )
-        matching.services.add(self.other_service)
+        Subservice.objects.create(
+            announcement=matching,
+            service_catalog=self.other_service_catalog,
+            name="Pet Grooming Plus",
+            description="Corte y bano",
+        )
         non_matching = Announcement.objects.create(
             organization=self.other_organization,
             category=self.category,
@@ -945,11 +933,16 @@ class OrganizationApiTests(APITestCase):
             description="Servicio para averias domesticas",
             free_text="Guardias nocturnas",
         )
-        non_matching.services.add(self.owner_service)
+        Subservice.objects.create(
+            announcement=non_matching,
+            service_catalog=self.owner_service_catalog,
+            name="Home Repairs Base",
+            description="Servicio para averias domesticas",
+        )
 
         response = self.client.get(
             reverse("public-announcement-list"),
-            {"service": str(self.other_service.uuid)},
+            {"service": str(self.other_service_catalog.uuid)},
         )
 
         self.assertEqual(response.status_code, status.HTTP_200_OK)
@@ -1084,11 +1077,32 @@ class OrganizationApiTests(APITestCase):
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertEqual(response.data["uuid"], str(self.announcement.uuid))
         self.assertEqual(response.data["organization"], str(self.organization.uuid))
+        self.assertEqual(
+            response.data["category"],
+            {
+                "uuid": str(self.category.uuid),
+                "name": self.category.name,
+            },
+        )
         self.assertEqual(response.data["lowest_price"], "49.99")
-        self.assertEqual(response.data["services"][0]["uuid"], str(self.owner_service.uuid))
+        self.assertEqual(response.data["services"][0]["uuid"], str(self.owner_service_catalog.uuid))
+        self.assertEqual(
+            response.data["services"][0]["category"],
+            {
+                "uuid": str(self.category.uuid),
+                "name": self.category.name,
+            },
+        )
         self.assertEqual(
             response.data["services"][0]["subservices"][0]["uuid"],
             str(self.owner_subservice.uuid),
+        )
+        self.assertEqual(
+            response.data["services"][0]["subservices"][0]["service_catalog"],
+            {
+                "uuid": str(self.owner_service_catalog.uuid),
+                "name": self.owner_service_catalog.name,
+            },
         )
         self.assertEqual(
             response.data["services"][0]["subservices"][0]["service_prices"][0]["uuid"],
@@ -1108,13 +1122,12 @@ class OrganizationApiTests(APITestCase):
 
         self.assertEqual(response.status_code, status.HTTP_404_NOT_FOUND)
 
-    def test_public_subservice_list_is_available_by_organization_and_service(self):
+    def test_public_subservice_list_is_available_by_organization_and_announcement(self):
         response = self.client.get(
             reverse(
-                "public-subservice-list",
+                "organization-subservice-list",
                 kwargs={
-                    "organization_uuid": self.organization.uuid,
-                    "service_uuid": self.owner_service.uuid,
+                    "announcement_uuid": self.announcement.uuid,
                 },
             )
         )
@@ -1126,10 +1139,9 @@ class OrganizationApiTests(APITestCase):
     def test_public_subservice_retrieve_is_available_by_nested_uuids(self):
         response = self.client.get(
             reverse(
-                "public-subservice-detail",
+                "organization-subservice-detail",
                 kwargs={
-                    "organization_uuid": self.organization.uuid,
-                    "service_uuid": self.owner_service.uuid,
+                    "announcement_uuid": self.announcement.uuid,
                     "subservice_uuid": self.owner_subservice.uuid,
                 },
             )
@@ -1137,15 +1149,21 @@ class OrganizationApiTests(APITestCase):
 
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertEqual(response.data["uuid"], str(self.owner_subservice.uuid))
-        self.assertEqual(str(response.data["service"]), str(self.owner_service.uuid))
+        self.assertEqual(str(response.data["announcement"]), str(self.announcement.uuid))
+        self.assertEqual(
+            response.data["service_catalog"],
+            {
+                "uuid": str(self.owner_service_catalog.uuid),
+                "name": self.owner_service_catalog.name,
+            },
+        )
 
     def test_public_service_price_list_is_available_by_nested_uuids(self):
         response = self.client.get(
             reverse(
-                "public-service-price-list",
+                "organization-service-price-list",
                 kwargs={
-                    "organization_uuid": self.organization.uuid,
-                    "service_uuid": self.owner_service.uuid,
+                    "announcement_uuid": self.announcement.uuid,
                     "subservice_uuid": self.owner_subservice.uuid,
                 },
             )
@@ -1158,10 +1176,9 @@ class OrganizationApiTests(APITestCase):
     def test_public_service_price_retrieve_is_available_by_nested_uuids(self):
         response = self.client.get(
             reverse(
-                "public-service-price-detail",
+                "organization-service-price-detail",
                 kwargs={
-                    "organization_uuid": self.organization.uuid,
-                    "service_uuid": self.owner_service.uuid,
+                    "announcement_uuid": self.announcement.uuid,
                     "subservice_uuid": self.owner_subservice.uuid,
                     "price_uuid": self.owner_service_price.uuid,
                 },
@@ -1178,19 +1195,17 @@ class OrganizationApiTests(APITestCase):
 
         subservice_response = self.client.get(
             reverse(
-                "public-subservice-list",
+                "organization-subservice-list",
                 kwargs={
-                    "organization_uuid": self.organization.uuid,
-                    "service_uuid": self.owner_service.uuid,
+                    "announcement_uuid": self.announcement.uuid,
                 },
             )
         )
         price_response = self.client.get(
             reverse(
-                "public-service-price-list",
+                "organization-service-price-list",
                 kwargs={
-                    "organization_uuid": self.organization.uuid,
-                    "service_uuid": self.owner_service.uuid,
+                    "announcement_uuid": self.announcement.uuid,
                     "subservice_uuid": self.owner_subservice.uuid,
                 },
             )
@@ -1269,14 +1284,19 @@ class OrganizationApiTests(APITestCase):
             description="Incluye cocina y banos",
             free_text="Disponible domingos",
         )
-        second_announcement.services.add(self.other_service)
+        Subservice.objects.create(
+            announcement=second_announcement,
+            service_catalog=self.other_service_catalog,
+            name="Deep Cleaning Extra",
+            description="Incluye cocina y banos",
+        )
 
         response = self.client.get(
             reverse(
                 "organization-announcement-list",
                 kwargs={"organization_uuid": self.organization.uuid},
             ),
-            {"service": str(self.owner_service.uuid)},
+            {"service": str(self.owner_service_catalog.uuid)},
         )
 
         self.assertEqual(response.status_code, status.HTTP_200_OK)
@@ -1447,7 +1467,6 @@ class OrganizationApiTests(APITestCase):
             ),
             {
                 "category": str(self.category.uuid),
-                "services": [str(self.owner_service.uuid)],
                 "name": "Emergency Plumbing",
                 "location": "Madrid Centro",
                 "title": "Atencion 24 horas",
@@ -1464,21 +1483,17 @@ class OrganizationApiTests(APITestCase):
         created = Announcement.objects.get(uuid=response.data["uuid"])
         self.assertEqual(created.organization, self.organization)
         self.assertEqual(response.data["organization"], str(self.organization.uuid))
-        self.assertEqual(response.data["category"], str(self.category.uuid))
-        self.assertEqual(response.data["lowest_price"], "49.99")
+        self.assertEqual(
+            response.data["category"],
+            {
+                "uuid": str(self.category.uuid),
+                "name": self.category.name,
+            },
+        )
+        self.assertIsNone(response.data["lowest_price"])
         self.assertEqual(response.data["title"], "Atencion 24 horas")
         self.assertNotIn("announcement", response.data)
-        self.assertEqual(len(response.data["services"]), 1)
-        self.assertEqual(response.data["services"][0]["uuid"], str(self.owner_service.uuid))
-        self.assertEqual(len(response.data["services"][0]["subservices"]), 1)
-        self.assertEqual(
-            response.data["services"][0]["subservices"][0]["uuid"],
-            str(self.owner_subservice.uuid),
-        )
-        self.assertEqual(
-            response.data["services"][0]["subservices"][0]["service_prices"][0]["uuid"],
-            str(self.owner_service_price.uuid),
-        )
+        self.assertEqual(response.data["services"], [])
         self.assertEqual(response.data["view_count"], 0)
         self.assertNotIn("review", response.data)
 
@@ -1516,7 +1531,6 @@ class OrganizationApiTests(APITestCase):
             ),
             {
                 "category": str(self.category.uuid),
-                "services": [str(self.owner_service.uuid)],
                 "name": "Emergency Plumbing",
                 "location": "Madrid Centro",
                 "title": "Atencion 24 horas",
@@ -1530,33 +1544,6 @@ class OrganizationApiTests(APITestCase):
         self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
         self.assertEqual(response.data["detail"], "Organization must be approved for this action.")
 
-    def test_announcement_create_rejects_services_from_another_organization(self):
-        self.client.force_authenticate(user=self.owner)
-
-        response = self.client.post(
-            reverse(
-                "organization-announcement-list",
-                kwargs={"organization_uuid": self.organization.uuid},
-            ),
-            {
-                "category": str(self.category.uuid),
-                "services": [str(self.other_service.uuid)],
-                "name": "Invalid Announcement",
-                "location": "Madrid",
-                "title": "No valida",
-                "status": Announcement.Status.ACTIVE,
-                "description": "Should fail",
-                "free_text": "",
-            },
-            format="json",
-        )
-
-        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
-        self.assertEqual(
-            response.data["services"][0],
-            "Services must belong to the organization in the URL.",
-        )
-
     def test_announcement_create_requires_description_and_free_text(self):
         self.client.force_authenticate(user=self.owner)
 
@@ -1567,7 +1554,6 @@ class OrganizationApiTests(APITestCase):
             ),
             {
                 "category": str(self.category.uuid),
-                "services": [str(self.owner_service.uuid)],
                 "name": "Invalid Announcement",
                 "location": "Madrid",
                 "title": "No valida",
@@ -1592,8 +1578,8 @@ class OrganizationApiTests(APITestCase):
 
         self.assertEqual(response.status_code, status.HTTP_404_NOT_FOUND)
 
-    def test_non_owner_cannot_retrieve_private_announcement(self):
-        self.client.force_authenticate(user=self.other_owner)
+    def test_organization_announcement_detail_get_is_not_available(self):
+        self.client.force_authenticate(user=self.owner)
 
         response = self.client.get(
             reverse(
@@ -1605,30 +1591,16 @@ class OrganizationApiTests(APITestCase):
             )
         )
 
-        self.assertEqual(response.status_code, status.HTTP_404_NOT_FOUND)
+        self.assertEqual(response.status_code, status.HTTP_405_METHOD_NOT_ALLOWED)
         self.announcement.refresh_from_db()
         self.assertEqual(self.announcement.view_count, 0)
 
-    def test_owner_retrieve_increments_announcement_view_count_only_once_per_client(self):
-        self.client.force_authenticate(user=self.owner)
-
+    def test_public_announcement_detail_increments_announcement_view_count_only_once_per_client(self):
         first_response = self.client.get(
-            reverse(
-                "organization-announcement-detail",
-                kwargs={
-                    "organization_uuid": self.organization.uuid,
-                    "uuid": self.announcement.uuid,
-                },
-            )
+            reverse("public-announcement-detail", kwargs={"uuid": self.announcement.uuid})
         )
         second_response = self.client.get(
-            reverse(
-                "organization-announcement-detail",
-                kwargs={
-                    "organization_uuid": self.organization.uuid,
-                    "uuid": self.announcement.uuid,
-                },
-            )
+            reverse("public-announcement-detail", kwargs={"uuid": self.announcement.uuid})
         )
 
         self.assertEqual(first_response.status_code, status.HTTP_200_OK)
@@ -1660,12 +1632,12 @@ class OrganizationApiTests(APITestCase):
 
         with patch.object(OrganizationViewSet, "throttle_classes", [OrganizationWriteTestThrottle]):
             first_response = self.client.patch(
-                reverse("organization-detail", kwargs={"uuid": self.organization.uuid}),
+                reverse("organization-me"),
                 {"name": "Acme Updated Once"},
                 format="json",
             )
             second_response = self.client.patch(
-                reverse("organization-detail", kwargs={"uuid": self.organization.uuid}),
+                reverse("organization-me"),
                 {"name": "Acme Updated Twice"},
                 format="json",
             )
@@ -1695,15 +1667,34 @@ class AnnouncementSerializerTests(SimpleTestCase):
         self.assertTrue(serializer.get_fields()["description"].required)
         self.assertTrue(serializer.get_fields()["free_text"].required)
 
-    def test_serializer_returns_hardcoded_images_list(self):
-        from .serializers import AnnouncementSerializer
+    @override_settings(MEDIA_URL="/s3/bravo-media/")
+    def test_announcement_image_serializer_normalizes_absolute_storage_url_to_public_s3_path(self):
+        from .serializers import AnnouncementImageSerializer
 
-        serializer = AnnouncementSerializer()
+        image = type(
+            "ImageStub",
+            (),
+            {
+                "uuid": uuid.uuid4(),
+                "image": type(
+                    "FileStub",
+                    (),
+                    {
+                        "name": "announcements/test.png",
+                        "url": "https://files.example.com/bravo-media/announcements/test.png?signature=abc",
+                    },
+                )(),
+                "created_at": None,
+            },
+        )()
+        request = RequestFactory().get("/api/announcements/")
+        serializer = AnnouncementImageSerializer(instance=image, context={"request": request})
 
         self.assertEqual(
-            serializer.get_images(obj=None),
-            [AnnouncementSerializer.HARDCODED_IMAGE_URL] * AnnouncementSerializer.HARDCODED_IMAGE_COUNT,
+            serializer.data["image_url"],
+            "http://testserver/s3/bravo-media/announcements/test.png?signature=abc",
         )
+        self.assertEqual(serializer.data["filename"], "test.png")
 
     def test_service_price_serializer_accepts_subservice_for_write(self):
         from .serializers import ServicePriceSerializer
@@ -1713,12 +1704,12 @@ class AnnouncementSerializerTests(SimpleTestCase):
         self.assertIn("subservice", serializer.get_fields())
         self.assertFalse(serializer.get_fields()["subservice"].read_only)
 
-    def test_service_serializer_requires_description(self):
+    def test_service_serializer_exposes_subservices_as_read_only(self):
         from .serializers import ServiceSerializer
 
         serializer = ServiceSerializer()
 
-        self.assertTrue(serializer.get_fields()["description"].required)
+        self.assertTrue(serializer.get_fields()["subservices"].read_only)
 
 
 class AnnouncementViewCountMiddlewareTests(APITestCase):
@@ -1769,11 +1760,8 @@ class AnnouncementViewCountMiddlewareTests(APITestCase):
     def _build_anonymous_request(self, session_key="anon-visitor"):
         request = self.factory.get(
             reverse(
-                "organization-announcement-detail",
-                kwargs={
-                    "organization_uuid": self.organization.uuid,
-                    "uuid": self.announcement.uuid,
-                },
+                "public-announcement-detail",
+                kwargs={"uuid": self.announcement.uuid},
             )
         )
         session_middleware = SessionMiddleware(lambda incoming_request: None)
@@ -1786,7 +1774,165 @@ class AnnouncementViewCountMiddlewareTests(APITestCase):
 
     def _resolver_match(self):
         class ResolverMatch:
-            url_name = "organization-announcement-detail"
+            url_name = "public-announcement-detail"
             kwargs = {"uuid": self.announcement.uuid}
 
         return ResolverMatch()
+
+
+@override_settings(
+    STORAGES={
+        "default": {"BACKEND": "django.core.files.storage.FileSystemStorage"},
+        "staticfiles": {"BACKEND": "django.contrib.staticfiles.storage.StaticFilesStorage"},
+    },
+    MEDIA_ROOT="/tmp/bravo-organization-tests-media",
+    MEDIA_URL="/s3/test-bucket/",
+    ORGANIZATION_ANNOUNCEMENT_IMAGE_ALLOWED_CONTENT_TYPES=("image/png", "image/jpeg"),
+    ORGANIZATION_ANNOUNCEMENT_IMAGE_MAX_BYTES=1024,
+)
+class AnnouncementImageApiTests(APITestCase):
+    def setUp(self):
+        user_model = get_user_model()
+        self.owner = user_model.objects.create_user(
+            username="announcement-image-owner",
+            email="announcement-image-owner@example.com",
+            password="testpass123",
+        )
+        self.other_user = user_model.objects.create_user(
+            username="announcement-image-other",
+            email="announcement-image-other@example.com",
+            password="testpass123",
+        )
+        self.organization = Organization.objects.create(
+            user=self.owner,
+            name="Image Org",
+            legal_name="Image Org SL",
+            tax_id="IMG123",
+            billing_email="billing@image-org.com",
+            billing_address="Main 1",
+            billing_city="Madrid",
+            billing_country="ES",
+            billing_postal_code="28001",
+            is_approved=True,
+        )
+        self.category = Category.objects.create(name="Image Category")
+        self.announcement = Announcement.objects.create(
+            organization=self.organization,
+            category=self.category,
+            name="Image Announcement",
+            location="Madrid",
+            announcement="Con imagen",
+            status=Announcement.Status.ACTIVE,
+            description="Descripcion",
+            free_text="Texto libre",
+        )
+
+    def _make_png_upload(self, name="announcement.png"):
+        image_io = io.BytesIO()
+        Image.new("RGBA", (1, 1), (255, 0, 0, 255)).save(image_io, format="PNG")
+        image_io.seek(0)
+        return SimpleUploadedFile(name, image_io.getvalue(), content_type="image/png")
+
+    def test_owner_can_upload_announcement_image(self):
+        self.client.force_authenticate(user=self.owner)
+
+        response = self.client.post(
+            reverse(
+                "organization-announcement-image-list",
+                kwargs={
+                    "organization_uuid": self.organization.uuid,
+                    "uuid": self.announcement.uuid,
+                },
+            ),
+            {"image": self._make_png_upload()},
+            format="multipart",
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+        self.assertEqual(AnnouncementImage.objects.count(), 1)
+        self.assertIn("image_url", response.data)
+        self.assertIn("/s3/test-bucket/organization-announcements/", response.data["image_url"])
+        self.assertTrue(response.data["filename"].startswith("announcement"))
+        self.assertTrue(response.data["filename"].endswith(".png"))
+
+    def test_non_owner_cannot_upload_announcement_image(self):
+        self.client.force_authenticate(user=self.other_user)
+
+        response = self.client.post(
+            reverse(
+                "organization-announcement-image-list",
+                kwargs={
+                    "organization_uuid": self.organization.uuid,
+                    "uuid": self.announcement.uuid,
+                },
+            ),
+            {"image": self._make_png_upload()},
+            format="multipart",
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_404_NOT_FOUND)
+        self.assertEqual(AnnouncementImage.objects.count(), 0)
+
+    def test_announcement_detail_includes_uploaded_images(self):
+        AnnouncementImage.objects.create(
+            announcement=self.announcement,
+            image=self._make_png_upload(name="detail.png"),
+        )
+
+        response = self.client.get(
+            reverse("public-announcement-detail", kwargs={"uuid": self.announcement.uuid})
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(len(response.data["images"]), 1)
+        self.assertIn(
+            "/s3/test-bucket/organization-announcements/",
+            response.data["images"][0]["image_url"],
+        )
+        self.assertTrue(response.data["images"][0]["filename"].startswith("detail"))
+        self.assertTrue(response.data["images"][0]["filename"].endswith(".png"))
+
+    def test_upload_rejects_invalid_content_type(self):
+        self.client.force_authenticate(user=self.owner)
+
+        response = self.client.post(
+            reverse(
+                "organization-announcement-image-list",
+                kwargs={
+                    "organization_uuid": self.organization.uuid,
+                    "uuid": self.announcement.uuid,
+                },
+            ),
+            {
+                "image": SimpleUploadedFile(
+                    "announcement.txt",
+                    b"plain text",
+                    content_type="text/plain",
+                )
+            },
+            format="multipart",
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn("image", response.data)
+
+    def test_owner_can_delete_announcement_image(self):
+        image = AnnouncementImage.objects.create(
+            announcement=self.announcement,
+            image=self._make_png_upload(name="delete.png"),
+        )
+        self.client.force_authenticate(user=self.owner)
+
+        response = self.client.delete(
+            reverse(
+                "organization-announcement-image-detail",
+                kwargs={
+                    "organization_uuid": self.organization.uuid,
+                    "uuid": self.announcement.uuid,
+                    "image_uuid": image.uuid,
+                },
+            )
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_204_NO_CONTENT)
+        self.assertFalse(AnnouncementImage.objects.filter(pk=image.pk).exists())

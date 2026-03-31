@@ -39,6 +39,7 @@ Servicios definidos en `compose.yml`:
 
 El backend queda expuesto directamente en `http://localhost:8000` y también a través de `nginx` en `http://localhost:24356`.
 Las peticiones `http://localhost:24356/s3/...` se enrutan a `localstack`.
+Las URLs publicas de media generadas por Django usan por defecto el prefijo `/s3/<bucket>/...`, para que sean resolubles desde fuera del contenedor.
 PostgreSQL queda accesible desde el host en `localhost:5432` o en el puerto definido por `POSTGRES_PORT`.
 La base de datos puede inspeccionarse en `http://localhost:24357` con servidor `postgres` y las credenciales de `POSTGRES_USER`/`POSTGRES_PASSWORD`.
 
@@ -47,6 +48,13 @@ La base de datos puede inspeccionarse en `http://localhost:24357` con servidor `
 - **`compose.yml`**: Desarrollo local (recomendado).
 - **`compose.prod.yml`**: Producción sin actualización automática de imágenes.
 - **`compose.prod-watchtower.yml`**: Producción con **Watchtower** (actualiza `app` automáticamente cuando hay nuevas imágenes remotas).
+
+`APP_MODE` se resuelve siempre desde variable de entorno:
+- `compose.yml`: default `development`
+- `compose.prod.yml`: default `production`
+- `compose.prod-watchtower.yml`: default `production`
+
+`example.env` ya no fija `APP_MODE`, precisamente para no pisar esos defaults. Si necesitas forzarlo, decláralo explícitamente en el entorno o en el `.env` del despliegue correspondiente.
 
 ### Usando Watchtower en producción
 

@@ -2,7 +2,7 @@ from django.core.management.base import BaseCommand
 from django.db import transaction
 
 from apps.management.models import FeatureFlag
-from apps.organization.models import Category, ServiceCatalog
+from apps.organization.models import AllowedCity, Category, ServiceCatalog
 
 CATEGORIES = [
     {"name": "Reformas", "description": "Servicios vinculados a reformas y obras."},
@@ -30,6 +30,59 @@ SERVICE_CATALOGS = [
         "category": "Mantenimiento",
         "description": "Servicios de limpieza profesional.",
     },
+]
+
+ALLOWED_CITIES = [
+    "A Coruña",
+    "Albacete",
+    "Alicante",
+    "Almería",
+    "Oviedo",
+    "Ávila",
+    "Badajoz",
+    "Barcelona",
+    "Bilbao",
+    "Burgos",
+    "Cáceres",
+    "Cádiz",
+    "Castellón de la Plana",
+    "Ciudad Real",
+    "Córdoba",
+    "Cuenca",
+    "Donostia-San Sebastián",
+    "Girona",
+    "Granada",
+    "Guadalajara",
+    "Huelva",
+    "Huesca",
+    "Jaén",
+    "León",
+    "Lleida",
+    "Logroño",
+    "Lugo",
+    "Madrid",
+    "Málaga",
+    "Murcia",
+    "Ourense",
+    "Palencia",
+    "Palma",
+    "Pamplona",
+    "Las Palmas de Gran Canaria",
+    "Pontevedra",
+    "Salamanca",
+    "Santa Cruz de Tenerife",
+    "Santander",
+    "Segovia",
+    "Sevilla",
+    "Soria",
+    "Tarragona",
+    "Teruel",
+    "Toledo",
+    "València",
+    "Valladolid",
+    "Vitoria-Gasteiz",
+    "Zamora",
+    "Zaragoza",
 ]
 
 FEATURE_FLAGS = [
@@ -60,14 +113,17 @@ class Command(BaseCommand):
     @transaction.atomic
     def handle(self, *args, **options):
         counters = {
+            "allowed_cities_created": 0,
             "categories_created": 0,
             "categories_updated": 0,
+            "allowed_cities_updated": 0,
             "service_catalogs_created": 0,
             "service_catalogs_updated": 0,
             "feature_flags_created": 0,
             "feature_flags_updated": 0,
         }
 
+        self._seed_allowed_cities(counters)
         categories_by_name = self._seed_categories(counters)
         self._seed_service_catalogs(categories_by_name, counters)
         self._seed_feature_flags(counters)
@@ -75,7 +131,9 @@ class Command(BaseCommand):
         self.stdout.write(
             self.style.SUCCESS(
                 "Fixed tables seed completed "
-                f"(categories_created={counters['categories_created']}, "
+                f"(allowed_cities_created={counters['allowed_cities_created']}, "
+                f"allowed_cities_updated={counters['allowed_cities_updated']}, "
+                f"categories_created={counters['categories_created']}, "
                 f"categories_updated={counters['categories_updated']}, "
                 f"service_catalogs_created={counters['service_catalogs_created']}, "
                 f"service_catalogs_updated={counters['service_catalogs_updated']}, "
@@ -83,6 +141,13 @@ class Command(BaseCommand):
                 f"feature_flags_updated={counters['feature_flags_updated']})."
             )
         )
+
+    def _seed_allowed_cities(self, counters):
+        for city_name in ALLOWED_CITIES:
+            _, created = AllowedCity.objects.get_or_create(name=city_name)
+
+            if created:
+                counters["allowed_cities_created"] += 1
 
     def _seed_categories(self, counters):
         categories_by_name = {}

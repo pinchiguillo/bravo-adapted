@@ -1,15 +1,16 @@
-from .announcement import Announcement, AnnouncementReview
-from .catalog import Category, ServiceCatalog
+from .announcement import Announcement, AnnouncementImage, AnnouncementReview
+from .catalog import AllowedCity, Category, ServiceCatalog
 from .organization import Organization, OrganizationQuerySet
-from .service import Service, ServicePrice, Subservice
+from .service import ServicePrice, Subservice
 
 __all__ = [
+    "AllowedCity",
     "Announcement",
+    "AnnouncementImage",
     "AnnouncementReview",
     "Category",
     "Organization",
     "OrganizationQuerySet",
-    "Service",
     "ServiceCatalog",
     "ServicePrice",
     "Subservice",

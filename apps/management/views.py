@@ -1,17 +1,22 @@
+import uuid
+
 from django.apps import apps
 from django.conf import settings
 from django.contrib.auth import get_user_model
-from drf_spectacular.utils import extend_schema
+from django.db.models import Q
+from drf_spectacular.utils import OpenApiParameter, extend_schema, extend_schema_view
 from rest_framework import mixins, permissions, status, viewsets
 from rest_framework.decorators import action
+from rest_framework.exceptions import ValidationError
 from rest_framework.response import Response
 
 from apps.management.models import FeatureFlag
-from apps.organization.models import Category, Organization
+from apps.organization.models import AllowedCity, Category, Organization
 from common.permissions import IsActiveAccount
 from common.throttling import ActionScopedRateThrottleMixin
 
 from .serializers import (
+    ManagementAllowedCitySerializer,
     ManagementCategorySerializer,
     ManagementFeatureFlagSerializer,
     ManagementOrganizationSerializer,
@@ -76,6 +81,44 @@ class ManagementBypassAdminLoginMixin:
         return super().get_permissions()
 
 
+management_user_search_parameter = OpenApiParameter(
+    name="search",
+    type=str,
+    location=OpenApiParameter.QUERY,
+    required=False,
+    description="Free text search over uuid, username, email, first name and last name.",
+)
+
+management_user_status_parameter = OpenApiParameter(
+    name="status",
+    type=str,
+    location=OpenApiParameter.QUERY,
+    required=False,
+    description="Exact user status filter.",
+)
+
+management_user_email_verified_parameter = OpenApiParameter(
+    name="email_verified",
+    type=bool,
+    location=OpenApiParameter.QUERY,
+    required=False,
+    description="Exact boolean filter for email verification status.",
+)
+
+
+@extend_schema(tags=["Management / Users"])
+@extend_schema_view(
+    list=extend_schema(
+        tags=["Management / Users"],
+        summary="List managed users",
+        description="Returns the paginated list of managed users with optional search and filters.",
+        parameters=[
+            management_user_search_parameter,
+            management_user_status_parameter,
+            management_user_email_verified_parameter,
+        ],
+    ),
+)
 class ManagementUserViewSet(
     ManagementBypassAdminLoginMixin,
     ActionScopedRateThrottleMixin,
@@ -103,7 +146,52 @@ class ManagementUserViewSet(
         "suspend": "management_status",
     }
 
+    def get_queryset(self):
+        queryset = self.queryset
+        if self.action != "list":
+            return queryset
 
+        search_query = str(self.request.query_params.get("search", "")).strip()
+        if search_query:
+            search_filter = (
+                Q(username__icontains=search_query)
+                | Q(email__icontains=search_query)
+                | Q(first_name__icontains=search_query)
+                | Q(last_name__icontains=search_query)
+            )
+            search_uuid = self._parse_uuid(search_query)
+            if search_uuid is not None:
+                search_filter |= Q(uuid=search_uuid)
+            queryset = queryset.filter(search_filter)
+
+        status_value = str(self.request.query_params.get("status", "")).strip()
+        if status_value:
+            queryset = queryset.filter(status=status_value)
+
+        email_verified = self.request.query_params.get("email_verified")
+        if email_verified is not None and str(email_verified).strip() != "":
+            queryset = queryset.filter(email_verified=self._parse_boolean_query_param(email_verified))
+
+        return queryset
+
+    def _parse_boolean_query_param(self, raw_value):
+        normalized_value = str(raw_value).strip().lower()
+        if normalized_value in {"true", "1"}:
+            return True
+        if normalized_value in {"false", "0"}:
+            return False
+        raise ValidationError(
+            {"email_verified": "Use a boolean value: true or false."}
+        )
+
+    def _parse_uuid(self, raw_value):
+        try:
+            return uuid.UUID(str(raw_value).strip())
+        except (AttributeError, TypeError, ValueError):
+            return None
+
+
+@extend_schema(tags=["Management / Feature Flags"])
 class ManagementFeatureFlagViewSet(
     ManagementBypassAdminLoginMixin,
     ActionScopedRateThrottleMixin,
@@ -130,6 +218,7 @@ class ManagementFeatureFlagViewSet(
     }
 
 
+@extend_schema(tags=["Management / Categories"])
 class ManagementCategoryViewSet(
     ManagementBypassAdminLoginMixin,
     ActionScopedRateThrottleMixin,
@@ -155,6 +244,31 @@ class ManagementCategoryViewSet(
     }
 
 
+@extend_schema(tags=["Management / Allowed Cities"])
+class ManagementAllowedCityViewSet(
+    ManagementBypassAdminLoginMixin,
+    ActionScopedRateThrottleMixin,
+    mixins.ListModelMixin,
+    mixins.CreateModelMixin,
+    mixins.RetrieveModelMixin,
+    mixins.UpdateModelMixin,
+    viewsets.GenericViewSet,
+):
+    permission_classes = [IsActiveAccount, permissions.IsAdminUser]
+    serializer_class = ManagementAllowedCitySerializer
+    queryset = AllowedCity.objects.all().order_by("name")
+    lookup_field = "uuid"
+    throttle_scope_prefix = "management"
+    throttle_scope_action_map = {
+        "list": "management_read",
+        "retrieve": "management_read",
+        "create": "management_write",
+        "update": "management_write",
+        "partial_update": "management_write",
+    }
+
+
+@extend_schema(tags=["Management / Organizations"])
 class ManagementOrganizationViewSet(
     ManagementBypassAdminLoginMixin,
     ActionScopedRateThrottleMixin,
@@ -184,6 +298,7 @@ class ManagementOrganizationViewSet(
 
 
 if apps.is_installed("apps.jobs"):
+    @extend_schema(tags=["Management / Jobs"])
     class ManagementJobViewSet(
         ManagementBypassAdminLoginMixin,
         ActionScopedRateThrottleMixin,
@@ -203,7 +318,8 @@ if apps.is_installed("apps.jobs"):
             "announcement__organization__user",
             "plan_price",
             "plan_price__subservice",
-            "plan_price__subservice__service",
+            "plan_price__subservice__announcement",
+            "plan_price__subservice__service_catalog",
         ).order_by("-created_at", "-id")
         lookup_field = "uuid"
         status_serializer_class = Job.Status

@@ -5,6 +5,7 @@ Este documento resume las variables consumidas por el backend desde `Core/settin
 ## Configuracion general
 
 - `APP_MODE`: modo de ejecucion. Valores habituales: `development`, `production`.
+  En Compose se inyecta desde entorno en todos los casos; `compose.yml` cae por defecto a `development` y los compose de despliegue caen por defecto a `production`. La plantilla `example.env` no lo fija para no sobrescribir esos defaults.
 - `PORT`: puerto expuesto por el contenedor `app`.
 - `SECRET_KEY`: clave secreta de Django.
 - `DEBUG`: activa o desactiva modo debug.
@@ -40,6 +41,7 @@ Si `REDIS_URL` no existe fuera de produccion, Channels usa `InMemoryChannelLayer
 - `AWS_S3_ENDPOINT_URL`
 - `AWS_SES_ENDPOINT_URL`
 - `AWS_STORAGE_BUCKET_NAME`
+- `MEDIA_PUBLIC_BASE_URL`: base publica usada para construir `MEDIA_URL`. En local/compose se recomienda `/s3`.
 - `USE_S3_STORAGE` (debe permanecer en `1`; el proyecto exige storage S3 activo)
 - `USE_SES_EMAIL`
 - `DEFAULT_FROM_EMAIL`

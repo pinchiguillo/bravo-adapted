@@ -1,7 +1,7 @@
 from django.core.management.base import BaseCommand
 from django.db import transaction
 
-from apps.organization.models import Announcement, Category, Organization, Service
+from apps.organization.models import Announcement, Category, Organization, Subservice
 
 DEFAULT_CATEGORY_NAME = "General"
 DEFAULT_CATEGORY_DESCRIPTION = "Categoria generica para announcements seed."
@@ -34,12 +34,13 @@ class Command(BaseCommand):
         organizations = Organization.objects.filter(status=Organization.Status.ACTIVE).order_by("id")
 
         for organization in organizations:
-            services = list(
-                Service.objects.select_related("category", "organization")
-                .filter(organization=organization)
+            first_catalog = (
+                Subservice.objects.select_related("service_catalog__category")
+                .filter(announcement__organization=organization)
                 .order_by("id")
+                .first()
             )
-            category = services[0].category if services else fallback_category
+            category = first_catalog.service_catalog.category if first_catalog else fallback_category
             announcement_name = f"{organization.name} - {DEFAULT_ANNOUNCEMENT_SUFFIX}"
             announcement, created = Announcement.objects.update_or_create(
                 organization=organization,
@@ -58,7 +59,6 @@ class Command(BaseCommand):
                     "longitude": None,
                 },
             )
-            announcement.services.set(services[:3])
 
             if created:
                 counters["announcements_created"] += 1

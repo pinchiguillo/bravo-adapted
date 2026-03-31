@@ -25,7 +25,7 @@ services:
     env_file:
       - .env
     environment:
-      APP_MODE: production
+      APP_MODE: ${APP_MODE:-production}
       PORT: "8000"
       SECRET_KEY: ${SECRET_KEY}
       DEBUG: "0"

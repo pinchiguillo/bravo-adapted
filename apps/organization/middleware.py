@@ -17,7 +17,7 @@ class AnnouncementViewCountMiddleware:
             request.method == "GET"
             and response.status_code == 200
             and resolver_match is not None
-            and resolver_match.url_name == "organization-announcement-detail"
+            and resolver_match.url_name == "public-announcement-detail"
         ):
             announcement_uuid = resolver_match.kwargs.get("uuid")
             if announcement_uuid is not None:

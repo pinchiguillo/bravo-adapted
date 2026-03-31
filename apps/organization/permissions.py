@@ -9,13 +9,17 @@ def get_resource_organization_owner_id(obj):
     if organization is not None:
         return organization.user_id
 
-    service = getattr(obj, "service", None)
-    if service is not None:
-        return service.organization.user_id
+    announcement = getattr(obj, "announcement", None)
+    if announcement is not None:
+        return announcement.organization.user_id
 
     subservice = getattr(obj, "subservice", None)
     if subservice is not None:
-        return subservice.service.organization.user_id
+        return subservice.announcement.organization.user_id
+
+    subservice_announcement = getattr(obj, "announcement", None)
+    if subservice_announcement is not None and hasattr(obj, "service_catalog_id"):
+        return subservice_announcement.organization.user_id
 
     return None
 

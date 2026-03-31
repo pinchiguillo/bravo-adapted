@@ -15,6 +15,17 @@ class Category(models.Model):
         return self.name
 
 
+class AllowedCity(models.Model):
+    uuid = models.UUIDField(default=uuid.uuid4, unique=True, editable=False)
+    name = models.CharField(max_length=120, unique=True)
+
+    class Meta:
+        ordering = ["name"]
+
+    def __str__(self):
+        return self.name
+
+
 class ServiceCatalog(models.Model):
     uuid = models.UUIDField(default=uuid.uuid4, unique=True, editable=False)
     category = models.ForeignKey(
