@@ -319,7 +319,7 @@ class OrganizationApiTests(APITestCase):
         )
 
     def test_service_catalog_list_is_paginated(self):
-        second_service_catalog = ServiceCatalog.objects.create(
+        ServiceCatalog.objects.create(
             category=self.category,
             name="Second Category Service",
             description="Second category service",
