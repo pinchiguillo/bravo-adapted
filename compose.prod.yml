@@ -98,7 +98,7 @@ services:
       retries: 10
 
   localstack:
-    image: localstack/localstack:latest
+    image: localstack/localstack:3.8.1
     env_file:
       - .env
     environment:
