@@ -310,12 +310,25 @@ class OrganizationApiTests(APITestCase):
 
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         for item in response.data["results"]:
-            self.assertEqual(set(item.keys()), {"uuid", "name"})
+            self.assertEqual(set(item.keys()), {"uuid", "name", "category"})
+            self.assertEqual(set(item["category"].keys()), {"uuid", "name"})
         returned_uuids = {item["uuid"] for item in response.data["results"]}
         self.assertEqual(response.data["count"], 2)
         self.assertEqual(
             returned_uuids,
             {str(self.owner_service_catalog.uuid), str(self.other_service_catalog.uuid)},
+        )
+        owner_item = next(
+            item
+            for item in response.data["results"]
+            if item["uuid"] == str(self.owner_service_catalog.uuid)
+        )
+        self.assertEqual(
+            owner_item["category"],
+            {
+                "uuid": str(self.category.uuid),
+                "name": self.category.name,
+            },
         )
 
     def test_service_catalog_list_is_paginated(self):

@@ -211,3 +211,19 @@ class ApiDocsRoutingTests(SimpleTestCase):
                 reverse("api-docs")
         finally:
             self._reload_urlconf()
+
+
+class VersionEndpointTests(SimpleTestCase):
+    def test_api_version_endpoint_returns_version_file_value(self):
+        expected_version = (core_settings.BASE_DIR / "VERSION").read_text(encoding="utf-8").strip()
+
+        response = self.client.get(reverse("api-version"))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json(), {"version": expected_version})
+
+    def test_schema_exposes_api_version_endpoint(self):
+        schema = SchemaGenerator().get_schema(request=None, public=True)
+
+        self.assertIn("/api/version/", schema["paths"])
+        self.assertIn("get", schema["paths"]["/api/version/"])

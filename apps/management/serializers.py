@@ -5,8 +5,9 @@ from django.contrib.auth.password_validation import validate_password
 from rest_framework import serializers
 
 from apps.management.models import FeatureFlag
-from apps.organization.models import AllowedCity, Announcement, Category, Organization
-from apps.organization.serializers import OrganizationRatingMixin
+from apps.organization.models import AllowedCity, Announcement, Category, Organization, ServiceCatalog
+from apps.organization.serializers import AnnouncementSerializer, OrganizationRatingMixin
+from apps.organization.serializers.catalog import CatalogReferenceField
 
 if apps.is_installed("apps.jobs"):
     from apps.jobs.models import Job
@@ -178,3 +179,35 @@ class ManagementAllowedCitySerializer(serializers.ModelSerializer):
             "name",
         )
         read_only_fields = ("uuid",)
+
+
+class ManagementServiceCatalogSerializer(serializers.ModelSerializer):
+    category = CatalogReferenceField(read_only=True, slug_field="uuid")
+    category_uuid = serializers.SlugRelatedField(
+        source="category",
+        queryset=Category.objects.all(),
+        slug_field="uuid",
+        write_only=True,
+    )
+
+    class Meta:
+        model = ServiceCatalog
+        fields = (
+            "uuid",
+            "name",
+            "description",
+            "category",
+            "category_uuid",
+        )
+        read_only_fields = ("uuid", "category")
+
+
+class ManagementAnnouncementSerializer(AnnouncementSerializer):
+    class Meta(AnnouncementSerializer.Meta):
+        read_only_fields = (
+            "uuid",
+            "organization",
+            "view_count",
+            "created_at",
+            "updated_at",
+        )
