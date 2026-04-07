@@ -108,7 +108,7 @@ FEATURE_FLAGS = [
 
 
 class Command(BaseCommand):
-    help = "Seeds fixed catalog tables and feature flags."
+    help = "Seeds fixed catalog tables for categories and service catalogs, excluding subservices, plus feature flags."
 
     @transaction.atomic
     def handle(self, *args, **options):
