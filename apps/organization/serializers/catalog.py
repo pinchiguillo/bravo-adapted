@@ -26,9 +26,7 @@ class CategorySerializer(serializers.ModelSerializer):
 
 
 class ServiceCatalogSerializer(serializers.ModelSerializer):
-    category = CatalogReferenceField(read_only=True, slug_field="uuid")
-
     class Meta:
         model = ServiceCatalog
-        fields = ("uuid", "name", "category")
+        fields = ("uuid", "name")
         read_only_fields = fields
