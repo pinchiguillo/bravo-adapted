@@ -38,7 +38,7 @@ Responsabilidades:
 
 ### 4. Servicios AWS locales (`localstack`)
 
-- Imagen: `localstack/localstack:latest`
+- Imagen: `localstack/localstack:3.8.1`
 - Servicios habilitados: `s3`, `sqs`, `sns`, `ses`
 - Endpoint principal: `http://localhost:4566`
 - Persistencia: volumen Docker `localstack_data`
