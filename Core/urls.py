@@ -19,12 +19,11 @@ from django.contrib import admin
 from django.urls import include, path
 from drf_spectacular.views import SpectacularAPIView, SpectacularSwaggerView
 
-from common.views import api_version, healthcheck
+from common.views import healthcheck
 
 urlpatterns = [
     path('admin/', admin.site.urls),
     path("health/", healthcheck, name="healthcheck"),
-    path("api/version/", api_version, name="api-version"),
     path("api/auth/", include("apps.auth.urls")),
     path("api/", include("apps.organization.urls")),
     path("api/management/", include("apps.management.urls")),

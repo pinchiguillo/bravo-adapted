@@ -11,17 +11,15 @@ from rest_framework.exceptions import ValidationError
 from rest_framework.response import Response
 
 from apps.management.models import FeatureFlag
-from apps.organization.models import AllowedCity, Announcement, Category, Organization, ServiceCatalog
+from apps.organization.models import AllowedCity, Category, Organization
 from common.permissions import IsActiveAccount
 from common.throttling import ActionScopedRateThrottleMixin
 
 from .serializers import (
     ManagementAllowedCitySerializer,
-    ManagementAnnouncementSerializer,
     ManagementCategorySerializer,
     ManagementFeatureFlagSerializer,
     ManagementOrganizationSerializer,
-    ManagementServiceCatalogSerializer,
     ManagementUserSerializer,
 )
 
@@ -267,109 +265,6 @@ class ManagementAllowedCityViewSet(
         "create": "management_write",
         "update": "management_write",
         "partial_update": "management_write",
-    }
-
-
-management_announcement_search_parameter = OpenApiParameter(
-    name="search",
-    type=str,
-    location=OpenApiParameter.QUERY,
-    required=False,
-    description="Free text search over announcement title, description, location, category and services.",
-)
-
-
-management_announcement_status_parameter = OpenApiParameter(
-    name="status",
-    type=str,
-    location=OpenApiParameter.QUERY,
-    required=False,
-    description="Exact announcement status filter.",
-)
-
-
-@extend_schema(tags=["Management / Announcements"])
-@extend_schema_view(
-    list=extend_schema(
-        tags=["Management / Announcements"],
-        summary="List managed announcements",
-        description="Returns the paginated list of announcements for administrative management.",
-        parameters=[management_announcement_search_parameter, management_announcement_status_parameter],
-    ),
-)
-class ManagementAnnouncementViewSet(
-    ManagementBypassAdminLoginMixin,
-    ActionScopedRateThrottleMixin,
-    mixins.ListModelMixin,
-    mixins.RetrieveModelMixin,
-    mixins.UpdateModelMixin,
-    mixins.DestroyModelMixin,
-    viewsets.GenericViewSet,
-):
-    permission_classes = [IsActiveAccount, permissions.IsAdminUser]
-    serializer_class = ManagementAnnouncementSerializer
-    queryset = Announcement.objects.select_related("organization", "category").prefetch_related(
-        "images", "subservices__service_catalog__category", "subservices__price_table"
-    )
-    lookup_field = "uuid"
-    throttle_scope_prefix = "management"
-    throttle_scope_action_map = {
-        "list": "management_read",
-        "retrieve": "management_read",
-        "update": "management_write",
-        "partial_update": "management_write",
-        "destroy": "management_write",
-    }
-
-    def get_queryset(self):
-        queryset = self.queryset.order_by("-created_at", "-id")
-
-        if self.action != "list":
-            return queryset
-
-        search_query = str(self.request.query_params.get("search", "")).strip()
-        if search_query:
-            queryset = queryset.filter(
-                Q(name__icontains=search_query)
-                | Q(location__icontains=search_query)
-                | Q(announcement__icontains=search_query)
-                | Q(description__icontains=search_query)
-                | Q(free_text__icontains=search_query)
-                | Q(category__name__icontains=search_query)
-                | Q(subservices__service_catalog__name__icontains=search_query)
-                | Q(status__icontains=search_query)
-            )
-
-        status_value = str(self.request.query_params.get("status", "")).strip()
-        if status_value:
-            queryset = queryset.filter(status=status_value)
-
-        return queryset.distinct()
-
-
-@extend_schema(tags=["Management / Services"])
-class ManagementServiceCatalogViewSet(
-    ManagementBypassAdminLoginMixin,
-    ActionScopedRateThrottleMixin,
-    mixins.ListModelMixin,
-    mixins.CreateModelMixin,
-    mixins.RetrieveModelMixin,
-    mixins.UpdateModelMixin,
-    mixins.DestroyModelMixin,
-    viewsets.GenericViewSet,
-):
-    permission_classes = [IsActiveAccount, permissions.IsAdminUser]
-    serializer_class = ManagementServiceCatalogSerializer
-    queryset = ServiceCatalog.objects.select_related("category").order_by("name", "uuid")
-    lookup_field = "uuid"
-    throttle_scope_prefix = "management"
-    throttle_scope_action_map = {
-        "list": "management_read",
-        "retrieve": "management_read",
-        "create": "management_write",
-        "update": "management_write",
-        "partial_update": "management_write",
-        "destroy": "management_write",
     }
 
 

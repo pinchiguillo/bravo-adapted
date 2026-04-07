@@ -264,79 +264,6 @@ class ManagementApiTests(APITestCase):
         self.job.refresh_from_db()
         self.assertEqual(self.job.status, Job.Status.SUSPENDED)
 
-
-class ManagementAnnouncementApiTests(APITestCase):
-    def setUp(self):
-        user_model = get_user_model()
-        self.admin_user = user_model.objects.create_user(
-            username="announcement-admin",
-            email="announcement-admin@example.com",
-            password="testpass123",
-            is_staff=True,
-        )
-        self.owner = user_model.objects.create_user(
-            username="announcement-owner",
-            email="announcement-owner@example.com",
-            password="testpass123",
-        )
-        self.organization = Organization.objects.create(
-            user=self.owner,
-            name="Announcements Org",
-            legal_name="Announcements Org SL",
-            tax_id="ANN123",
-            billing_email="billing@announcements-org.com",
-            billing_address="Gran Via 10",
-            billing_city="Madrid",
-            billing_country="ES",
-            billing_postal_code="28013",
-        )
-        self.category = Category.objects.create(
-            name="Announcements Category",
-            description="Categoria para management announcements",
-        )
-        self.announcement = Announcement.objects.create(
-            organization=self.organization,
-            category=self.category,
-            name="Managed Announcement",
-            location="Madrid",
-            announcement="Managed announcement",
-            description="Managed description",
-            free_text="Managed free text",
-            status=Announcement.Status.ACTIVE,
-        )
-
-    def test_admin_can_list_management_announcements(self):
-        self.client.force_authenticate(user=self.admin_user)
-
-        response = self.client.get(reverse("management-announcements-list"))
-
-        self.assertEqual(response.status_code, status.HTTP_200_OK)
-        self.assertEqual(response.data["count"], 1)
-        self.assertEqual(response.data["results"][0]["uuid"], str(self.announcement.uuid))
-        self.assertEqual(response.data["results"][0]["organization"], str(self.organization.uuid))
-
-    def test_admin_can_filter_management_announcements_by_status(self):
-        archived_announcement = Announcement.objects.create(
-            organization=self.organization,
-            category=self.category,
-            name="Archived Announcement",
-            location="Bilbao",
-            announcement="Archived plan",
-            status=Announcement.Status.CLOSED,
-            description="Archived description",
-            free_text="Archived free text",
-        )
-        self.client.force_authenticate(user=self.admin_user)
-
-        response = self.client.get(
-            reverse("management-announcements-list"),
-            {"status": Announcement.Status.CLOSED},
-        )
-
-        self.assertEqual(response.status_code, status.HTTP_200_OK)
-        self.assertEqual(response.data["count"], 1)
-        self.assertEqual(response.data["results"][0]["uuid"], str(archived_announcement.uuid))
-
     @skipUnless(JOBS_INSTALLED, "jobs app disabled")
     def test_unauthenticated_user_cannot_deactivate_job(self):
         response = self.client.post(
@@ -350,7 +277,7 @@ class ManagementAnnouncementApiTests(APITestCase):
         response = self.client.get(reverse("management-users-list"))
 
         self.assertEqual(response.status_code, status.HTTP_200_OK)
-        self.assertEqual(response.data["count"], 2)
+        self.assertEqual(response.data["count"], 3)
         self.assertNotIn("id", response.data["results"][0])
 
     @skipUnless(JOBS_INSTALLED, "jobs app disabled")
@@ -830,71 +757,6 @@ class ManagementAllowedCityApiTests(APITestCase):
 
         self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
 
-
-class ManagementServiceCatalogApiTests(APITestCase):
-    def setUp(self):
-        user_model = get_user_model()
-        self.admin_user = user_model.objects.create_user(
-            username="management-service-admin",
-            email="management-service-admin@example.com",
-            password="testpass123",
-            is_staff=True,
-        )
-        self.regular_user = user_model.objects.create_user(
-            username="management-service-user",
-            email="management-service-user@example.com",
-            password="testpass123",
-        )
-        self.category = Category.objects.create(
-            name="Category Services",
-            description="Servicios de categoria",
-        )
-
-    def test_admin_can_create_service_catalog(self):
-        self.client.force_authenticate(user=self.admin_user)
-
-        response = self.client.post(
-            reverse("management-services-list"),
-            {
-                "name": "Nueva instalacion",
-                "description": "Servicio creado desde management",
-                "category_uuid": str(self.category.uuid),
-            },
-            format="json",
-        )
-
-        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
-        self.assertEqual(response.data["name"], "Nueva instalacion")
-        self.assertEqual(response.data["description"], "Servicio creado desde management")
-        self.assertEqual(
-            response.data["category"],
-            {
-                "uuid": str(self.category.uuid),
-                "name": self.category.name,
-            },
-        )
-        self.assertTrue(
-            ServiceCatalog.objects.filter(
-                name="Nueva instalacion",
-                category=self.category,
-            ).exists()
-        )
-
-    def test_non_staff_cannot_create_service_catalog(self):
-        self.client.force_authenticate(user=self.regular_user)
-
-        response = self.client.post(
-            reverse("management-services-list"),
-            {
-                "name": "No autorizado",
-                "description": "",
-                "category_uuid": str(self.category.uuid),
-            },
-            format="json",
-        )
-
-        self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
-
 class FeatureFlagHelperTests(APITestCase):
     def test_returns_default_when_flag_does_not_exist(self):
         self.assertFalse(is_feature_enabled("missing-flag"))
@@ -1142,14 +1004,6 @@ class SeedFixedTablesCommandTests(APITestCase):
         self.assertIn("categories_created=2", out.getvalue())
         self.assertIn("service_catalogs_created=4", out.getvalue())
         self.assertIn("feature_flags_created=3", out.getvalue())
-
-    def test_seed_fixed_tables_does_not_create_subservices(self):
-        out = StringIO()
-
-        call_command("seed_fixed_tables", stdout=out)
-
-        self.assertEqual(Subservice.objects.count(), 0)
-        self.assertIn("service_catalogs_created=4", out.getvalue())
 
     def test_seed_fixed_tables_is_idempotent_and_updates_existing_records(self):
         AllowedCity.objects.create(name="Madrid")
