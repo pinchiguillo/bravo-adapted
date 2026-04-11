@@ -9,8 +9,7 @@ from apps.organization.models import (
     Announcement,
     Category,
     Organization,
-    OrganizationJob,
-    Service,
+    ServiceCatalog,
     ServicePrice,
     Subservice,
 )
@@ -140,47 +139,62 @@ class Command(BaseCommand):
             if created:
                 counters["organizations"] += 1
 
-            # Create default org job and services
-            org_job, _ = OrganizationJob.objects.get_or_create(
-                organization=organization,
-                defaults={
-                    "name": f"{org_name} services",
-                    "description": f"Services for {org_name}.",
-                },
-            )
-
-            # Add random services
+            selected_service_catalogs = []
             for service_data in SERVICES[:randint(2, 4)]:
-                category = categories_by_name.get(
-                    choice(list(categories_by_name.keys()))
-                )
-                Service.objects.get_or_create(
-                    job=org_job,
+                category = categories_by_name[choice(list(categories_by_name.keys()))]
+                service_catalog, _ = ServiceCatalog.objects.update_or_create(
                     name=service_data["name"],
                     defaults={
                         "category": category,
                         "description": service_data["description"],
                     },
                 )
+                selected_service_catalogs.append(service_catalog)
+
+            if not selected_service_catalogs:
+                continue
+
+            announcement_name = f"{org_name} - catalogo general"
+            announcement, _ = Announcement.objects.update_or_create(
+                organization=organization,
+                name=announcement_name,
+                defaults={
+                    "category": selected_service_catalogs[0].category,
+                    "location": organization.billing_city,
+                    "announcement": f"Servicios disponibles de {org_name}.",
+                    "status": Announcement.Status.ACTIVE,
+                    "description": f"Announcement base para {org_name}.",
+                    "free_text": "Contact for quote.",
+                    "latitude": None,
+                    "longitude": None,
+                },
+            )
+
+            for service_catalog in selected_service_catalogs:
+                Subservice.objects.update_or_create(
+                    announcement=announcement,
+                    service_catalog=service_catalog,
+                    name=service_catalog.name,
+                    defaults={"description": service_catalog.description},
+                )
 
         return organizations
 
     def _seed_announcements(self, count, organizations, categories_by_name, counters):
-        org_services_cache = {}
+        org_subservices_cache = {}
 
         for i in range(count):
             organization = choice(organizations)
-            
-            if organization.id not in org_services_cache:
-                org_job = OrganizationJob.objects.filter(
-                    organization=organization
-                ).first()
-                org_services_cache[organization.id] = (
-                    list(org_job.services.all()) if org_job else []
+
+            if organization.id not in org_subservices_cache:
+                org_subservices_cache[organization.id] = list(
+                    Subservice.objects.select_related("service_catalog", "service_catalog__category")
+                    .filter(announcement__organization=organization)
+                    .order_by("id")
                 )
 
-            services = org_services_cache[organization.id]
-            if not services:
+            subservices = org_subservices_cache[organization.id]
+            if not subservices:
                 continue
 
             category = categories_by_name.get(
@@ -203,4 +217,22 @@ class Command(BaseCommand):
             )
             if created:
                 counters["announcements"] += 1
-                announcement.services.set(services[:2])
+
+            selected_subservices = subservices[:2]
+            for subservice in selected_subservices:
+                seeded_subservice, _ = Subservice.objects.update_or_create(
+                    announcement=announcement,
+                    service_catalog=subservice.service_catalog,
+                    name=subservice.name,
+                    defaults={"description": subservice.description},
+                )
+                ServicePrice.objects.update_or_create(
+                    subservice=seeded_subservice,
+                    currency="EUR",
+                    effective_from=DEFAULT_PRICE_DATE,
+                    defaults={
+                        "amount": "150.00",
+                        "charging_type": ServicePrice.ChargingType.PER_PROJECT,
+                        "effective_to": None,
+                    },
+                )

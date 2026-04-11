@@ -7,7 +7,6 @@ from django.core.files.base import ContentFile
 from django.core.management.base import BaseCommand
 from django.db import transaction
 
-from apps.jobs.models import Job
 from apps.organization.models import (
     Announcement,
     AnnouncementReview,
@@ -158,7 +157,7 @@ JOBS = [
         "organization_name": "Bravo Reformas",
         "service_name": "Pintura",
         "subservice_name": "Piso completo",
-        "status": Job.Status.PENDING,
+        "status": "pending",
         "organization_rating": None,
         "messages": [
             {
@@ -178,7 +177,7 @@ JOBS = [
         "organization_name": "Bravo Reformas",
         "service_name": "Electricidad",
         "subservice_name": "Cuadro electrico",
-        "status": Job.Status.ACTIVE,
+        "status": "active",
         "organization_rating": None,
         "messages": [
             {
@@ -196,7 +195,7 @@ JOBS = [
         "organization_name": "Casa Lista",
         "service_name": "Fontaneria",
         "subservice_name": "Fuga urgente",
-        "status": Job.Status.COMPLETED,
+        "status": "completed",
         "organization_rating": "4.50",
         "messages": [
             {
@@ -210,7 +209,7 @@ JOBS = [
         "organization_name": "Casa Lista",
         "service_name": "Limpieza",
         "subservice_name": "Fin de obra",
-        "status": Job.Status.REJECTED,
+        "status": "rejected",
         "organization_rating": None,
         "messages": [
             {
@@ -478,6 +477,12 @@ class Command(BaseCommand):
         return organizations_by_name
 
     def _seed_jobs(self, users_by_email, organizations_by_name, counters):
+        if not apps.is_installed("apps.jobs"):
+            self.stdout.write(self.style.WARNING("apps.jobs is not installed. Skipping jobs seed."))
+            return
+
+        job_model = apps.get_model("jobs", "Job")
+
         for job_data in JOBS:
             user = users_by_email[job_data["user_email"]]
             organization = organizations_by_name[job_data["organization_name"]]
@@ -509,7 +514,7 @@ class Command(BaseCommand):
                 currency="EUR",
                 effective_from=DEFAULT_PRICE_DATE,
             )
-            _, created = Job.objects.update_or_create(
+            _, created = job_model.objects.update_or_create(
                 user=user,
                 announcement=announcement,
                 plan_price=plan_price,
@@ -518,7 +523,7 @@ class Command(BaseCommand):
                     "organization_rating": job_data["organization_rating"],
                 },
             )
-            job = Job.objects.get(
+            job = job_model.objects.get(
                 user=user,
                 announcement=announcement,
                 plan_price=plan_price,
