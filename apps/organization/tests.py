@@ -102,17 +102,21 @@ class OrganizationApiTests(APITestCase):
             name="Pet Services",
             description="Servicios para mascotas",
         )
-        self.default_plan_tier = PlanTierCatalog.objects.create(
+        self.default_plan_tier, _ = PlanTierCatalog.objects.update_or_create(
             key="default",
-            name="Default",
-            description="Plan base",
-            sort_order=10,
+            defaults={
+                "name": "Default",
+                "description": "Plan base",
+                "sort_order": 10,
+            },
         )
-        self.premium_plan_tier = PlanTierCatalog.objects.create(
+        self.premium_plan_tier, _ = PlanTierCatalog.objects.update_or_create(
             key="premium",
-            name="Premium",
-            description="Plan premium",
-            sort_order=20,
+            defaults={
+                "name": "Premium",
+                "description": "Plan premium",
+                "sort_order": 20,
+            },
         )
         self.owner_service_catalog = ServiceCatalog.objects.create(
             category=self.category,

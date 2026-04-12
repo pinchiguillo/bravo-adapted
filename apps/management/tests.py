@@ -135,11 +135,13 @@ class ManagementApiTests(APITestCase):
             billing_country="ES",
             billing_postal_code="28001",
         )
-        self.pro_plan_tier = PlanTierCatalog.objects.create(
+        self.pro_plan_tier, _ = PlanTierCatalog.objects.update_or_create(
             key="pro",
-            name="Pro",
-            description="Tier pro",
-            sort_order=30,
+            defaults={
+                "name": "Pro",
+                "description": "Tier pro",
+                "sort_order": 30,
+            },
         )
         self.organization_pricing = OrganizationPricing.objects.create(
             organization=self.organization,
@@ -517,11 +519,13 @@ class ManagementOrganizationListApiTests(APITestCase):
             billing_country="ES",
             billing_postal_code="28010",
         )
-        self.default_plan_tier = PlanTierCatalog.objects.create(
+        self.default_plan_tier, _ = PlanTierCatalog.objects.update_or_create(
             key="default",
-            name="Default",
-            description="Tier base",
-            sort_order=10,
+            defaults={
+                "name": "Default",
+                "description": "Tier base",
+                "sort_order": 10,
+            },
         )
         OrganizationPricing.objects.create(
             organization=self.organization,
