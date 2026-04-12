@@ -102,17 +102,21 @@ class OrganizationApiTests(APITestCase):
             name="Pet Services",
             description="Servicios para mascotas",
         )
-        self.default_plan_tier = PlanTierCatalog.objects.create(
-            key="default",
-            name="Default",
-            description="Plan base",
-            sort_order=10,
+        self.default_plan_tier, _ = PlanTierCatalog.objects.update_or_create(
+            key="test-org-default",
+            defaults={
+                "name": "Test Org Default",
+                "description": "Plan base",
+                "sort_order": 10,
+            },
         )
-        self.premium_plan_tier = PlanTierCatalog.objects.create(
-            key="premium",
-            name="Premium",
-            description="Plan premium",
-            sort_order=20,
+        self.premium_plan_tier, _ = PlanTierCatalog.objects.update_or_create(
+            key="test-org-premium",
+            defaults={
+                "name": "Test Org Premium",
+                "description": "Plan premium",
+                "sort_order": 20,
+            },
         )
         self.owner_service_catalog = ServiceCatalog.objects.create(
             category=self.category,
@@ -1770,17 +1774,17 @@ class OrganizationPricingModelTests(TestCase):
             is_approved=True,
         )
         self.default_plan_tier, _ = PlanTierCatalog.objects.update_or_create(
-            key="default",
+            key="test-pricing-default",
             defaults={
-                "name": "Default",
+                "name": "Test Pricing Default",
                 "description": "Tier base",
                 "sort_order": 10,
             },
         )
         self.pro_plan_tier, _ = PlanTierCatalog.objects.update_or_create(
-            key="pro",
+            key="test-pricing-pro",
             defaults={
-                "name": "Pro",
+                "name": "Test Pricing Pro",
                 "description": "Tier pro",
                 "sort_order": 20,
             },
