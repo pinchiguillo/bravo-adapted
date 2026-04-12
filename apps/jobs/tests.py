@@ -25,7 +25,6 @@ from apps.organization.models import (
     Announcement,
     Category,
     Organization,
-    Service,
     ServiceCatalog,
     ServicePrice,
     Subservice,
@@ -262,15 +261,16 @@ class JobChatDisabledTests(APITestCase):
             name="Disabled Chat Service",
             description="",
         )
-        self.service = Service.objects.create(
+        self.announcement = Announcement.objects.create(
             organization=self.organization,
-            service_catalog=self.service_catalog,
             category=self.category,
-            name="Disabled Chat Service",
-            description="",
+            name="Disabled Chat Announcement",
+            location="Madrid",
+            announcement="Disabled chat",
         )
         self.subservice = Subservice.objects.create(
-            service=self.service,
+            announcement=self.announcement,
+            service_catalog=self.service_catalog,
             name="Disabled Chat Subservice",
             description="",
         )
@@ -281,14 +281,6 @@ class JobChatDisabledTests(APITestCase):
             charging_type=ServicePrice.ChargingType.PER_PROJECT,
             effective_from=date(2026, 1, 1),
         )
-        self.announcement = Announcement.objects.create(
-            organization=self.organization,
-            category=self.category,
-            name="Disabled Chat Announcement",
-            location="Madrid",
-            announcement="Disabled chat",
-        )
-        self.announcement.services.add(self.service)
 
     def test_create_job_does_not_create_chat_when_feature_is_disabled(self):
         self.client.force_authenticate(user=self.client_user)
@@ -365,15 +357,16 @@ class JobsApiTests(APITestCase):
             name="Plan",
             description="",
         )
-        self.service = Service.objects.create(
+        self.announcement = Announcement.objects.create(
             organization=self.organization,
-            service_catalog=self.service_catalog,
             category=self.category,
-            name="Plan",
-            description="",
+            name="Plan Announcement",
+            location="Madrid",
+            announcement="Plan disponible",
         )
         self.subservice = Subservice.objects.create(
-            service=self.service,
+            announcement=self.announcement,
+            service_catalog=self.service_catalog,
             name="Plan Variant",
             description="",
         )
@@ -384,14 +377,6 @@ class JobsApiTests(APITestCase):
             charging_type=ServicePrice.ChargingType.PER_PROJECT,
             effective_from=date(2026, 1, 1),
         )
-        self.announcement = Announcement.objects.create(
-            organization=self.organization,
-            category=self.category,
-            name="Plan Announcement",
-            location="Madrid",
-            announcement="Plan disponible",
-        )
-        self.announcement.services.add(self.service)
         self.second_organization = Organization.objects.create(
             user=self.client_user,
             name="Client Org",
@@ -408,15 +393,16 @@ class JobsApiTests(APITestCase):
             name="Second Plan",
             description="",
         )
-        self.second_service = Service.objects.create(
+        self.second_announcement = Announcement.objects.create(
             organization=self.second_organization,
-            service_catalog=self.second_service_catalog,
             category=self.category,
-            name="Second Plan",
-            description="",
+            name="Second Announcement",
+            location="Valencia",
+            announcement="Segundo plan disponible",
         )
         self.second_subservice = Subservice.objects.create(
-            service=self.second_service,
+            announcement=self.second_announcement,
+            service_catalog=self.second_service_catalog,
             name="Second Variant",
             description="",
         )
@@ -427,14 +413,6 @@ class JobsApiTests(APITestCase):
             charging_type=ServicePrice.ChargingType.PER_PROJECT,
             effective_from=date(2026, 1, 1),
         )
-        self.second_announcement = Announcement.objects.create(
-            organization=self.second_organization,
-            category=self.category,
-            name="Second Announcement",
-            location="Valencia",
-            announcement="Segundo plan disponible",
-        )
-        self.second_announcement.services.add(self.second_service)
 
     def create_job(self, **overrides):
         payload = {
@@ -633,15 +611,16 @@ class JobsApiTests(APITestCase):
             name="Out Plan",
             description="",
         )
-        outsider_service = Service.objects.create(
+        outsider_announcement = Announcement.objects.create(
             organization=outsider_org,
-            service_catalog=outsider_service_catalog,
             category=self.category,
-            name="Out Plan",
-            description="",
+            name="Out Announcement",
+            location="Sevilla",
+            announcement="Out plan disponible",
         )
         outsider_subservice = Subservice.objects.create(
-            service=outsider_service,
+            announcement=outsider_announcement,
+            service_catalog=outsider_service_catalog,
             name="Out Variant",
             description="",
         )
@@ -652,14 +631,6 @@ class JobsApiTests(APITestCase):
             charging_type=ServicePrice.ChargingType.PER_PROJECT,
             effective_from=date(2026, 1, 1),
         )
-        outsider_announcement = Announcement.objects.create(
-            organization=outsider_org,
-            category=self.category,
-            name="Out Announcement",
-            location="Sevilla",
-            announcement="Out plan disponible",
-        )
-        outsider_announcement.services.add(outsider_service)
         outsider_job = Job.objects.create(
             user=outsider,
             announcement=outsider_announcement,
@@ -725,15 +696,16 @@ class JobsApiTests(APITestCase):
             name="Garden Plan",
             description="",
         )
-        garden_service = Service.objects.create(
+        garden_announcement = Announcement.objects.create(
             organization=self.second_organization,
-            service_catalog=garden_service_catalog,
             category=garden_category,
-            name="Garden Plan",
-            description="",
+            name="Garden Announcement",
+            location="Valencia",
+            announcement="Servicio de jardineria",
         )
         garden_subservice = Subservice.objects.create(
-            service=garden_service,
+            announcement=garden_announcement,
+            service_catalog=garden_service_catalog,
             name="Garden Variant",
             description="",
         )
@@ -744,14 +716,6 @@ class JobsApiTests(APITestCase):
             charging_type=ServicePrice.ChargingType.PER_PROJECT,
             effective_from=date(2026, 1, 1),
         )
-        garden_announcement = Announcement.objects.create(
-            organization=self.second_organization,
-            category=garden_category,
-            name="Garden Announcement",
-            location="Valencia",
-            announcement="Servicio de jardineria",
-        )
-        garden_announcement.services.add(garden_service)
         matching_job = self.create_job(
             announcement=garden_announcement,
             plan_price=garden_price,
@@ -795,15 +759,23 @@ class JobsApiTests(APITestCase):
             name="Garden Plan",
             description="",
         )
-        garden_service = Service.objects.create(
+        matching_announcement = Announcement.objects.create(
             organization=self.second_organization,
-            service_catalog=garden_service_catalog,
             category=garden_category,
-            name="Garden Plan",
-            description="",
+            name="Garden Saturdays",
+            location="Valencia",
+            announcement="Disponible fines de semana",
+        )
+        non_matching_text_announcement = Announcement.objects.create(
+            organization=self.second_organization,
+            category=garden_category,
+            name="Garden Weekdays",
+            location="Valencia",
+            announcement="Disponible entre semana",
         )
         garden_subservice = Subservice.objects.create(
-            service=garden_service,
+            announcement=matching_announcement,
+            service_catalog=garden_service_catalog,
             name="Garden Variant",
             description="",
         )
@@ -814,22 +786,12 @@ class JobsApiTests(APITestCase):
             charging_type=ServicePrice.ChargingType.PER_PROJECT,
             effective_from=date(2026, 1, 1),
         )
-        matching_announcement = Announcement.objects.create(
-            organization=self.second_organization,
-            category=garden_category,
-            name="Garden Saturdays",
-            location="Valencia",
-            announcement="Disponible fines de semana",
+        Subservice.objects.create(
+            announcement=non_matching_text_announcement,
+            service_catalog=garden_service_catalog,
+            name="Garden Weekday Variant",
+            description="",
         )
-        matching_announcement.services.add(garden_service)
-        non_matching_text_announcement = Announcement.objects.create(
-            organization=self.second_organization,
-            category=garden_category,
-            name="Garden Weekdays",
-            location="Valencia",
-            announcement="Disponible entre semana",
-        )
-        non_matching_text_announcement.services.add(garden_service)
 
         matching_job = self.create_job(
             announcement=matching_announcement,
@@ -1389,15 +1351,16 @@ class JobChatWebSocketTests(TransactionTestCase):
             name="Websocket Plan",
             description="",
         )
-        service = Service.objects.create(
+        announcement = Announcement.objects.create(
             organization=self.organization,
-            service_catalog=service_catalog,
             category=self.category,
-            name="Websocket Plan",
-            description="",
+            name="Websocket Announcement",
+            location="Madrid",
+            announcement="Websocket plan disponible",
         )
         subservice = Subservice.objects.create(
-            service=service,
+            announcement=announcement,
+            service_catalog=service_catalog,
             name="Websocket Variant",
             description="",
         )
@@ -1408,14 +1371,6 @@ class JobChatWebSocketTests(TransactionTestCase):
             charging_type=ServicePrice.ChargingType.PER_PROJECT,
             effective_from=date(2026, 1, 1),
         )
-        announcement = Announcement.objects.create(
-            organization=self.organization,
-            category=self.category,
-            name="Websocket Announcement",
-            location="Madrid",
-            announcement="Websocket plan disponible",
-        )
-        announcement.services.add(service)
         self.job = Job.objects.create(
             user=self.client_user,
             announcement=announcement,

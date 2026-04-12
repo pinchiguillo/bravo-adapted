@@ -1,6 +1,8 @@
+from drf_spectacular.utils import extend_schema_field
 from rest_framework import serializers
 
 from ..models import Organization
+from .catalog import PlanTierCatalogSerializer
 
 
 class OrganizationRatingMixin(serializers.Serializer):
@@ -17,6 +19,14 @@ class OrganizationRatingMixin(serializers.Serializer):
 
 class OrganizationPublicSerializer(OrganizationRatingMixin, serializers.ModelSerializer):
     is_approved = serializers.BooleanField(source="is_validated", read_only=True)
+    plan_tier = serializers.SerializerMethodField()
+
+    @extend_schema_field(PlanTierCatalogSerializer(allow_null=True))
+    def get_plan_tier(self, obj):
+        pricing = getattr(obj, "pricing", None)
+        if pricing is None or pricing.plan_tier_id is None:
+            return None
+        return PlanTierCatalogSerializer(pricing.plan_tier).data
 
     class Meta:
         model = Organization
@@ -25,6 +35,7 @@ class OrganizationPublicSerializer(OrganizationRatingMixin, serializers.ModelSer
             "name",
             "verification_level",
             "is_approved",
+            "plan_tier",
             "rating",
         )
         read_only_fields = ("uuid",)
@@ -32,6 +43,14 @@ class OrganizationPublicSerializer(OrganizationRatingMixin, serializers.ModelSer
 
 class OrganizationSerializer(OrganizationRatingMixin, serializers.ModelSerializer):
     is_approved = serializers.BooleanField(source="is_validated", read_only=True)
+    plan_tier = serializers.SerializerMethodField()
+
+    @extend_schema_field(PlanTierCatalogSerializer(allow_null=True))
+    def get_plan_tier(self, obj):
+        pricing = getattr(obj, "pricing", None)
+        if pricing is None or pricing.plan_tier_id is None:
+            return None
+        return PlanTierCatalogSerializer(pricing.plan_tier).data
 
     class Meta:
         model = Organization
@@ -47,6 +66,7 @@ class OrganizationSerializer(OrganizationRatingMixin, serializers.ModelSerialize
             "billing_postal_code",
             "verification_level",
             "is_approved",
+            "plan_tier",
             "rating",
             "created_at",
             "updated_at",

@@ -2,7 +2,7 @@ from django.core.management.base import BaseCommand
 from django.db import transaction
 
 from apps.management.models import FeatureFlag
-from apps.organization.models import AllowedCity, Category, ServiceCatalog
+from apps.organization.models import AllowedCity, Category, PlanTierCatalog, ServiceCatalog
 
 CATEGORIES = [
     {"name": "Reformas", "description": "Servicios vinculados a reformas y obras."},
@@ -106,9 +106,39 @@ FEATURE_FLAGS = [
     },
 ]
 
+PLAN_TIERS = [
+    {
+        "key": "default",
+        "name": "Default",
+        "description": "Tier base para organizaciones con configuracion estandar.",
+        "sort_order": 10,
+    },
+    {
+        "key": "premium",
+        "name": "Premium",
+        "description": "Tier con condiciones comerciales avanzadas.",
+        "sort_order": 20,
+    },
+    {
+        "key": "pro",
+        "name": "Pro",
+        "description": "Tier profesional para organizaciones con mas volumen.",
+        "sort_order": 30,
+    },
+    {
+        "key": "ultra",
+        "name": "Ultra",
+        "description": "Tier de maximas prestaciones y personalizacion.",
+        "sort_order": 40,
+    },
+]
+
 
 class Command(BaseCommand):
-    help = "Seeds fixed catalog tables and feature flags."
+    help = (
+        "Seeds fixed catalog tables for categories, plan tiers and service "
+        "catalogs, excluding subservices, plus feature flags."
+    )
 
     @transaction.atomic
     def handle(self, *args, **options):
@@ -119,12 +149,15 @@ class Command(BaseCommand):
             "allowed_cities_updated": 0,
             "service_catalogs_created": 0,
             "service_catalogs_updated": 0,
+            "plan_tiers_created": 0,
+            "plan_tiers_updated": 0,
             "feature_flags_created": 0,
             "feature_flags_updated": 0,
         }
 
         self._seed_allowed_cities(counters)
         categories_by_name = self._seed_categories(counters)
+        self._seed_plan_tiers(counters)
         self._seed_service_catalogs(categories_by_name, counters)
         self._seed_feature_flags(counters)
 
@@ -135,6 +168,8 @@ class Command(BaseCommand):
                 f"allowed_cities_updated={counters['allowed_cities_updated']}, "
                 f"categories_created={counters['categories_created']}, "
                 f"categories_updated={counters['categories_updated']}, "
+                f"plan_tiers_created={counters['plan_tiers_created']}, "
+                f"plan_tiers_updated={counters['plan_tiers_updated']}, "
                 f"service_catalogs_created={counters['service_catalogs_created']}, "
                 f"service_catalogs_updated={counters['service_catalogs_updated']}, "
                 f"feature_flags_created={counters['feature_flags_created']}, "
@@ -195,6 +230,36 @@ class Command(BaseCommand):
             if updated_fields:
                 catalog.save(update_fields=updated_fields)
                 counters["service_catalogs_updated"] += 1
+
+    def _seed_plan_tiers(self, counters):
+        for tier_data in PLAN_TIERS:
+            tier, created = PlanTierCatalog.objects.get_or_create(
+                key=tier_data["key"],
+                defaults={
+                    "name": tier_data["name"],
+                    "description": tier_data["description"],
+                    "sort_order": tier_data["sort_order"],
+                },
+            )
+
+            if created:
+                counters["plan_tiers_created"] += 1
+                continue
+
+            updated_fields = []
+            if tier.name != tier_data["name"]:
+                tier.name = tier_data["name"]
+                updated_fields.append("name")
+            if tier.description != tier_data["description"]:
+                tier.description = tier_data["description"]
+                updated_fields.append("description")
+            if tier.sort_order != tier_data["sort_order"]:
+                tier.sort_order = tier_data["sort_order"]
+                updated_fields.append("sort_order")
+
+            if updated_fields:
+                tier.save(update_fields=updated_fields)
+                counters["plan_tiers_updated"] += 1
 
     def _seed_feature_flags(self, counters):
         for flag_data in FEATURE_FLAGS:

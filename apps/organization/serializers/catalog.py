@@ -1,6 +1,6 @@
 from rest_framework import serializers
 
-from ..models import AllowedCity, Category, ServiceCatalog
+from ..models import AllowedCity, Category, PlanTierCatalog, ServiceCatalog
 
 
 class CatalogReferenceField(serializers.SlugRelatedField):
@@ -26,7 +26,16 @@ class CategorySerializer(serializers.ModelSerializer):
 
 
 class ServiceCatalogSerializer(serializers.ModelSerializer):
+    category = CatalogReferenceField(read_only=True, slug_field="uuid")
+
     class Meta:
         model = ServiceCatalog
-        fields = ("uuid", "name")
+        fields = ("uuid", "name", "category")
+        read_only_fields = fields
+
+
+class PlanTierCatalogSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = PlanTierCatalog
+        fields = ("uuid", "key", "name", "description")
         read_only_fields = fields

@@ -19,6 +19,13 @@ class SecuritySettingsTests(SimpleTestCase):
                     "DEBUG": "0",
                     "ALLOWED_HOSTS": "api.example.com",
                     "SECRET_KEY": "production-secret-key-with-enough-entropy-1234567890",
+                    "DATABASE_URL": "postgresql://postgres:postgres@postgres:5432/auth_db",
+                    "REDIS_URL": "redis://redis:6379/0",
+                    "AWS_DEFAULT_REGION": "us-east-1",
+                    "AWS_ACCESS_KEY_ID": "test",
+                    "AWS_SECRET_ACCESS_KEY": "test",
+                    "AWS_STORAGE_BUCKET_NAME": "bravo-media",
+                    "AWS_LEGAL_DOCUMENTS_BUCKET_NAME": "bravo-legal-documents",
                     "SECURE_SSL_REDIRECT": "0",
                     "SECURE_HSTS_SECONDS": "0",
                     "SECURE_HSTS_INCLUDE_SUBDOMAINS": "0",
@@ -103,6 +110,33 @@ class SecuritySettingsTests(SimpleTestCase):
             settings_module = importlib.reload(settings_module)
 
             self.assertEqual(settings_module.MEDIA_URL, "/s3/bravo-media/")
+        finally:
+            os.environ.clear()
+            os.environ.update(original_env)
+            importlib.reload(settings_module)
+
+    def test_legal_documents_storage_uses_separate_bucket_configuration(self):
+        original_env = os.environ.copy()
+        settings_module = importlib.import_module("Core.settings")
+
+        try:
+            os.environ["USE_S3_STORAGE"] = "1"
+            os.environ["AWS_STORAGE_BUCKET_NAME"] = "bravo-media"
+            os.environ["AWS_LEGAL_DOCUMENTS_BUCKET_NAME"] = "bravo-legal-documents"
+            settings_module = importlib.reload(settings_module)
+
+            self.assertEqual(
+                settings_module.AWS_LEGAL_DOCUMENTS_BUCKET_NAME,
+                "bravo-legal-documents",
+            )
+            self.assertEqual(
+                settings_module.STORAGES["legal_documents"]["OPTIONS"]["bucket_name"],
+                "bravo-legal-documents",
+            )
+            self.assertNotEqual(
+                settings_module.AWS_LEGAL_DOCUMENTS_BUCKET_NAME,
+                settings_module.AWS_STORAGE_BUCKET_NAME,
+            )
         finally:
             os.environ.clear()
             os.environ.update(original_env)

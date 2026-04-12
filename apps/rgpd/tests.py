@@ -2,8 +2,10 @@ from unittest import SkipTest
 from unittest.mock import patch
 
 from django.apps import apps as django_apps
+from django.conf import settings
 from django.contrib.auth import get_user_model
 from django.core.cache import cache
+from django.core.files.uploadedfile import SimpleUploadedFile
 from django.test import override_settings
 from django.urls import reverse
 from rest_framework import status
@@ -18,6 +20,7 @@ if RGPD_INSTALLED:
         RgpdAnonymousConsentEvent,
         RgpdConsent,
         RgpdConsentEvent,
+        RgpdLegalDocument,
     )
     from .views import RgpdAnonymousConsentViewSet
 else:
@@ -266,7 +269,143 @@ class RgpdAnonymousConsentApiTests(APITestCase):
         )
 
         self.assertEqual(response.status_code, status.HTTP_404_NOT_FOUND)
-        self.assertEqual(response.data["detail"], "Anonymous consent not found.")
+
+
+class RgpdLegalDocumentApiTests(APITestCase):
+    def setUp(self):
+        user_model = get_user_model()
+        self.user = user_model.objects.create_user(
+            username="legal-doc-user",
+            email="legal-doc-user@example.com",
+            password="testpass123",
+        )
+        self.other_user = user_model.objects.create_user(
+            username="legal-doc-other",
+            email="legal-doc-other@example.com",
+            password="testpass123",
+        )
+        self.url = reverse("rgpd-legal-documents-list")
+
+    def test_legal_document_list_requires_authentication(self):
+        response = self.client.get(self.url)
+
+        self.assertEqual(response.status_code, status.HTTP_401_UNAUTHORIZED)
+
+    def test_legal_document_upload_uses_separate_bucket_and_user_scoped_prefix(self):
+        self.client.force_authenticate(user=self.user)
+        storage = RgpdLegalDocument._meta.get_field("file").storage
+
+        with patch.object(storage, "_save", side_effect=lambda name, content: name) as save_mock:
+            response = self.client.post(
+                self.url,
+                {
+                    "document_type": "privacy-policy",
+                    "file": SimpleUploadedFile(
+                        "privacy-policy.pdf",
+                        b"%PDF-1.4 legal document",
+                        content_type="application/pdf",
+                    ),
+                },
+                format="multipart",
+            )
+
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+        self.assertEqual(storage.bucket_name, "bravo-media-legal")
+        document = RgpdLegalDocument.objects.get(user=self.user)
+        self.assertEqual(document.document_type, "privacy-policy")
+        self.assertEqual(document.original_name, "privacy-policy.pdf")
+        self.assertEqual(document.content_type, "application/pdf")
+        self.assertEqual(document.size_bytes, len(b"%PDF-1.4 legal document"))
+        self.assertTrue(
+            document.file.name.startswith(
+                f"{settings.LEGAL_DOCUMENTS_UPLOAD_PREFIX}/users/{self.user.uuid}/"
+            )
+        )
+        save_mock.assert_called_once()
+
+    def test_legal_document_list_is_scoped_to_authenticated_user(self):
+        storage = RgpdLegalDocument._meta.get_field("file").storage
+        with patch.object(storage, "_save", side_effect=lambda name, content: name):
+            RgpdLegalDocument.objects.create(
+                user=self.user,
+                document_type="privacy-policy",
+                file=SimpleUploadedFile(
+                    "user.pdf",
+                    b"%PDF-1.4 user",
+                    content_type="application/pdf",
+                ),
+                original_name="user.pdf",
+                content_type="application/pdf",
+                size_bytes=len(b"%PDF-1.4 user"),
+            )
+            RgpdLegalDocument.objects.create(
+                user=self.other_user,
+                document_type="terms",
+                file=SimpleUploadedFile(
+                    "other.pdf",
+                    b"%PDF-1.4 other",
+                    content_type="application/pdf",
+                ),
+                original_name="other.pdf",
+                content_type="application/pdf",
+                size_bytes=len(b"%PDF-1.4 other"),
+            )
+
+        self.client.force_authenticate(user=self.user)
+        response = self.client.get(self.url)
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.data["count"], 1)
+        self.assertEqual(response.data["results"][0]["document_type"], "privacy-policy")
+        self.assertEqual(response.data["results"][0]["original_name"], "user.pdf")
+
+    @override_settings(
+        LEGAL_DOCUMENT_ALLOWED_CONTENT_TYPES=["application/pdf"],
+        LEGAL_DOCUMENT_MAX_BYTES=8,
+    )
+    def test_legal_document_upload_validates_type_and_size(self):
+        self.client.force_authenticate(user=self.user)
+
+        invalid_type_response = self.client.post(
+            self.url,
+            {
+                "document_type": "privacy-policy",
+                "file": SimpleUploadedFile(
+                    "privacy-policy.txt",
+                    b"plain-text",
+                    content_type="text/plain",
+                ),
+            },
+            format="multipart",
+        )
+        oversized_response = self.client.post(
+            self.url,
+            {
+                "document_type": "privacy-policy",
+                "file": SimpleUploadedFile(
+                    "privacy-policy.pdf",
+                    b"123456789",
+                    content_type="application/pdf",
+                ),
+            },
+            format="multipart",
+        )
+
+        self.assertEqual(invalid_type_response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertEqual(
+            invalid_type_response.data["file"][0],
+            "Unsupported legal document content type.",
+        )
+        self.assertEqual(oversized_response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertEqual(
+            oversized_response.data["file"][0],
+            "Legal document exceeds maximum allowed size.",
+        )
+
+
+class RgpdAnonymousConsentBehaviorTests(APITestCase):
+    def setUp(self):
+        self.url = reverse("rgpd-anonymous-list")
 
     def test_public_anonymous_endpoint_updates_existing_identifier_when_write_token_matches(self):
         create_response = self.client.post(

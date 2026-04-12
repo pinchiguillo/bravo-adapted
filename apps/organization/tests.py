@@ -10,9 +10,10 @@ from django.contrib.auth import get_user_model
 from django.contrib.auth.models import AnonymousUser
 from django.contrib.sessions.middleware import SessionMiddleware
 from django.core.cache import cache
+from django.core.exceptions import ValidationError
 from django.core.files.uploadedfile import SimpleUploadedFile
 from django.db.utils import IntegrityError
-from django.test import RequestFactory, SimpleTestCase, override_settings
+from django.test import RequestFactory, SimpleTestCase, TestCase, override_settings
 from django.urls import NoReverseMatch, reverse
 from PIL import Image
 from rest_framework import status
@@ -27,6 +28,8 @@ from .models import (
     AnnouncementReview,
     Category,
     Organization,
+    OrganizationPricing,
+    PlanTierCatalog,
     ServiceCatalog,
     ServicePrice,
     Subservice,
@@ -99,6 +102,18 @@ class OrganizationApiTests(APITestCase):
             name="Pet Services",
             description="Servicios para mascotas",
         )
+        self.default_plan_tier = PlanTierCatalog.objects.create(
+            key="default",
+            name="Default",
+            description="Plan base",
+            sort_order=10,
+        )
+        self.premium_plan_tier = PlanTierCatalog.objects.create(
+            key="premium",
+            name="Premium",
+            description="Plan premium",
+            sort_order=20,
+        )
         self.owner_service_catalog = ServiceCatalog.objects.create(
             category=self.category,
             name="Owner Plan",
@@ -135,6 +150,12 @@ class OrganizationApiTests(APITestCase):
             charging_type=ServicePrice.ChargingType.PER_PROJECT,
             effective_from=date(2026, 1, 1),
         )
+        self.organization_pricing = OrganizationPricing.objects.create(
+            organization=self.organization,
+            plan_tier=self.premium_plan_tier,
+            monthly_price="49.99",
+            commission_rate="12.50",
+        )
         self.announcement_review = AnnouncementReview.objects.create(
             announcement=self.announcement,
             content="Muy recomendable",
@@ -169,6 +190,12 @@ class OrganizationApiTests(APITestCase):
                 "name": self.organization.name,
                 "verification_level": 0,
                 "is_approved": True,
+                "plan_tier": {
+                    "uuid": str(self.premium_plan_tier.uuid),
+                    "key": self.premium_plan_tier.key,
+                    "name": self.premium_plan_tier.name,
+                    "description": self.premium_plan_tier.description,
+                },
                 "rating": None,
             },
         )
@@ -198,6 +225,7 @@ class OrganizationApiTests(APITestCase):
         self.assertEqual(response.data["tax_id"], self.organization.tax_id)
         self.assertEqual(response.data["billing_email"], self.organization.billing_email)
         self.assertEqual(response.data["verification_level"], self.organization.verification_level)
+        self.assertEqual(response.data["plan_tier"]["key"], self.premium_plan_tier.key)
         self.assertIsNone(response.data["rating"])
 
     def test_public_retrieve_hides_unapproved_organization_for_anonymous_user(self):
@@ -305,17 +333,39 @@ class OrganizationApiTests(APITestCase):
         with self.assertRaises(NoReverseMatch):
             reverse("organization-category-detail", kwargs={"uuid": self.category.uuid})
 
+    def test_plan_tier_list_is_public_and_read_only(self):
+        response = self.client.get(reverse("organization-plan-tier-list"))
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        for item in response.data["results"]:
+            self.assertEqual(set(item.keys()), {"uuid", "key", "name", "description"})
+        returned_keys = {item["key"] for item in response.data["results"]}
+        self.assertTrue({"default", "premium"}.issubset(returned_keys))
+
     def test_service_catalog_list_is_public(self):
         response = self.client.get(reverse("service-catalog-list"))
 
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         for item in response.data["results"]:
-            self.assertEqual(set(item.keys()), {"uuid", "name"})
+            self.assertEqual(set(item.keys()), {"uuid", "name", "category"})
+            self.assertEqual(set(item["category"].keys()), {"uuid", "name"})
         returned_uuids = {item["uuid"] for item in response.data["results"]}
         self.assertEqual(response.data["count"], 2)
         self.assertEqual(
             returned_uuids,
             {str(self.owner_service_catalog.uuid), str(self.other_service_catalog.uuid)},
+        )
+        owner_item = next(
+            item
+            for item in response.data["results"]
+            if item["uuid"] == str(self.owner_service_catalog.uuid)
+        )
+        self.assertEqual(
+            owner_item["category"],
+            {
+                "uuid": str(self.category.uuid),
+                "name": self.category.name,
+            },
         )
 
     def test_service_catalog_list_is_paginated(self):
@@ -1498,6 +1548,59 @@ class OrganizationApiTests(APITestCase):
         self.assertEqual(response.data["view_count"], 0)
         self.assertNotIn("review", response.data)
 
+    def test_organization_owner_can_create_announcement_with_nested_subservices(self):
+        self.client.force_authenticate(user=self.owner)
+
+        response = self.client.post(
+            reverse(
+                "organization-announcement-list",
+                kwargs={"organization_uuid": self.organization.uuid},
+            ),
+            {
+                "category": str(self.category.uuid),
+                "name": "Pack completo de reformas",
+                "location": "Madrid Centro",
+                "title": "Servicio integral",
+                "status": Announcement.Status.ACTIVE,
+                "description": "Incluye varias lineas de servicio",
+                "free_text": "Disponible bajo cita previa",
+                "subservices": [
+                    {
+                        "service_catalog": str(self.owner_service_catalog.uuid),
+                        "name": "Visita tecnica",
+                        "description": "Diagnostico inicial",
+                    },
+                    {
+                        "service_catalog": str(self.other_service_catalog.uuid),
+                        "name": "Acabado final",
+                        "description": "Cierre del servicio",
+                    },
+                ],
+            },
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+        created = Announcement.objects.get(uuid=response.data["uuid"])
+        self.assertEqual(created.subservices.count(), 2)
+        self.assertEqual(
+            set(created.subservices.values_list("name", flat=True)),
+            {"Visita tecnica", "Acabado final"},
+        )
+        self.assertEqual(len(response.data["services"]), 2)
+        self.assertEqual(
+            {service["name"] for service in response.data["services"]},
+            {self.owner_service_catalog.name, self.other_service_catalog.name},
+        )
+        self.assertEqual(
+            {
+                subservice["name"]
+                for service in response.data["services"]
+                for subservice in service["subservices"]
+            },
+            {"Visita tecnica", "Acabado final"},
+        )
+
     def test_public_announcement_detail_returns_null_lowest_price_when_no_prices_exist(self):
         announcement_without_prices = Announcement.objects.create(
             organization=self.organization,
@@ -1647,6 +1750,86 @@ class OrganizationApiTests(APITestCase):
         self.assertEqual(second_response.status_code, status.HTTP_429_TOO_MANY_REQUESTS)
 
 
+class OrganizationPricingModelTests(TestCase):
+    def setUp(self):
+        self.user = get_user_model().objects.create_user(
+            username="pricing-owner",
+            email="pricing-owner@example.com",
+            password="testpass123",
+        )
+        self.organization = Organization.objects.create(
+            user=self.user,
+            name="Pricing Org",
+            legal_name="Pricing Org SL",
+            tax_id="P123",
+            billing_email="billing@pricing.example.com",
+            billing_address="Main 1",
+            billing_city="Madrid",
+            billing_country="ES",
+            billing_postal_code="28001",
+            is_approved=True,
+        )
+        self.default_plan_tier, _ = PlanTierCatalog.objects.update_or_create(
+            key="default",
+            defaults={
+                "name": "Default",
+                "description": "Tier base",
+                "sort_order": 10,
+            },
+        )
+        self.pro_plan_tier, _ = PlanTierCatalog.objects.update_or_create(
+            key="pro",
+            defaults={
+                "name": "Pro",
+                "description": "Tier pro",
+                "sort_order": 20,
+            },
+        )
+
+    def test_organization_pricing_persists_plan_and_flags(self):
+        pricing = OrganizationPricing.objects.create(
+            organization=self.organization,
+            plan_tier=self.pro_plan_tier,
+            monthly_price="49.99",
+            commission_rate="12.50",
+            feature_flags={"priority_support": True, "custom_branding": False},
+        )
+
+        self.assertEqual(pricing.organization, self.organization)
+        self.assertEqual(pricing.plan_tier, self.pro_plan_tier)
+        self.assertEqual(str(pricing.monthly_price), "49.99")
+        self.assertEqual(str(pricing.commission_rate), "12.50")
+        self.assertEqual(
+            pricing.feature_flags,
+            {"priority_support": True, "custom_branding": False},
+        )
+
+    def test_organization_can_only_have_one_pricing_row(self):
+        OrganizationPricing.objects.create(
+            organization=self.organization,
+            plan_tier=self.default_plan_tier,
+            monthly_price="19.99",
+            commission_rate="10.00",
+        )
+
+        with self.assertRaises(IntegrityError):
+            OrganizationPricing.objects.create(
+                organization=self.organization,
+                plan_tier=self.pro_plan_tier,
+                monthly_price="79.99",
+                commission_rate="8.50",
+            )
+
+    def test_organization_pricing_rejects_commission_rate_above_100_percent(self):
+        pricing = OrganizationPricing(
+            organization=self.organization,
+            plan_tier=self.pro_plan_tier,
+            monthly_price="49.99",
+            commission_rate="120.00",
+        )
+
+        with self.assertRaises(ValidationError):
+            pricing.full_clean()
 
 
 class AnnouncementSerializerTests(SimpleTestCase):
@@ -1845,8 +2028,9 @@ class AnnouncementImageApiTests(APITestCase):
         Image.new("RGBA", (1, 1), (255, 0, 0, 255)).save(image_io, format="PNG")
         return image_io.getvalue()
 
-    def test_owner_can_upload_announcement_image(self):
+    def test_owner_cannot_request_direct_upload_with_filesystem_storage(self):
         self.client.force_authenticate(user=self.owner)
+        image_bytes = self._make_png_bytes()
 
         response = self.client.post(
             reverse(
@@ -1856,22 +2040,17 @@ class AnnouncementImageApiTests(APITestCase):
                     "uuid": self.announcement.uuid,
                 },
             ),
-            {"image": self._make_png_upload()},
-            format="multipart",
+            {
+                "filename": "announcement.png",
+                "content_type": "image/png",
+                "size_bytes": len(image_bytes),
+            },
+            format="json",
         )
 
-        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
-        self.assertEqual(AnnouncementImage.objects.count(), 1)
-        self.assertIn("image_url", response.data)
-        self.assertIn("base64_url", response.data)
-        self.assertIn("/s3/test-bucket/organization-announcements/", response.data["image_url"])
-        self.assertIn(
-            f"/api/organizations/{self.organization.uuid}/announcements/{self.announcement.uuid}/images/",
-            response.data["base64_url"],
-        )
-        self.assertTrue(response.data["base64_url"].endswith("/base64/"))
-        self.assertTrue(response.data["filename"].startswith("announcement"))
-        self.assertTrue(response.data["filename"].endswith(".png"))
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertEqual(AnnouncementImage.objects.count(), 0)
+        self.assertEqual(response.data[0], "Direct upload is not supported by the configured storage.")
 
     def test_non_owner_cannot_upload_announcement_image(self):
         self.client.force_authenticate(user=self.other_user)
@@ -2017,17 +2196,15 @@ class AnnouncementImageApiTests(APITestCase):
                 },
             ),
             {
-                "image": SimpleUploadedFile(
-                    "announcement.txt",
-                    b"plain text",
-                    content_type="text/plain",
-                )
+                "filename": "announcement.txt",
+                "content_type": "text/plain",
+                "size_bytes": len(b"plain text"),
             },
-            format="multipart",
+            format="json",
         )
 
         self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
-        self.assertIn("image", response.data)
+        self.assertIn("content_type", response.data)
 
     def test_owner_can_delete_announcement_image(self):
         image = AnnouncementImage.objects.create(
