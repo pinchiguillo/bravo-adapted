@@ -136,9 +136,9 @@ class ManagementApiTests(APITestCase):
             billing_postal_code="28001",
         )
         self.pro_plan_tier, _ = PlanTierCatalog.objects.update_or_create(
-            key="pro",
+            key="mgmt-pro",
             defaults={
-                "name": "Pro",
+                "name": "Mgmt Pro",
                 "description": "Tier pro",
                 "sort_order": 30,
             },
@@ -520,9 +520,9 @@ class ManagementOrganizationListApiTests(APITestCase):
             billing_postal_code="28010",
         )
         self.default_plan_tier, _ = PlanTierCatalog.objects.update_or_create(
-            key="default",
+            key="mgmt-default",
             defaults={
-                "name": "Default",
+                "name": "Mgmt Default",
                 "description": "Tier base",
                 "sort_order": 10,
             },
@@ -542,7 +542,7 @@ class ManagementOrganizationListApiTests(APITestCase):
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertEqual(response.data["count"], 1)
         self.assertEqual(response.data["results"][0]["uuid"], str(self.organization.uuid))
-        self.assertEqual(response.data["results"][0]["plan_tier"]["key"], "default")
+        self.assertEqual(response.data["results"][0]["plan_tier"]["key"], "mgmt-default")
 
 
 class ManagementUserListApiTests(APITestCase):
@@ -940,9 +940,9 @@ class ManagementPlanTierApiTests(APITestCase):
             password="testpass123",
         )
         self.plan_tier, _ = PlanTierCatalog.objects.update_or_create(
-            key="default",
+            key="mgmt-plan-tier",
             defaults={
-                "name": "Default",
+                "name": "Mgmt Plan Tier",
                 "description": "Tier base",
                 "sort_order": 10,
             },

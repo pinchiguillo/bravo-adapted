@@ -103,17 +103,17 @@ class OrganizationApiTests(APITestCase):
             description="Servicios para mascotas",
         )
         self.default_plan_tier, _ = PlanTierCatalog.objects.update_or_create(
-            key="default",
+            key="test-org-default",
             defaults={
-                "name": "Default",
+                "name": "Test Org Default",
                 "description": "Plan base",
                 "sort_order": 10,
             },
         )
         self.premium_plan_tier, _ = PlanTierCatalog.objects.update_or_create(
-            key="premium",
+            key="test-org-premium",
             defaults={
-                "name": "Premium",
+                "name": "Test Org Premium",
                 "description": "Plan premium",
                 "sort_order": 20,
             },
@@ -1774,17 +1774,17 @@ class OrganizationPricingModelTests(TestCase):
             is_approved=True,
         )
         self.default_plan_tier, _ = PlanTierCatalog.objects.update_or_create(
-            key="default",
+            key="test-pricing-default",
             defaults={
-                "name": "Default",
+                "name": "Test Pricing Default",
                 "description": "Tier base",
                 "sort_order": 10,
             },
         )
         self.pro_plan_tier, _ = PlanTierCatalog.objects.update_or_create(
-            key="pro",
+            key="test-pricing-pro",
             defaults={
-                "name": "Pro",
+                "name": "Test Pricing Pro",
                 "description": "Tier pro",
                 "sort_order": 20,
             },
