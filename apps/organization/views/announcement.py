@@ -12,8 +12,8 @@ from ..models import Announcement, AnnouncementImage, Organization
 from ..permissions import IsOrganizationResourceOwner
 from ..serializers import (
     AnnouncementImageBase64Serializer,
-    AnnouncementImageUploadCompleteSerializer,
     AnnouncementImageSerializer,
+    AnnouncementImageUploadCompleteSerializer,
     AnnouncementImageUploadRequestSerializer,
     AnnouncementImageUploadTargetSerializer,
     AnnouncementSerializer,

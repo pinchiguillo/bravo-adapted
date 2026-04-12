@@ -11,8 +11,8 @@ from django.core import signing
 from django.db import transaction
 from django.db.models import Min
 from django.urls import reverse
-from django.utils.encoding import filepath_to_uri
 from django.utils import timezone
+from django.utils.encoding import filepath_to_uri
 from drf_spectacular.utils import extend_schema_field
 from PIL import Image, UnidentifiedImageError
 from rest_framework import serializers
