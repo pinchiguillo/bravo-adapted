@@ -39,7 +39,7 @@ class OrganizationViewSet(
     viewsets.GenericViewSet,
 ):
     serializer_class = OrganizationSerializer
-    queryset = Organization.objects.select_related("user").with_rating()
+    queryset = Organization.objects.select_related("user", "pricing", "pricing__plan_tier").with_rating()
     lookup_field = "uuid"
     throttle_scope_prefix = "organization"
     throttle_scope_action_map = {
@@ -80,7 +80,12 @@ class OrganizationViewSet(
         raise NotFound("Organization not found.")
 
     def _get_authenticated_user_organization(self, user):
-        return Organization.objects.select_related("user").with_rating().filter(user=user).first()
+        return (
+            Organization.objects.select_related("user", "pricing", "pricing__plan_tier")
+            .with_rating()
+            .filter(user=user)
+            .first()
+        )
 
     @extend_schema(
         tags=["Organizations"],

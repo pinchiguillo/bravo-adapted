@@ -1,0 +1,52 @@
+{% extends "admin/base_site.html" %}
+
+{% block breadcrumbs %}
+<div class="breadcrumbs">
+    <a href="{% url 'admin:index' %}">Inicio</a>
+    &rsaquo; Documentos legales
+    {% if current_path %}
+        &rsaquo; {{ current_path }}
+    {% endif %}
+</div>
+{% endblock %}
+
+{% block content %}
+<div id="content-main">
+    <h1>Documentos legales</h1>
+    <p><strong>Raiz:</strong> {{ root_path }}</p>
+
+    {% if not root_exists %}
+        <p>La ruta configurada no existe.</p>
+    {% elif is_file %}
+        <p>
+            <a href="{% url 'admin:legal-documents-browser' %}{% if parent_path %}?path={{ parent_path }}{% endif %}">
+                Volver
+            </a>
+        </p>
+        <h2>{{ current_name }}</h2>
+        {% if is_text_file %}
+            <pre style="white-space: pre-wrap; word-break: break-word;">{{ file_content }}</pre>
+        {% endif %}
+    {% else %}
+        {% if parent_path %}
+            <p>
+                <a href="{% url 'admin:legal-documents-browser' %}{% if parent_path %}?path={{ parent_path }}{% endif %}">
+                    Subir un nivel
+                </a>
+            </p>
+        {% endif %}
+        {% if entries %}
+            <ul>
+                {% for entry in entries %}
+                    <li>
+                        {% if entry.is_dir %}[Carpeta]{% else %}[Archivo]{% endif %}
+                        <a href="{% url 'admin:legal-documents-browser' %}?path={{ entry.path }}">{{ entry.name }}</a>
+                    </li>
+                {% endfor %}
+            </ul>
+        {% else %}
+            <p>No hay documentos en esta ubicacion.</p>
+        {% endif %}
+    {% endif %}
+</div>
+{% endblock %}

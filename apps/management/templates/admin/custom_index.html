@@ -1,0 +1,24 @@
+{% extends "admin/index.html" %}
+
+{% block content %}
+<div class="module">
+    <table>
+        <caption>Navegacion</caption>
+        <tbody>
+            <tr>
+                <th scope="row">
+                    <a href="{% url 'admin:legal-documents-browser' %}">Documentos legales</a>
+                </th>
+                <td>Explorar carpetas y archivos legales desde el admin.</td>
+            </tr>
+            <tr>
+                <th scope="row">
+                    <a href="{% url 'admin:organization_plantiercatalog_changelist' %}">Catalogo de planes</a>
+                </th>
+                <td>Gestionar los tiers fijos de pricing de organizaciones.</td>
+            </tr>
+        </tbody>
+    </table>
+</div>
+{{ block.super }}
+{% endblock %}

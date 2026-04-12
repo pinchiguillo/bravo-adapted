@@ -149,12 +149,25 @@ AWS_S3_ENDPOINT_URL = (
 )
 AWS_SES_ENDPOINT_URL = os.getenv("AWS_SES_ENDPOINT_URL") or os.getenv("LOCALSTACK_ENDPOINT")
 AWS_STORAGE_BUCKET_NAME = os.getenv("AWS_STORAGE_BUCKET_NAME", "bravo-media")
+AWS_LEGAL_DOCUMENTS_BUCKET_NAME = os.getenv(
+    "AWS_LEGAL_DOCUMENTS_BUCKET_NAME",
+    f"{AWS_STORAGE_BUCKET_NAME}-legal",
+)
 MEDIA_PUBLIC_BASE_URL = os.getenv("MEDIA_PUBLIC_BASE_URL", "/s3")
+LEGAL_DOCUMENTS_UPLOAD_PREFIX = os.getenv(
+    "LEGAL_DOCUMENTS_UPLOAD_PREFIX",
+    "legal-documents",
+).strip().strip("/")
 USE_S3_STORAGE = env_bool("USE_S3_STORAGE", default=True)
 if not USE_S3_STORAGE:
     raise ImproperlyConfigured("USE_S3_STORAGE must remain enabled in this project.")
 USE_SES_EMAIL = env_bool("USE_SES_EMAIL", default=bool(AWS_SES_ENDPOINT_URL))
 DEFAULT_FROM_EMAIL = os.getenv("DEFAULT_FROM_EMAIL", "no-reply@bravo.local")
+LEGAL_DOCUMENT_MAX_BYTES = env_int("LEGAL_DOCUMENT_MAX_BYTES", 10 * 1024 * 1024)
+LEGAL_DOCUMENT_ALLOWED_CONTENT_TYPES = env_list(
+    "LEGAL_DOCUMENT_ALLOWED_CONTENT_TYPES",
+    default=["application/pdf"],
+)
 JOB_CHAT_ATTACHMENT_MAX_BYTES = env_int("JOB_CHAT_ATTACHMENT_MAX_BYTES", 5 * 1024 * 1024)
 JOB_CHAT_ATTACHMENT_URL_TTL_SECONDS = env_int("JOB_CHAT_ATTACHMENT_URL_TTL_SECONDS", 300)
 JOB_CHAT_ATTACHMENT_ALLOWED_CONTENT_TYPES = env_list(
@@ -163,6 +176,12 @@ JOB_CHAT_ATTACHMENT_ALLOWED_CONTENT_TYPES = env_list(
 )
 ORGANIZATION_ANNOUNCEMENT_IMAGE_MAX_BYTES = env_int(
     "ORGANIZATION_ANNOUNCEMENT_IMAGE_MAX_BYTES", 5 * 1024 * 1024
+)
+ORGANIZATION_ANNOUNCEMENT_IMAGE_UPLOAD_URL_TTL_SECONDS = env_int(
+    "ORGANIZATION_ANNOUNCEMENT_IMAGE_UPLOAD_URL_TTL_SECONDS", 300
+)
+ORGANIZATION_ANNOUNCEMENT_IMAGE_PENDING_MAX_AGE_SECONDS = env_int(
+    "ORGANIZATION_ANNOUNCEMENT_IMAGE_PENDING_MAX_AGE_SECONDS", 3600
 )
 ORGANIZATION_ANNOUNCEMENT_IMAGE_ALLOWED_CONTENT_TYPES = env_list(
     "ORGANIZATION_ANNOUNCEMENT_IMAGE_ALLOWED_CONTENT_TYPES",
@@ -207,6 +226,9 @@ HIDE_API_DOCS = env_bool(
     default=IS_PRODUCTION,
 )
 RGPD_MODULE_ENABLED = env_bool("RGPD_MODULE_ENABLED", default=False)
+LEGAL_DOCUMENTS_ROOT = Path(
+    os.getenv("LEGAL_DOCUMENTS_ROOT", str(BASE_DIR / "docs"))
+).resolve()
 
 AUTH_BYPASS_EMAIL_VERIFICATION = disable_in_production_bool(AUTH_BYPASS_EMAIL_VERIFICATION)
 BYPASS_ADMIN_LOGIN = disable_in_production_bool(BYPASS_ADMIN_LOGIN)
@@ -217,6 +239,7 @@ if IS_PRODUCTION and USE_S3_STORAGE:
     require_env("AWS_ACCESS_KEY_ID")
     require_env("AWS_SECRET_ACCESS_KEY")
     require_env("AWS_STORAGE_BUCKET_NAME")
+    require_env("AWS_LEGAL_DOCUMENTS_BUCKET_NAME")
 
 if IS_PRODUCTION and USE_SES_EMAIL:
     require_env("DEFAULT_FROM_EMAIL")
@@ -364,6 +387,15 @@ if USE_S3_STORAGE:
     AWS_QUERYSTRING_AUTH = True
     STORAGES = {
         "default": {"BACKEND": "storages.backends.s3.S3Storage"},
+        "legal_documents": {
+            "BACKEND": "storages.backends.s3.S3Storage",
+            "OPTIONS": {
+                "bucket_name": AWS_LEGAL_DOCUMENTS_BUCKET_NAME,
+                "default_acl": None,
+                "file_overwrite": False,
+                "querystring_auth": True,
+            },
+        },
         "staticfiles": {
             "BACKEND": "django.contrib.staticfiles.storage.StaticFilesStorage"
         },
@@ -429,6 +461,14 @@ SIMPLE_JWT = {
     "ROTATE_REFRESH_TOKENS": env_bool("JWT_ROTATE_REFRESH_TOKENS", default=True),
 }
 
+spectacular_enum_name_overrides = {
+    "ActiveStateStatusEnum": "apps.auth.models.CustomUser.Status",
+    "AnnouncementStatusEnum": "apps.organization.models.announcement.Announcement.Status",
+}
+
+if "apps.jobs" in INSTALLED_APPS:
+    spectacular_enum_name_overrides["JobStatusEnum"] = "apps.jobs.models.Job.Status"
+
 SPECTACULAR_SETTINGS = {
     "TITLE": "Bravo API",
     "DESCRIPTION": "OpenAPI documentation for the Bravo backend.",
@@ -447,9 +487,7 @@ SPECTACULAR_SETTINGS = {
         {"name": "Management / Allowed Cities"},
         {"name": "RGPD"},
     ],
-    "ENUM_NAME_OVERRIDES": {
-        "AccountStatusEnum": "apps.auth.models.CustomUser.Status",
-    },
+    "ENUM_NAME_OVERRIDES": spectacular_enum_name_overrides,
     "SWAGGER_UI_SETTINGS": {
         "deepLinking": True,
         "operationsSorter": "alpha",

@@ -7,6 +7,7 @@ from .views import (
     ManagementCategoryViewSet,
     ManagementFeatureFlagViewSet,
     ManagementOrganizationViewSet,
+    ManagementPlanTierCatalogViewSet,
     ManagementServiceCatalogViewSet,
     ManagementUserViewSet,
 )
@@ -15,6 +16,7 @@ router = DefaultRouter()
 router.register("users", ManagementUserViewSet, basename="management-users")
 router.register("feature-flags", ManagementFeatureFlagViewSet, basename="management-feature-flags")
 router.register("categories", ManagementCategoryViewSet, basename="management-categories")
+router.register("plan-tiers", ManagementPlanTierCatalogViewSet, basename="management-plan-tiers")
 router.register("services", ManagementServiceCatalogViewSet, basename="management-services")
 router.register("allowed-cities", ManagementAllowedCityViewSet, basename="management-allowed-cities")
 router.register("announcements", ManagementAnnouncementViewSet, basename="management-announcements")

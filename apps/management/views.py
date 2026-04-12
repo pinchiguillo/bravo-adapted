@@ -11,7 +11,14 @@ from rest_framework.exceptions import ValidationError
 from rest_framework.response import Response
 
 from apps.management.models import FeatureFlag
-from apps.organization.models import AllowedCity, Announcement, Category, Organization, ServiceCatalog
+from apps.organization.models import (
+    AllowedCity,
+    Announcement,
+    Category,
+    Organization,
+    PlanTierCatalog,
+    ServiceCatalog,
+)
 from common.permissions import IsActiveAccount
 from common.throttling import ActionScopedRateThrottleMixin
 
@@ -21,6 +28,7 @@ from .serializers import (
     ManagementCategorySerializer,
     ManagementFeatureFlagSerializer,
     ManagementOrganizationSerializer,
+    ManagementPlanTierCatalogSerializer,
     ManagementServiceCatalogSerializer,
     ManagementUserSerializer,
 )
@@ -270,6 +278,32 @@ class ManagementAllowedCityViewSet(
     }
 
 
+@extend_schema(tags=["Management / Plan Tiers"])
+class ManagementPlanTierCatalogViewSet(
+    ManagementBypassAdminLoginMixin,
+    ActionScopedRateThrottleMixin,
+    mixins.ListModelMixin,
+    mixins.CreateModelMixin,
+    mixins.RetrieveModelMixin,
+    mixins.UpdateModelMixin,
+    mixins.DestroyModelMixin,
+    viewsets.GenericViewSet,
+):
+    permission_classes = [IsActiveAccount, permissions.IsAdminUser]
+    serializer_class = ManagementPlanTierCatalogSerializer
+    queryset = PlanTierCatalog.objects.all().order_by("sort_order", "name")
+    lookup_field = "uuid"
+    throttle_scope_prefix = "management"
+    throttle_scope_action_map = {
+        "list": "management_read",
+        "retrieve": "management_read",
+        "create": "management_write",
+        "update": "management_write",
+        "partial_update": "management_write",
+        "destroy": "management_write",
+    }
+
+
 management_announcement_search_parameter = OpenApiParameter(
     name="search",
     type=str,
@@ -386,7 +420,11 @@ class ManagementOrganizationViewSet(
 ):
     permission_classes = [IsActiveAccount, permissions.IsAdminUser]
     serializer_class = ManagementOrganizationSerializer
-    queryset = Organization.objects.select_related("user").with_rating().order_by("name")
+    queryset = (
+        Organization.objects.select_related("user", "pricing", "pricing__plan_tier")
+        .with_rating()
+        .order_by("name")
+    )
     lookup_field = "uuid"
     status_serializer_class = Organization.Status
     throttle_scope_prefix = "management"

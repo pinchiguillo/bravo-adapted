@@ -1,6 +1,6 @@
 from rest_framework import serializers
 
-from .models import RgpdAnonymousConsent, RgpdConsent
+from .models import RgpdAnonymousConsent, RgpdConsent, RgpdLegalDocument
 
 
 class RgpdConsentSerializer(serializers.ModelSerializer):
@@ -98,3 +98,52 @@ class RgpdAnonymousConsentUpsertSerializer(serializers.Serializer):
                 "identifier and write_token must be provided together."
             )
         return attrs
+
+
+class RgpdLegalDocumentSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = RgpdLegalDocument
+        fields = (
+            "uuid",
+            "document_type",
+            "file",
+            "original_name",
+            "content_type",
+            "size_bytes",
+            "created_at",
+        )
+        read_only_fields = (
+            "uuid",
+            "original_name",
+            "content_type",
+            "size_bytes",
+            "created_at",
+        )
+        extra_kwargs = {
+            "document_type": {"trim_whitespace": True},
+        }
+
+    def validate_document_type(self, value):
+        normalized = value.strip()
+        if not normalized:
+            raise serializers.ValidationError("This field may not be blank.")
+        return normalized
+
+    def validate_file(self, value):
+        allowed_types = set(self.context["allowed_content_types"])
+        if value.content_type not in allowed_types:
+            raise serializers.ValidationError("Unsupported legal document content type.")
+        if value.size > self.context["max_bytes"]:
+            raise serializers.ValidationError("Legal document exceeds maximum allowed size.")
+        return value
+
+    def create(self, validated_data):
+        uploaded_file = validated_data["file"]
+        return RgpdLegalDocument.objects.create(
+            user=self.context["request"].user,
+            document_type=validated_data["document_type"],
+            file=uploaded_file,
+            original_name=uploaded_file.name,
+            content_type=uploaded_file.content_type or "",
+            size_bytes=uploaded_file.size,
+        )

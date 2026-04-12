@@ -1,6 +1,25 @@
+import os
+import uuid
+from pathlib import Path
+
 from django.conf import settings
 from django.db import models
 from django.utils import timezone
+
+from .storage import LegalDocumentsStorage
+
+legal_documents_storage = LegalDocumentsStorage()
+
+
+def legal_document_upload_to(instance, filename):
+    extension = Path(filename or "").suffix.lower()
+    user_uuid = getattr(instance.user, "uuid", None) or instance.user_id
+    date_prefix = timezone.now().strftime("%Y/%m/%d")
+    object_name = f"{uuid.uuid4().hex}{extension}"
+    return (
+        f"{settings.LEGAL_DOCUMENTS_UPLOAD_PREFIX}/"
+        f"users/{user_uuid}/{date_prefix}/{object_name}"
+    )
 
 
 class BaseRgpdConsent(models.Model):
@@ -153,3 +172,30 @@ class RgpdAnonymousConsentEvent(BaseRgpdConsentEvent):
         ordering = ["-created_at", "-id"]
         verbose_name = "RGPD anonymous consent event"
         verbose_name_plural = "RGPD anonymous consent events"
+
+
+class RgpdLegalDocument(models.Model):
+    uuid = models.UUIDField(default=uuid.uuid4, unique=True, editable=False)
+    user = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name="rgpd_legal_documents",
+    )
+    document_type = models.CharField(max_length=64)
+    file = models.FileField(
+        upload_to=legal_document_upload_to,
+        storage=legal_documents_storage,
+    )
+    original_name = models.CharField(max_length=255)
+    content_type = models.CharField(max_length=255, blank=True)
+    size_bytes = models.PositiveBigIntegerField(default=0)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["-created_at", "-id"]
+        verbose_name = "RGPD legal document"
+        verbose_name_plural = "RGPD legal documents"
+
+    def __str__(self):
+        filename = os.path.basename(self.file.name or "")
+        return f"rgpd-legal-document:{self.user_id}:{filename}"

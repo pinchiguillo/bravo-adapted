@@ -2,11 +2,23 @@ from django.apps import apps
 from django.conf import settings
 from django.contrib.auth import get_user_model
 from django.contrib.auth.password_validation import validate_password
+from drf_spectacular.utils import extend_schema_field
 from rest_framework import serializers
 
 from apps.management.models import FeatureFlag
-from apps.organization.models import AllowedCity, Announcement, Category, Organization, ServiceCatalog
-from apps.organization.serializers import AnnouncementSerializer, OrganizationRatingMixin
+from apps.organization.models import (
+    AllowedCity,
+    Announcement,
+    Category,
+    Organization,
+    PlanTierCatalog,
+    ServiceCatalog,
+)
+from apps.organization.serializers import (
+    AnnouncementSerializer,
+    OrganizationRatingMixin,
+    PlanTierCatalogSerializer,
+)
 from apps.organization.serializers.catalog import CatalogReferenceField
 
 if apps.is_installed("apps.jobs"):
@@ -71,6 +83,14 @@ class ManagementUserSerializer(serializers.ModelSerializer):
 
 class ManagementOrganizationSerializer(OrganizationRatingMixin, serializers.ModelSerializer):
     user = serializers.SlugRelatedField(queryset=get_user_model().objects.all(), slug_field="uuid")
+    plan_tier = serializers.SerializerMethodField()
+
+    @extend_schema_field(PlanTierCatalogSerializer(allow_null=True))
+    def get_plan_tier(self, obj):
+        pricing = getattr(obj, "pricing", None)
+        if pricing is None or pricing.plan_tier_id is None:
+            return None
+        return PlanTierCatalogSerializer(pricing.plan_tier).data
 
     class Meta:
         model = Organization
@@ -86,6 +106,7 @@ class ManagementOrganizationSerializer(OrganizationRatingMixin, serializers.Mode
             "billing_country",
             "billing_postal_code",
             "verification_level",
+            "plan_tier",
             "rating",
             "status",
             "created_at",
@@ -177,6 +198,19 @@ class ManagementAllowedCitySerializer(serializers.ModelSerializer):
         fields = (
             "uuid",
             "name",
+        )
+        read_only_fields = ("uuid",)
+
+
+class ManagementPlanTierCatalogSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = PlanTierCatalog
+        fields = (
+            "uuid",
+            "key",
+            "name",
+            "description",
+            "sort_order",
         )
         read_only_fields = ("uuid",)
 

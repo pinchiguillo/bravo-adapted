@@ -41,7 +41,9 @@ Si `REDIS_URL` no existe fuera de produccion, Channels usa `InMemoryChannelLayer
 - `AWS_S3_ENDPOINT_URL`
 - `AWS_SES_ENDPOINT_URL`
 - `AWS_STORAGE_BUCKET_NAME`
+- `AWS_LEGAL_DOCUMENTS_BUCKET_NAME`: bucket dedicado para documentos legales/RGPD. En produccion debe configurarse de forma explicita y distinta al bucket general.
 - `MEDIA_PUBLIC_BASE_URL`: base publica usada para construir `MEDIA_URL`. En local/compose se recomienda `/s3`.
+- `LEGAL_DOCUMENTS_UPLOAD_PREFIX`: prefijo interno de claves S3 para documentos legales dentro del bucket dedicado.
 - `USE_S3_STORAGE` (debe permanecer en `1`; el proyecto exige storage S3 activo)
 - `USE_SES_EMAIL`
 - `DEFAULT_FROM_EMAIL`
@@ -70,10 +72,15 @@ Si `REDIS_URL` no existe fuera de produccion, Channels usa `InMemoryChannelLayer
 - `BYPASS_ORGANIZATION_VALIDATION`: cuando vale `1`, trata las organizaciones como validadas para reglas de visibilidad y escritura. En produccion se fuerza automaticamente a `0`.
 - `AUTH_ENFORCE_PASSWORD_RESTRICTIONS`: cuando vale `0`, desactiva validadores de Django y longitud minima en serializers para permitir contrasenas sin restricciones.
 - `HIDE_API_DOCS`: cuando vale `1`, elimina del enrutado las rutas `api/docs/` y `api/schema/`, dejandolas no disponibles. Por defecto vale `0` en desarrollo y `1` en produccion.
+- `RGPD_MODULE_ENABLED`: habilita el enrutado y la app `rgpd`. Debe valer `1` para exponer `api/rgpd/`, incluido el flujo de documentos legales.
 - `JWT_ROTATE_REFRESH_TOKENS`: rota refresh tokens al renovar sesion.
 
 ## Jobs y WebSocket
 
+- `LEGAL_DOCUMENT_MAX_BYTES`: limite maximo para subidas de documentos legales.
+- `LEGAL_DOCUMENT_ALLOWED_CONTENT_TYPES`: lista separada por comas con tipos MIME admitidos para documentos legales. Por defecto solo `application/pdf`.
+- `ORGANIZATION_ANNOUNCEMENT_IMAGE_UPLOAD_URL_TTL_SECONDS`: TTL en segundos de la URL firmada de subida directa para imagenes de anuncios.
+- `ORGANIZATION_ANNOUNCEMENT_IMAGE_PENDING_MAX_AGE_SECONDS`: tiempo maximo de vida de objetos temporales de imagen antes de su limpieza automatica.
 - `JOB_CHAT_ATTACHMENT_MAX_BYTES`: limite de tamano de adjuntos.
 - `JOB_CHAT_ATTACHMENT_ALLOWED_CONTENT_TYPES`: lista separada por comas de content types permitidos.
 - `JOB_CHAT_WS_RATE_LIMIT`: maximo de mensajes por ventana.

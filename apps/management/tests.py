@@ -1,5 +1,7 @@
 from datetime import date
 from io import StringIO
+from pathlib import Path
+from tempfile import TemporaryDirectory
 from unittest import skipUnless
 
 from django.apps import apps as django_apps
@@ -19,6 +21,8 @@ from apps.organization.models import (
     AnnouncementReview,
     Category,
     Organization,
+    OrganizationPricing,
+    PlanTierCatalog,
     ServiceCatalog,
     ServicePrice,
     Subservice,
@@ -38,6 +42,66 @@ else:
     JobChat = None
     JobChatAttachment = None
     JobChatMessage = None
+
+
+class AdminLegalDocumentsBrowserTests(APITestCase):
+    def setUp(self):
+        user_model = get_user_model()
+        self.admin_user = user_model.objects.create_user(
+            username="legal-docs-admin",
+            email="legal-docs-admin@example.com",
+            password="testpass123",
+            is_staff=True,
+        )
+        self.regular_user = user_model.objects.create_user(
+            username="legal-docs-user",
+            email="legal-docs-user@example.com",
+            password="testpass123",
+        )
+
+    def test_admin_index_includes_legal_documents_link(self):
+        self.client.force_login(self.admin_user)
+
+        response = self.client.get(reverse("admin:index"))
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertContains(response, reverse("admin:legal-documents-browser"))
+        self.assertContains(response, "Documentos legales")
+
+    def test_staff_user_can_browse_nested_legal_documents_and_read_text_file(self):
+        with TemporaryDirectory() as tmp_dir:
+            root = Path(tmp_dir)
+            contracts_dir = root / "contracts"
+            contracts_dir.mkdir()
+            (contracts_dir / "privacy-policy.md").write_text(
+                "# Privacy policy\n\nDocumento legal visible desde admin.\n",
+                encoding="utf-8",
+            )
+
+            with override_settings(LEGAL_DOCUMENTS_ROOT=root):
+                self.client.force_login(self.admin_user)
+
+                folder_response = self.client.get(
+                    reverse("admin:legal-documents-browser"),
+                    {"path": "contracts"},
+                )
+                file_response = self.client.get(
+                    reverse("admin:legal-documents-browser"),
+                    {"path": "contracts/privacy-policy.md"},
+                )
+
+        self.assertEqual(folder_response.status_code, status.HTTP_200_OK)
+        self.assertContains(folder_response, "privacy-policy.md")
+        self.assertContains(folder_response, "contracts")
+        self.assertEqual(file_response.status_code, status.HTTP_200_OK)
+        self.assertContains(file_response, "Documento legal visible desde admin.")
+
+    def test_non_staff_user_cannot_access_legal_documents_browser(self):
+        self.client.force_login(self.regular_user)
+
+        response = self.client.get(reverse("admin:legal-documents-browser"))
+
+        self.assertEqual(response.status_code, status.HTTP_302_FOUND)
 
 
 @skipUnless(JOBS_INSTALLED, "jobs app disabled")
@@ -70,6 +134,18 @@ class ManagementApiTests(APITestCase):
             billing_city="Madrid",
             billing_country="ES",
             billing_postal_code="28001",
+        )
+        self.pro_plan_tier = PlanTierCatalog.objects.create(
+            key="pro",
+            name="Pro",
+            description="Tier pro",
+            sort_order=30,
+        )
+        self.organization_pricing = OrganizationPricing.objects.create(
+            organization=self.organization,
+            plan_tier=self.pro_plan_tier,
+            monthly_price="49.99",
+            commission_rate="12.50",
         )
         if JOBS_INSTALLED:
             self.category, _ = Category.objects.get_or_create(
@@ -227,6 +303,7 @@ class ManagementApiTests(APITestCase):
         self.assertEqual(response.status_code, status.HTTP_201_CREATED)
         self.assertEqual(response.data["name"], "Brand New Org")
         self.assertEqual(response.data["verification_level"], 2)
+        self.assertIsNone(response.data["plan_tier"])
         self.assertEqual(response.data["status"], Organization.Status.ACTIVE)
 
     def test_admin_cannot_create_second_organization_for_same_user(self):
@@ -440,6 +517,18 @@ class ManagementOrganizationListApiTests(APITestCase):
             billing_country="ES",
             billing_postal_code="28010",
         )
+        self.default_plan_tier = PlanTierCatalog.objects.create(
+            key="default",
+            name="Default",
+            description="Tier base",
+            sort_order=10,
+        )
+        OrganizationPricing.objects.create(
+            organization=self.organization,
+            plan_tier=self.default_plan_tier,
+            monthly_price="29.99",
+            commission_rate="10.00",
+        )
 
     def test_admin_can_list_organizations_from_management_endpoint(self):
         self.client.force_authenticate(user=self.admin_user)
@@ -449,6 +538,7 @@ class ManagementOrganizationListApiTests(APITestCase):
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertEqual(response.data["count"], 1)
         self.assertEqual(response.data["results"][0]["uuid"], str(self.organization.uuid))
+        self.assertEqual(response.data["results"][0]["plan_tier"]["key"], "default")
 
 
 class ManagementUserListApiTests(APITestCase):
@@ -831,6 +921,74 @@ class ManagementAllowedCityApiTests(APITestCase):
         self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
 
 
+class ManagementPlanTierApiTests(APITestCase):
+    def setUp(self):
+        user_model = get_user_model()
+        self.admin_user = user_model.objects.create_user(
+            username="management-plan-tier-admin",
+            email="management-plan-tier-admin@example.com",
+            password="testpass123",
+            is_staff=True,
+        )
+        self.regular_user = user_model.objects.create_user(
+            username="management-plan-tier-user",
+            email="management-plan-tier-user@example.com",
+            password="testpass123",
+        )
+        self.plan_tier, _ = PlanTierCatalog.objects.update_or_create(
+            key="default",
+            defaults={
+                "name": "Default",
+                "description": "Tier base",
+                "sort_order": 10,
+            },
+        )
+
+    def test_admin_can_crud_plan_tiers(self):
+        self.client.force_authenticate(user=self.admin_user)
+
+        create_response = self.client.post(
+            reverse("management-plan-tiers-list"),
+            {
+                "key": "vip",
+                "name": "Vip",
+                "description": "Tier personalizado de prueba",
+                "sort_order": 90,
+            },
+            format="json",
+        )
+
+        self.assertEqual(create_response.status_code, status.HTTP_201_CREATED)
+        created_uuid = create_response.data["uuid"]
+
+        retrieve_response = self.client.get(
+            reverse("management-plan-tiers-detail", kwargs={"uuid": created_uuid})
+        )
+        self.assertEqual(retrieve_response.status_code, status.HTTP_200_OK)
+        self.assertEqual(retrieve_response.data["key"], "vip")
+
+        update_response = self.client.patch(
+            reverse("management-plan-tiers-detail", kwargs={"uuid": created_uuid}),
+            {"description": "Tier con prioridad maxima"},
+            format="json",
+        )
+        self.assertEqual(update_response.status_code, status.HTTP_200_OK)
+        self.assertEqual(update_response.data["description"], "Tier con prioridad maxima")
+
+        delete_response = self.client.delete(
+            reverse("management-plan-tiers-detail", kwargs={"uuid": created_uuid})
+        )
+        self.assertEqual(delete_response.status_code, status.HTTP_204_NO_CONTENT)
+        self.assertFalse(PlanTierCatalog.objects.filter(uuid=created_uuid).exists())
+
+    def test_non_staff_cannot_manage_plan_tiers(self):
+        self.client.force_authenticate(user=self.regular_user)
+
+        response = self.client.get(reverse("management-plan-tiers-list"))
+
+        self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
+
+
 class ManagementServiceCatalogApiTests(APITestCase):
     def setUp(self):
         user_model = get_user_model()
@@ -1116,6 +1274,9 @@ class SeedFixedTablesCommandTests(APITestCase):
         service_catalog_names = set(
             ServiceCatalog.objects.values_list("name", flat=True)
         )
+        plan_tier_keys = list(
+            PlanTierCatalog.objects.order_by("sort_order").values_list("key", flat=True)
+        )
         feature_flags = {
             flag.key: flag.is_active for flag in FeatureFlag.objects.order_by("key")
         }
@@ -1130,6 +1291,7 @@ class SeedFixedTablesCommandTests(APITestCase):
             service_catalog_names,
             {"Electricidad", "Fontaneria", "Limpieza", "Pintura"},
         )
+        self.assertEqual(plan_tier_keys, ["default", "premium", "pro", "ultra"])
         self.assertEqual(
             feature_flags,
             {
@@ -1140,6 +1302,7 @@ class SeedFixedTablesCommandTests(APITestCase):
         )
         self.assertIn("allowed_cities_created=50", out.getvalue())
         self.assertIn("categories_created=2", out.getvalue())
+        self.assertIn("plan_tiers_created=", out.getvalue())
         self.assertIn("service_catalogs_created=4", out.getvalue())
         self.assertIn("feature_flags_created=3", out.getvalue())
 
@@ -1153,6 +1316,14 @@ class SeedFixedTablesCommandTests(APITestCase):
 
     def test_seed_fixed_tables_is_idempotent_and_updates_existing_records(self):
         AllowedCity.objects.create(name="Madrid")
+        plan_tier, _ = PlanTierCatalog.objects.update_or_create(
+            key="default",
+            defaults={
+                "name": "Default antiguo",
+                "description": "Descripcion antigua",
+                "sort_order": 99,
+            },
+        )
         category = Category.objects.create(
             name="Reformas",
             description="Descripcion desactualizada",
@@ -1182,12 +1353,20 @@ class SeedFixedTablesCommandTests(APITestCase):
         category.refresh_from_db()
         mantenimiento.refresh_from_db()
         catalog.refresh_from_db()
+        plan_tier.refresh_from_db()
         job_chat_flag = FeatureFlag.objects.get(key="job_chat")
 
         self.assertEqual(AllowedCity.objects.count(), 50)
+        self.assertEqual(PlanTierCatalog.objects.count(), 4)
         self.assertEqual(Category.objects.count(), 3)
         self.assertEqual(ServiceCatalog.objects.count(), 4)
         self.assertEqual(FeatureFlag.objects.count(), 3)
+        self.assertEqual(plan_tier.name, "Default")
+        self.assertEqual(
+            plan_tier.description,
+            "Tier base para organizaciones con configuracion estandar.",
+        )
+        self.assertEqual(plan_tier.sort_order, 10)
         self.assertEqual(
             category.description,
             "Servicios vinculados a reformas y obras.",
@@ -1203,6 +1382,8 @@ class SeedFixedTablesCommandTests(APITestCase):
         )
         self.assertTrue(job_chat_flag.is_active)
         self.assertEqual(job_chat_flag.name, "Job chat")
+        self.assertIn("plan_tiers_created=0", second_out.getvalue())
+        self.assertIn("plan_tiers_updated=0", second_out.getvalue())
         self.assertIn("allowed_cities_created=0", second_out.getvalue())
         self.assertIn("allowed_cities_updated=0", second_out.getvalue())
         self.assertIn("categories_created=0", second_out.getvalue())

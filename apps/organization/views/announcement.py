@@ -3,7 +3,6 @@ import base64
 from drf_spectacular.utils import extend_schema, extend_schema_view
 from rest_framework import mixins, permissions, status, viewsets
 from rest_framework.exceptions import NotFound, PermissionDenied
-from rest_framework.parsers import FormParser, MultiPartParser
 from rest_framework.response import Response
 
 from common.permissions import IsActiveAccount
@@ -13,7 +12,10 @@ from ..models import Announcement, AnnouncementImage, Organization
 from ..permissions import IsOrganizationResourceOwner
 from ..serializers import (
     AnnouncementImageBase64Serializer,
+    AnnouncementImageUploadCompleteSerializer,
     AnnouncementImageSerializer,
+    AnnouncementImageUploadRequestSerializer,
+    AnnouncementImageUploadTargetSerializer,
     AnnouncementSerializer,
 )
 from .common import (
@@ -283,9 +285,25 @@ class AnnouncementViewSet(
         parameters=[organization_uuid_parameter, announcement_uuid_parameter],
     ),
     create=extend_schema(
-        summary="Upload announcement image",
-        description="Uploads an image for an announcement owned by the organization in the URL.",
+        summary="Prepare announcement image upload",
+        description=(
+            "Validates image metadata for an announcement owned by the organization "
+            "in the URL and returns a signed URL so the client can upload the file "
+            "directly to S3-compatible storage."
+        ),
         parameters=[organization_uuid_parameter, announcement_uuid_parameter],
+        request=AnnouncementImageUploadRequestSerializer,
+        responses={status.HTTP_201_CREATED: AnnouncementImageUploadTargetSerializer},
+    ),
+    complete_upload=extend_schema(
+        summary="Complete announcement image upload",
+        description=(
+            "Confirms a previously prepared direct upload after the client has "
+            "uploaded the binary to S3-compatible storage."
+        ),
+        parameters=[organization_uuid_parameter, announcement_uuid_parameter],
+        request=AnnouncementImageUploadCompleteSerializer,
+        responses={status.HTTP_201_CREATED: AnnouncementImageSerializer},
     ),
     destroy=extend_schema(
         summary="Delete announcement image",
@@ -303,7 +321,6 @@ class AnnouncementImageViewSet(
 ):
     serializer_class = AnnouncementImageSerializer
     permission_classes = [IsActiveAccount]
-    parser_classes = [MultiPartParser, FormParser]
     lookup_field = "uuid"
     lookup_url_kwarg = "image_uuid"
     throttle_scope_prefix = "organization"
@@ -331,9 +348,32 @@ class AnnouncementImageViewSet(
 
     def create(self, request, *args, **kwargs):
         announcement = self._get_announcement(for_write=True)
-        serializer = self.get_serializer(data=request.data)
+        serializer = AnnouncementImageUploadRequestSerializer(
+            data=request.data,
+            context={
+                **self.get_serializer_context(),
+                "announcement": announcement,
+            },
+        )
         serializer.is_valid(raise_exception=True)
-        image = serializer.save(announcement=announcement)
+        upload_target = serializer.save()
+        response_serializer = AnnouncementImageUploadTargetSerializer(
+            upload_target,
+            context=self.get_serializer_context(),
+        )
+        return Response(response_serializer.data, status=status.HTTP_201_CREATED)
+
+    def complete_upload(self, request, *args, **kwargs):
+        announcement = self._get_announcement(for_write=True)
+        serializer = AnnouncementImageUploadCompleteSerializer(
+            data=request.data,
+            context={
+                **self.get_serializer_context(),
+                "announcement": announcement,
+            },
+        )
+        serializer.is_valid(raise_exception=True)
+        image = serializer.save()
         response_serializer = self.get_serializer(image)
         return Response(response_serializer.data, status=status.HTTP_201_CREATED)
 

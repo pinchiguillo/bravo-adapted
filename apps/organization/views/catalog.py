@@ -3,8 +3,13 @@ from rest_framework import mixins, permissions, viewsets
 
 from common.throttling import ActionScopedRateThrottleMixin
 
-from ..models import AllowedCity, Category, ServiceCatalog
-from ..serializers import AllowedCitySerializer, CategorySerializer, ServiceCatalogSerializer
+from ..models import AllowedCity, Category, PlanTierCatalog, ServiceCatalog
+from ..serializers import (
+    AllowedCitySerializer,
+    CategorySerializer,
+    PlanTierCatalogSerializer,
+    ServiceCatalogSerializer,
+)
 
 
 @extend_schema(tags=["Catalog"])
@@ -70,6 +75,29 @@ class ServiceCatalogViewSet(
     serializer_class = ServiceCatalogSerializer
     permission_classes = [permissions.AllowAny]
     queryset = ServiceCatalog.objects.select_related("category").order_by("name", "uuid")
+    throttle_scope_prefix = "organization"
+    throttle_scope_action_map = {
+        "list": "organization_public_read",
+    }
+
+
+@extend_schema(tags=["Catalog"])
+@extend_schema_view(
+    list=extend_schema(
+        tags=["Catalog"],
+        summary="List plan tiers",
+        description="Returns the public fixed plan tiers catalog.",
+        auth=[],
+    ),
+)
+class PlanTierCatalogViewSet(
+    ActionScopedRateThrottleMixin,
+    mixins.ListModelMixin,
+    viewsets.GenericViewSet,
+):
+    serializer_class = PlanTierCatalogSerializer
+    permission_classes = [permissions.AllowAny]
+    queryset = PlanTierCatalog.objects.all().order_by("sort_order", "name")
     throttle_scope_prefix = "organization"
     throttle_scope_action_map = {
         "list": "organization_public_read",

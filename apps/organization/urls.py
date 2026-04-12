@@ -8,6 +8,7 @@ from .views import (
     CategoryViewSet,
     OrganizationAnnouncementImageBase64ViewSet,
     OrganizationViewSet,
+    PlanTierCatalogViewSet,
     PublicAnnouncementDetailViewSet,
     PublicAnnouncementImageBase64ViewSet,
     PublicAnnouncementViewSet,
@@ -19,6 +20,7 @@ from .views import (
 router = DefaultRouter()
 router.register("allowed-cities", AllowedCityViewSet, basename="organization-allowed-city")
 router.register("categories", CategoryViewSet, basename="organization-category")
+router.register("plan-tiers", PlanTierCatalogViewSet, basename="organization-plan-tier")
 router.register("services", ServiceCatalogViewSet, basename="service-catalog")
 router.register("organizations", OrganizationViewSet, basename="organization")
 
@@ -29,6 +31,7 @@ announcement_detail = AnnouncementViewSet.as_view(
     {"put": "update", "patch": "partial_update", "delete": "destroy"}
 )
 announcement_image_list = AnnouncementImageViewSet.as_view({"get": "list", "post": "create"})
+announcement_image_complete = AnnouncementImageViewSet.as_view({"post": "complete_upload"})
 announcement_image_detail = AnnouncementImageViewSet.as_view({"delete": "destroy"})
 announcement_image_base64 = OrganizationAnnouncementImageBase64ViewSet.as_view({"get": "retrieve"})
 public_announcement_image_base64 = PublicAnnouncementImageBase64ViewSet.as_view({"get": "retrieve"})
@@ -97,6 +100,11 @@ urlpatterns = [
         "organizations/<uuid:organization_uuid>/announcements/<uuid:uuid>/images/",
         announcement_image_list,
         name="organization-announcement-image-list",
+    ),
+    path(
+        "organizations/<uuid:organization_uuid>/announcements/<uuid:uuid>/images/complete/",
+        announcement_image_complete,
+        name="organization-announcement-image-complete",
     ),
     path(
         "organizations/<uuid:organization_uuid>/announcements/<uuid:uuid>/images/<uuid:image_uuid>/",

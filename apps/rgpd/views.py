@@ -1,5 +1,6 @@
+from django.conf import settings
 from drf_spectacular.utils import extend_schema, extend_schema_view
-from rest_framework import permissions, status, viewsets
+from rest_framework import mixins, permissions, status, viewsets
 from rest_framework.decorators import action
 from rest_framework.exceptions import NotFound
 from rest_framework.response import Response
@@ -12,12 +13,14 @@ from .models import (
     RgpdAnonymousConsentEvent,
     RgpdConsent,
     RgpdConsentEvent,
+    RgpdLegalDocument,
 )
 from .serializers import (
     RgpdAnonymousConsentSerializer,
     RgpdAnonymousConsentUpsertSerializer,
     RgpdConsentSerializer,
     RgpdConsentUpsertSerializer,
+    RgpdLegalDocumentSerializer,
 )
 from .utils import (
     extract_client_ip,
@@ -164,3 +167,46 @@ class RgpdAnonymousConsentViewSet(ActionScopedRateThrottleMixin, viewsets.Generi
             write_token_hash=hash_write_token(write_token),
         )
         return consent, write_token, RgpdAnonymousConsentEvent.Action.CREATE, status.HTTP_201_CREATED
+
+
+@extend_schema_view(
+    list=extend_schema(
+        tags=["RGPD"],
+        summary="List my legal documents",
+        description="Returns the legal documents uploaded by the authenticated user.",
+        responses=RgpdLegalDocumentSerializer(many=True),
+    ),
+    create=extend_schema(
+        tags=["RGPD"],
+        summary="Upload legal document",
+        description=(
+            "Uploads a legal document for the authenticated user using the dedicated "
+            "legal-documents storage bucket."
+        ),
+        request=RgpdLegalDocumentSerializer,
+        responses={201: RgpdLegalDocumentSerializer},
+    ),
+)
+class RgpdLegalDocumentViewSet(
+    ActionScopedRateThrottleMixin,
+    mixins.ListModelMixin,
+    mixins.CreateModelMixin,
+    viewsets.GenericViewSet,
+):
+    queryset = RgpdLegalDocument.objects.select_related("user")
+    serializer_class = RgpdLegalDocumentSerializer
+    permission_classes = [IsActiveAccount]
+    throttle_scope_prefix = "rgpd"
+    throttle_scope_action_map = {
+        "list": "rgpd_authenticated_read",
+        "create": "rgpd_authenticated_write",
+    }
+
+    def get_queryset(self):
+        return self.queryset.filter(user=self.request.user)
+
+    def get_serializer_context(self):
+        context = super().get_serializer_context()
+        context["allowed_content_types"] = settings.LEGAL_DOCUMENT_ALLOWED_CONTENT_TYPES
+        context["max_bytes"] = settings.LEGAL_DOCUMENT_MAX_BYTES
+        return context

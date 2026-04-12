@@ -43,3 +43,17 @@ class ServiceCatalog(models.Model):
 
     def __str__(self):
         return self.name
+
+
+class PlanTierCatalog(models.Model):
+    uuid = models.UUIDField(default=uuid.uuid4, unique=True, editable=False)
+    key = models.SlugField(max_length=50, unique=True)
+    name = models.CharField(max_length=120, unique=True)
+    description = models.TextField(blank=True, default="")
+    sort_order = models.PositiveIntegerField(default=0)
+
+    class Meta:
+        ordering = ["sort_order", "name"]
+
+    def __str__(self):
+        return self.name
