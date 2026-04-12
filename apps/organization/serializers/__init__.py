@@ -1,7 +1,7 @@
 from .announcement import (
     AnnouncementImageBase64Serializer,
-    AnnouncementImageUploadCompleteSerializer,
     AnnouncementImageSerializer,
+    AnnouncementImageUploadCompleteSerializer,
     AnnouncementImageUploadRequestSerializer,
     AnnouncementImageUploadTargetSerializer,
     AnnouncementSerializer,
