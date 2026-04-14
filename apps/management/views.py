@@ -262,6 +262,7 @@ class ManagementAllowedCityViewSet(
     mixins.CreateModelMixin,
     mixins.RetrieveModelMixin,
     mixins.UpdateModelMixin,
+    mixins.DestroyModelMixin,
     viewsets.GenericViewSet,
 ):
     permission_classes = [IsActiveAccount, permissions.IsAdminUser]
@@ -275,6 +276,7 @@ class ManagementAllowedCityViewSet(
         "create": "management_write",
         "update": "management_write",
         "partial_update": "management_write",
+        "destroy": "management_write",
     }
 
 

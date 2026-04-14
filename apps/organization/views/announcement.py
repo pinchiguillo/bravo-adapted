@@ -163,7 +163,7 @@ class PublicAnnouncementDetailViewSet(
     create=extend_schema(
         tags=["Announcements"],
         summary="Create announcement",
-        description="Creates an announcement for the organization specified in the URL. Can optionally include subservices in a single request.",
+        description="Creates an announcement with optional subservices.",
         parameters=[organization_uuid_parameter],
         request=AnnouncementSerializer,
     ),
