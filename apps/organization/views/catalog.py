@@ -1,5 +1,7 @@
 from drf_spectacular.utils import extend_schema, extend_schema_view
 from rest_framework import mixins, permissions, viewsets
+from rest_framework.decorators import action
+from rest_framework.response import Response
 
 from common.throttling import ActionScopedRateThrottleMixin
 
@@ -66,6 +68,12 @@ class CategoryViewSet(
         description="Returns the public fixed services catalog.",
         auth=[],
     ),
+    services_by_category=extend_schema(
+        tags=["Catalog"],
+        summary="Get services by category",
+        description="Returns all services for a specific category UUID.",
+        auth=[],
+    ),
 )
 class ServiceCatalogViewSet(
     ActionScopedRateThrottleMixin,
@@ -78,7 +86,21 @@ class ServiceCatalogViewSet(
     throttle_scope_prefix = "organization"
     throttle_scope_action_map = {
         "list": "organization_public_read",
+        "services_by_category": "organization_public_read",
     }
+
+    @action(detail=False, methods=["get"], url_path="(?P<category_uuid>[^/.]+)")
+    def services_by_category(self, request, category_uuid=None):
+        """Get all services for a specific category"""
+        try:
+            category = Category.objects.get(uuid=category_uuid)
+        except Category.DoesNotExist:
+            from rest_framework.exceptions import NotFound
+            raise NotFound(f"Category with UUID {category_uuid} not found")
+
+        services = self.get_queryset().filter(category=category)
+        serializer = self.get_serializer(services, many=True)
+        return Response(serializer.data)
 
 
 @extend_schema(tags=["Catalog"])
