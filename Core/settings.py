@@ -440,11 +440,6 @@ REST_FRAMEWORK = {
         ),
         "organization_write": os.getenv("ORGANIZATION_WRITE_THROTTLE_RATE", "30/minute"),
         "organization_admin": os.getenv("ORGANIZATION_ADMIN_THROTTLE_RATE", "30/minute"),
-        "jobs_default": os.getenv("JOBS_DEFAULT_THROTTLE_RATE", "60/minute"),
-        "jobs_read": os.getenv("JOBS_READ_THROTTLE_RATE", "120/minute"),
-        "jobs_write": os.getenv("JOBS_WRITE_THROTTLE_RATE", "30/minute"),
-        "jobs_messages": os.getenv("JOBS_MESSAGES_THROTTLE_RATE", "30/minute"),
-        "jobs_attachments": os.getenv("JOBS_ATTACHMENTS_THROTTLE_RATE", "10/minute"),
         "rgpd_authenticated_read": os.getenv("RGPD_AUTHENTICATED_READ_THROTTLE_RATE", "120/minute"),
         "rgpd_authenticated_write": os.getenv("RGPD_AUTHENTICATED_WRITE_THROTTLE_RATE", "30/minute"),
         "rgpd_anonymous_write": os.getenv("RGPD_ANONYMOUS_WRITE_THROTTLE_RATE", "20/minute"),
@@ -465,9 +460,6 @@ spectacular_enum_name_overrides = {
     "ActiveStateStatusEnum": "apps.auth.models.CustomUser.Status",
     "AnnouncementStatusEnum": "apps.organization.models.announcement.Announcement.Status",
 }
-
-if "apps.jobs" in INSTALLED_APPS:
-    spectacular_enum_name_overrides["JobStatusEnum"] = "apps.jobs.models.Job.Status"
 
 SPECTACULAR_SETTINGS = {
     "TITLE": "Bravo API",

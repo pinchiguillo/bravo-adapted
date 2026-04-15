@@ -86,24 +86,6 @@ ALLOWED_CITIES = [
 ]
 
 FEATURE_FLAGS = [
-    {
-        "key": "job_chat",
-        "name": "Job chat",
-        "description": "Habilita el acceso al chat asociado a trabajos.",
-        "is_active": True,
-    },
-    {
-        "key": "job_chat_attachments",
-        "name": "Job chat attachments",
-        "description": "Permite adjuntar ficheros dentro del chat de trabajos.",
-        "is_active": True,
-    },
-    {
-        "key": "job_chat_uploads",
-        "name": "Job chat uploads",
-        "description": "Activa la subida de archivos desde el chat de trabajos.",
-        "is_active": True,
-    },
 ]
 
 PLAN_TIERS = [

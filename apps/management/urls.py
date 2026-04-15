@@ -1,4 +1,3 @@
-from django.apps import apps
 from rest_framework.routers import DefaultRouter
 
 from .views import (
@@ -23,10 +22,5 @@ router.register("allowed-cities", ManagementAllowedCityViewSet, basename="manage
 router.register("announcements", ManagementAnnouncementViewSet, basename="management-announcements")
 router.register("announcement-status-changes", ManagementAnnouncementStatusChangeViewSet, basename="management-announcement-status-changes")
 router.register("organizations", ManagementOrganizationViewSet, basename="management-organizations")
-
-if apps.is_installed("apps.jobs"):
-    from .views import ManagementJobViewSet
-
-    router.register("jobs", ManagementJobViewSet, basename="management-jobs")
 
 urlpatterns = router.urls

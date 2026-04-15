@@ -1,6 +1,5 @@
 import uuid
 
-from django.apps import apps
 from django.conf import settings
 from django.contrib.auth import get_user_model
 from django.db.models import Q
@@ -34,11 +33,6 @@ from .serializers import (
     ManagementServiceCatalogSerializer,
     ManagementUserSerializer,
 )
-
-if apps.is_installed("apps.jobs"):
-    from apps.jobs.models import Job
-
-    from .serializers import ManagementJobSerializer
 
 
 class ManagementStatusActionsMixin:
@@ -465,45 +459,6 @@ class ManagementOrganizationViewSet(
         "deactivate": "management_status",
         "suspend": "management_status",
     }
-
-
-if apps.is_installed("apps.jobs"):
-    @extend_schema(tags=["Management / Jobs"])
-    class ManagementJobViewSet(
-        ManagementBypassAdminLoginMixin,
-        ActionScopedRateThrottleMixin,
-        ManagementStatusActionsMixin,
-        mixins.ListModelMixin,
-        mixins.CreateModelMixin,
-        mixins.RetrieveModelMixin,
-        mixins.UpdateModelMixin,
-        viewsets.GenericViewSet,
-    ):
-        permission_classes = [IsActiveAccount, permissions.IsAdminUser]
-        serializer_class = ManagementJobSerializer
-        queryset = Job.objects.select_related(
-            "user",
-            "announcement",
-            "announcement__organization",
-            "announcement__organization__user",
-            "plan_price",
-            "plan_price__subservice",
-            "plan_price__subservice__announcement",
-            "plan_price__subservice__service_catalog",
-        ).order_by("-created_at", "-id")
-        lookup_field = "uuid"
-        status_serializer_class = Job.Status
-        throttle_scope_prefix = "management"
-        throttle_scope_action_map = {
-            "list": "management_read",
-            "retrieve": "management_read",
-            "create": "management_write",
-            "update": "management_write",
-            "partial_update": "management_write",
-            "activate": "management_status",
-            "deactivate": "management_status",
-            "suspend": "management_status",
-        }
 
 
 @extend_schema(tags=["Management / Announcements"])

@@ -1,4 +1,3 @@
-from django.apps import apps
 from django.conf import settings
 from django.contrib.auth import get_user_model
 from django.contrib.auth.password_validation import validate_password
@@ -22,9 +21,6 @@ from apps.organization.serializers import (
     PlanTierCatalogSerializer,
 )
 from apps.organization.serializers.catalog import CatalogReferenceField
-
-if apps.is_installed("apps.jobs"):
-    from apps.jobs.models import Job
 
 
 class ManagementUserSerializer(serializers.ModelSerializer):
@@ -120,52 +116,6 @@ class ManagementOrganizationSerializer(OrganizationRatingMixin, serializers.Mode
         if self.instance is None and Organization.objects.filter(user=value).exists():
             raise serializers.ValidationError("Selected user already has an organization.")
         return value
-
-
-if apps.is_installed("apps.jobs"):
-    class ManagementJobSerializer(serializers.ModelSerializer):
-        user = serializers.SlugRelatedField(queryset=get_user_model().objects.all(), slug_field="uuid")
-        announcement = serializers.SlugRelatedField(
-            queryset=Announcement.objects.select_related("organization"),
-            slug_field="uuid",
-        )
-
-        class Meta:
-            model = Job
-            fields = (
-                "id",
-                "uuid",
-                "user",
-                "announcement",
-                "plan_price",
-                "status",
-                "organization_rating",
-                "created_at",
-                "updated_at",
-            )
-            read_only_fields = ("id", "uuid", "created_at", "updated_at")
-
-        def validate(self, attrs):
-            announcement = attrs.get("announcement", getattr(self.instance, "announcement", None))
-            plan_price = attrs.get("plan_price", getattr(self.instance, "plan_price", None))
-            if announcement is not None and plan_price is not None:
-                subservice = plan_price.subservice
-                if subservice.announcement.organization_id != announcement.organization_id:
-                    raise serializers.ValidationError(
-                        {"plan_price": "Plan price does not belong to the selected announcement."}
-                    )
-                if subservice.announcement_id != announcement.id:
-                    raise serializers.ValidationError(
-                        {"plan_price": "Plan price does not belong to the selected announcement."}
-                    )
-
-            if "organization_rating" in attrs:
-                job_status = attrs.get("status", getattr(self.instance, "status", None))
-                if job_status != Job.Status.COMPLETED:
-                    raise serializers.ValidationError(
-                        {"organization_rating": "Organization rating can only be set for completed jobs."}
-                    )
-            return attrs
 
 
 class ManagementFeatureFlagSerializer(serializers.ModelSerializer):
