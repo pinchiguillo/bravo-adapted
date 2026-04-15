@@ -4,6 +4,7 @@ from rest_framework.routers import DefaultRouter
 from .views import (
     ManagementAllowedCityViewSet,
     ManagementAnnouncementViewSet,
+    ManagementAnnouncementStatusChangeViewSet,
     ManagementCategoryViewSet,
     ManagementFeatureFlagViewSet,
     ManagementOrganizationViewSet,
@@ -20,6 +21,7 @@ router.register("plan-tiers", ManagementPlanTierCatalogViewSet, basename="manage
 router.register("services", ManagementServiceCatalogViewSet, basename="management-services")
 router.register("allowed-cities", ManagementAllowedCityViewSet, basename="management-allowed-cities")
 router.register("announcements", ManagementAnnouncementViewSet, basename="management-announcements")
+router.register("announcement-status-changes", ManagementAnnouncementStatusChangeViewSet, basename="management-announcement-status-changes")
 router.register("organizations", ManagementOrganizationViewSet, basename="management-organizations")
 
 if apps.is_installed("apps.jobs"):

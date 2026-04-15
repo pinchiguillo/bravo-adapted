@@ -14,6 +14,7 @@ from apps.management.models import FeatureFlag
 from apps.organization.models import (
     AllowedCity,
     Announcement,
+    AnnouncementStatusChange,
     Category,
     Organization,
     PlanTierCatalog,
@@ -25,6 +26,7 @@ from common.throttling import ActionScopedRateThrottleMixin
 from .serializers import (
     ManagementAllowedCitySerializer,
     ManagementAnnouncementSerializer,
+    ManagementAnnouncementStatusChangeSerializer,
     ManagementCategorySerializer,
     ManagementFeatureFlagSerializer,
     ManagementOrganizationSerializer,
@@ -44,8 +46,25 @@ class ManagementStatusActionsMixin:
 
     def _set_status(self, request, status_value):
         instance = self.get_object()
+        old_status = instance.status
         instance.status = status_value
         instance.save(update_fields=["status"])
+        
+        # Log the status change if it's an Announcement
+        if hasattr(instance, 'status_changes'):
+            from organization.models import AnnouncementStatusChange
+            reason_text = request.data.get('reason_text', '') if request.data else ''
+            reason = request.data.get('reason', 'admin_decision') if request.data else 'admin_decision'
+            
+            AnnouncementStatusChange.objects.create(
+                announcement=instance,
+                from_status=old_status,
+                to_status=status_value,
+                reason=reason,
+                reason_text=reason_text,
+                changed_by='admin',
+            )
+        
         serializer = self.get_serializer(instance)
         return Response(serializer.data, status=status.HTTP_200_OK)
 
@@ -333,8 +352,10 @@ management_announcement_status_parameter = OpenApiParameter(
         parameters=[management_announcement_search_parameter, management_announcement_status_parameter],
     ),
 )
+@extend_schema(tags=["Management / Announcements"])
 class ManagementAnnouncementViewSet(
     ManagementBypassAdminLoginMixin,
+    ManagementStatusActionsMixin,
     ActionScopedRateThrottleMixin,
     mixins.ListModelMixin,
     mixins.RetrieveModelMixin,
@@ -344,6 +365,7 @@ class ManagementAnnouncementViewSet(
 ):
     permission_classes = [IsActiveAccount, permissions.IsAdminUser]
     serializer_class = ManagementAnnouncementSerializer
+    status_serializer_class = Announcement.Status
     queryset = Announcement.objects.select_related("organization", "category").prefetch_related(
         "images", "subservices__service_catalog__category", "subservices__price_table"
     )
@@ -355,6 +377,9 @@ class ManagementAnnouncementViewSet(
         "update": "management_write",
         "partial_update": "management_write",
         "destroy": "management_write",
+        "activate": "management_write",
+        "deactivate": "management_write",
+        "suspend": "management_write",
     }
 
     def get_queryset(self):
@@ -479,3 +504,27 @@ if apps.is_installed("apps.jobs"):
             "deactivate": "management_status",
             "suspend": "management_status",
         }
+
+
+@extend_schema(tags=["Management / Announcements"])
+class ManagementAnnouncementStatusChangeViewSet(
+    mixins.ListModelMixin,
+    viewsets.GenericViewSet,
+):
+    """Read-only ViewSet for tracking announcement status changes."""
+
+    permission_classes = [IsActiveAccount, permissions.IsAdminUser]
+    serializer_class = ManagementAnnouncementStatusChangeSerializer
+    queryset = AnnouncementStatusChange.objects.select_related("announcement").order_by("-created_at")
+    filterset_fields = ["announcement__uuid", "to_status", "reason"]
+    throttle_scope_prefix = "management"
+    throttle_scope_action_map = {
+        "list": "management_read",
+    }
+
+    def get_queryset(self):
+        queryset = self.queryset
+        announcement_uuid = self.request.query_params.get("announcement__uuid")
+        if announcement_uuid:
+            queryset = queryset.filter(announcement__uuid=announcement_uuid)
+        return queryset

@@ -9,6 +9,7 @@ from apps.management.models import FeatureFlag
 from apps.organization.models import (
     AllowedCity,
     Announcement,
+    AnnouncementStatusChange,
     Category,
     Organization,
     PlanTierCatalog,
@@ -16,6 +17,7 @@ from apps.organization.models import (
 )
 from apps.organization.serializers import (
     AnnouncementSerializer,
+    AnnouncementStatusChangeSerializer,
     OrganizationRatingMixin,
     PlanTierCatalogSerializer,
 )
@@ -245,3 +247,13 @@ class ManagementAnnouncementSerializer(AnnouncementSerializer):
             "created_at",
             "updated_at",
         )
+
+
+class ManagementAnnouncementStatusChangeSerializer(AnnouncementStatusChangeSerializer):
+    class Meta(AnnouncementStatusChangeSerializer.Meta):
+        read_only_fields = list(AnnouncementStatusChangeSerializer.Meta.read_only_fields) + [
+            'from_status',
+            'to_status',
+            'changed_by',
+            'announcement',
+        ]

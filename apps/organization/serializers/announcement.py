@@ -17,9 +17,17 @@ from drf_spectacular.utils import extend_schema_field
 from PIL import Image, UnidentifiedImageError
 from rest_framework import serializers
 
-from ..models import Announcement, AnnouncementImage, Category, ServiceCatalog, Subservice
+from ..models import (
+    Announcement,
+    AnnouncementImage,
+    AnnouncementStatusChange,
+    Category,
+    ServiceCatalog,
+    ServicePrice,
+    Subservice,
+)
 from .catalog import CatalogReferenceField
-from .service import ServiceSerializer
+from .service import ServiceSerializer, SubservicePriceWriteSerializer
 
 
 def build_public_media_url(file_name, *, request=None, signed_url=None) -> str | None:
@@ -445,10 +453,11 @@ class AnnouncementSubserviceWriteSerializer(serializers.ModelSerializer):
         queryset=ServiceCatalog.objects.select_related("category"),
         slug_field="uuid",
     )
+    prices = SubservicePriceWriteSerializer(many=True, write_only=True, required=False)
 
     class Meta:
         model = Subservice
-        fields = ("service_catalog", "name", "description")
+        fields = ("service_catalog", "name", "description", "prices")
 
 
 class AnnouncementSerializer(serializers.ModelSerializer):
@@ -520,7 +529,10 @@ class AnnouncementSerializer(serializers.ModelSerializer):
         subservices = validated_data.pop("subservices", [])
         announcement = super().create(validated_data)
         for subservice_data in subservices:
-            Subservice.objects.create(announcement=announcement, **subservice_data)
+            prices_data = subservice_data.pop("prices", [])
+            subservice = Subservice.objects.create(announcement=announcement, **subservice_data)
+            for price_data in prices_data:
+                ServicePrice.objects.create(subservice=subservice, **price_data)
         return announcement
 
     @extend_schema_field(serializers.CharField(allow_null=True))
@@ -547,3 +559,21 @@ class AnnouncementSerializer(serializers.ModelSerializer):
             many=True,
             context=self.context,
         ).data
+
+
+class AnnouncementStatusChangeSerializer(serializers.ModelSerializer):
+    """Serializer for tracking announcement status changes with reasons."""
+
+    class Meta:
+        model = AnnouncementStatusChange
+        fields = [
+            'uuid',
+            'announcement',
+            'from_status',
+            'to_status',
+            'reason',
+            'reason_text',
+            'changed_by',
+            'created_at',
+        ]
+        read_only_fields = ['uuid', 'created_at']

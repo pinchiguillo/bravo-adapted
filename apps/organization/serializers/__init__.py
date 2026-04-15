@@ -5,6 +5,7 @@ from .announcement import (
     AnnouncementImageUploadRequestSerializer,
     AnnouncementImageUploadTargetSerializer,
     AnnouncementSerializer,
+    AnnouncementStatusChangeSerializer,
 )
 from .catalog import (
     AllowedCitySerializer,
@@ -32,6 +33,7 @@ __all__ = [
     "AnnouncementImageUploadRequestSerializer",
     "AnnouncementImageUploadTargetSerializer",
     "AnnouncementSerializer",
+    "AnnouncementStatusChangeSerializer",
     "CategorySerializer",
     "PlanTierCatalogSerializer",
     "OrganizationPublicSerializer",

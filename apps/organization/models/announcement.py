@@ -85,3 +85,55 @@ class AnnouncementReview(models.Model):
 
     def __str__(self):
         return f"{self.announcement_id}:review"
+
+
+class AnnouncementStatusChange(models.Model):
+    """Tracks status changes of announcements, including suspension/activation reasons."""
+
+    class ChangeReason(models.TextChoices):
+        ADMIN_DECISION = "admin_decision", "Admin Decision"
+        POLICY_VIOLATION = "policy_violation", "Policy Violation"
+        CONTENT_REVIEW = "content_review", "Content Review"
+        USER_REQUEST = "user_request", "User Request"
+        TECHNICAL_ISSUE = "technical_issue", "Technical Issue"
+        OTHER = "other", "Other"
+
+    uuid = models.UUIDField(default=uuid.uuid4, unique=True, editable=False)
+    announcement = models.ForeignKey(
+        "organization.Announcement",
+        on_delete=models.CASCADE,
+        related_name="status_changes",
+    )
+    from_status = models.CharField(
+        max_length=20,
+        choices=Announcement.Status.choices,
+    )
+    to_status = models.CharField(
+        max_length=20,
+        choices=Announcement.Status.choices,
+    )
+    reason = models.CharField(
+        max_length=50,
+        choices=ChangeReason.choices,
+        default=ChangeReason.ADMIN_DECISION,
+    )
+    reason_text = models.TextField(
+        blank=True,
+        help_text="Detailed explanation for the status change",
+    )
+    changed_by = models.CharField(
+        max_length=255,
+        default="admin",
+        help_text="User or system that performed the change",
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["-created_at", "announcement_id"]
+        indexes = [
+            models.Index(fields=["announcement", "-created_at"]),
+            models.Index(fields=["to_status", "-created_at"]),
+        ]
+
+    def __str__(self):
+        return f"{self.announcement.uuid}: {self.from_status} → {self.to_status}"
