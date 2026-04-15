@@ -1,27 +1,16 @@
 import uuid
 
-from django.apps import apps
 from django.conf import settings
 from django.db import models
-from django.db.models import Avg, DecimalField, Q, Value
+from django.db.models import DecimalField, Value
 
 
 class OrganizationQuerySet(models.QuerySet):
     def with_rating(self):
-        if not apps.is_installed("apps.jobs"):
-            return self.annotate(
-                calculated_rating=Value(
-                    None,
-                    output_field=DecimalField(max_digits=3, decimal_places=2, null=True),
-                )
-            )
         return self.annotate(
-            calculated_rating=Avg(
-                "announcements__jobs__organization_rating",
-                filter=Q(
-                    announcements__jobs__status="completed",
-                    announcements__jobs__organization_rating__isnull=False,
-                ),
+            calculated_rating=Value(
+                None,
+                output_field=DecimalField(max_digits=3, decimal_places=2, null=True),
             )
         )
 
@@ -79,9 +68,4 @@ class Organization(models.Model):
         return self.validation_bypassed() or self.is_approved
 
     def get_rating(self):
-        if not apps.is_installed("apps.jobs"):
-            return None
-        return self.announcements.filter(
-            jobs__status="completed",
-            jobs__organization_rating__isnull=False,
-        ).aggregate(rating=Avg("jobs__organization_rating"))["rating"]
+        return None
