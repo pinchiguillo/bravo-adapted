@@ -7,8 +7,6 @@ from rest_framework import serializers
 from apps.management.models import FeatureFlag
 from apps.organization.models import (
     AllowedCity,
-    Announcement,
-    AnnouncementStatusChange,
     Category,
     Organization,
     PlanTierCatalog,

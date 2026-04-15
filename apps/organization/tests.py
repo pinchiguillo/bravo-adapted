@@ -2,10 +2,8 @@ import base64
 import io
 import uuid
 from datetime import date
-from unittest import skipUnless
 from unittest.mock import patch
 
-from django.apps import apps as django_apps
 from django.contrib.auth import get_user_model
 from django.contrib.auth.models import AnonymousUser
 from django.contrib.sessions.middleware import SessionMiddleware
