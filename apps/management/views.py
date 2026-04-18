@@ -8,7 +8,9 @@ from rest_framework import mixins, permissions, status, viewsets
 from rest_framework.decorators import action
 from rest_framework.exceptions import ValidationError
 from rest_framework.response import Response
+from rest_framework.views import APIView
 
+from apps.jobs.models import Job
 from apps.management.models import FeatureFlag
 from apps.organization.models import (
     AllowedCity,
@@ -483,3 +485,56 @@ class ManagementAnnouncementStatusChangeViewSet(
         if announcement_uuid:
             queryset = queryset.filter(announcement__uuid=announcement_uuid)
         return queryset
+
+
+@extend_schema(tags=["Management / Stats"])
+class ManagementStatsView(ManagementBypassAdminLoginMixin, APIView):
+    """Returns aggregate counts for all management entities in a single request."""
+
+    permission_classes = [IsActiveAccount, permissions.IsAdminUser]
+
+    @extend_schema(
+        summary="Get management statistics",
+        description="Aggregated counts for users, organizations, announcements, jobs and catalogs.",
+    )
+    def get(self, request):
+        User = get_user_model()
+
+        return Response({
+            "users": {
+                "total": User.objects.count(),
+                "active": User.objects.filter(status="active").count(),
+                "inactive": User.objects.filter(status="inactive").count(),
+                "suspended": User.objects.filter(status="suspended").count(),
+                "email_verified": User.objects.filter(email_verified=True).count(),
+                "staff": User.objects.filter(is_staff=True).count(),
+            },
+            "organizations": {
+                "total": Organization.objects.count(),
+                "active": Organization.objects.filter(status="active").count(),
+                "inactive": Organization.objects.filter(status="inactive").count(),
+                "suspended": Organization.objects.filter(status="suspended").count(),
+            },
+            "announcements": {
+                "total": Announcement.objects.count(),
+                "active": Announcement.objects.filter(status="active").count(),
+                "draft": Announcement.objects.filter(status="draft").count(),
+                "paused": Announcement.objects.filter(status="paused").count(),
+                "closed": Announcement.objects.filter(status="closed").count(),
+                "published": Announcement.objects.filter(status="published").count(),
+            },
+            "jobs": {
+                "total": Job.objects.count(),
+                "pending": Job.objects.filter(status="pending").count(),
+                "active": Job.objects.filter(status="active").count(),
+                "completed": Job.objects.filter(status="completed").count(),
+                "rejected": Job.objects.filter(status="rejected").count(),
+                "suspended": Job.objects.filter(status="suspended").count(),
+                "inactive": Job.objects.filter(status="inactive").count(),
+            },
+            "catalogs": {
+                "categories": Category.objects.count(),
+                "services": ServiceCatalog.objects.count(),
+                "allowed_cities": AllowedCity.objects.count(),
+            },
+        })

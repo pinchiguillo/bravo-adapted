@@ -48,14 +48,18 @@ class JobChatMessage(models.Model):
 
 
 class JobChatAttachment(models.Model):
-    """Attachment in a JobChatMessage."""
+    """Attachment in a JobChatMessage, backed by an Asset in S3."""
 
     id = models.AutoField(primary_key=True)
     uuid = models.UUIDField(unique=True, default=uuid.uuid4)
     message = models.ForeignKey(
         JobChatMessage, on_delete=models.CASCADE, related_name="attachments"
     )
-    file = models.FileField(upload_to="job_chat_attachments/%Y/%m/%d/")
+    asset = models.ForeignKey(
+        "assets.Asset",
+        on_delete=models.PROTECT,
+        related_name="job_chat_attachments",
+    )
     created_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:

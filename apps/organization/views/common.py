@@ -1,5 +1,6 @@
 import uuid
 
+from django.conf import settings
 from django.db.models import Q
 from drf_spectacular.utils import OpenApiParameter
 from rest_framework.exceptions import NotFound, PermissionDenied, ValidationError
@@ -227,6 +228,8 @@ class OrganizationVisibilityMixin:
         return organization
 
     def ensure_organization_is_approved_for_write(self, organization):
+        if getattr(settings, "BYPASS_ORGANIZATION_VALIDATION", False):
+            return
         if not organization.is_validated:
             raise PermissionDenied("Organization must be approved for this action.")
 

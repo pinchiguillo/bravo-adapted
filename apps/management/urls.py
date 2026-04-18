@@ -1,3 +1,4 @@
+from django.urls import path
 from rest_framework.routers import DefaultRouter
 
 from .views import (
@@ -9,6 +10,7 @@ from .views import (
     ManagementOrganizationViewSet,
     ManagementPlanTierCatalogViewSet,
     ManagementServiceCatalogViewSet,
+    ManagementStatsView,
     ManagementUserViewSet,
 )
 
@@ -27,4 +29,6 @@ router.register(
 )
 router.register("organizations", ManagementOrganizationViewSet, basename="management-organizations")
 
-urlpatterns = router.urls
+urlpatterns = router.urls + [
+    path("stats/", ManagementStatsView.as_view(), name="management-stats"),
+]
