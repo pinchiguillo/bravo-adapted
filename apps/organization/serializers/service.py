@@ -1,8 +1,36 @@
+from datetime import date
+
 from drf_spectacular.utils import extend_schema_field
 from rest_framework import serializers
 
 from ..models import Announcement, ServiceCatalog, ServicePrice, Subservice
 from .catalog import CatalogReferenceField, CategorySerializer
+
+
+class SubservicePriceWriteSerializer(serializers.ModelSerializer):
+    """Serializer for creating service prices during subservice creation."""
+
+    class Meta:
+        model = ServicePrice
+        fields = ("amount", "currency", "charging_type", "effective_from", "effective_to")
+
+    def validate_currency(self, value):
+        if not value:
+            return "EUR"
+        return value.upper()
+
+    def validate_effective_to(self, value):
+        if value is not None and value < date.today():
+            raise serializers.ValidationError("effective_to must be today or in the future.")
+        return value
+
+    def validate(self, attrs):
+        attrs = super().validate(attrs)
+        if attrs.get("effective_to") and attrs.get("effective_to") < attrs.get("effective_from"):
+            raise serializers.ValidationError(
+                {"effective_to": "effective_to must be after or equal to effective_from."}
+            )
+        return attrs
 
 
 class ServicePriceSerializer(serializers.ModelSerializer):

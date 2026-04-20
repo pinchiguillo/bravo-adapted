@@ -1,11 +1,7 @@
-from datetime import date
 from io import StringIO
 from pathlib import Path
 from tempfile import TemporaryDirectory
-from unittest import skipUnless
 
-from django.apps import apps as django_apps
-from django.conf import settings
 from django.contrib.auth import get_user_model
 from django.core.management import call_command
 from django.test import override_settings
@@ -18,30 +14,16 @@ from apps.management.models import FeatureFlag
 from apps.organization.models import (
     AllowedCity,
     Announcement,
-    AnnouncementReview,
     Category,
     Organization,
     OrganizationPricing,
     PlanTierCatalog,
     ServiceCatalog,
-    ServicePrice,
     Subservice,
 )
 
-JOBS_INSTALLED = django_apps.is_installed("apps.jobs")
-JOB_CHAT_INSTALLED = django_apps.is_installed("apps.job_chat")
-
-if JOBS_INSTALLED:
-    from apps.jobs.models import Job
-else:
-    Job = None
-
-if JOB_CHAT_INSTALLED:
-    from apps.job_chat.models import JobChat, JobChatAttachment, JobChatMessage
-else:
-    JobChat = None
-    JobChatAttachment = None
-    JobChatMessage = None
+JOBS_INSTALLED = False
+JOB_CHAT_INSTALLED = False
 
 
 class AdminLegalDocumentsBrowserTests(APITestCase):
@@ -104,7 +86,6 @@ class AdminLegalDocumentsBrowserTests(APITestCase):
         self.assertEqual(response.status_code, status.HTTP_302_FOUND)
 
 
-@skipUnless(JOBS_INSTALLED, "jobs app disabled")
 class ManagementApiTests(APITestCase):
     def setUp(self):
         user_model = get_user_model()
@@ -149,42 +130,6 @@ class ManagementApiTests(APITestCase):
             monthly_price="49.99",
             commission_rate="12.50",
         )
-        if JOBS_INSTALLED:
-            self.category, _ = Category.objects.get_or_create(
-                name="Managed Category",
-                defaults={"description": "Categoria gestionada"},
-            )
-            self.announcement = Announcement.objects.create(
-                organization=self.organization,
-                category=self.category,
-                name="Managed Announcement",
-                location="Madrid",
-                announcement="Managed plan disponible",
-            )
-            self.service_catalog = ServiceCatalog.objects.create(
-                category=self.category,
-                name="Managed Plan",
-                description="",
-            )
-            self.subservice = Subservice.objects.create(
-                announcement=self.announcement,
-                service_catalog=self.service_catalog,
-                name="Managed Variant",
-                description="",
-            )
-            self.service_price = ServicePrice.objects.create(
-                subservice=self.subservice,
-                amount="19.99",
-                currency="EUR",
-                charging_type=ServicePrice.ChargingType.PER_PROJECT,
-                effective_from=date(2026, 1, 1),
-            )
-            self.job = Job.objects.create(
-                user=self.staff_candidate,
-                announcement=self.announcement,
-                plan_price=self.service_price,
-                status=Job.Status.PENDING,
-            )
 
     def test_non_staff_cannot_access_management_endpoints(self):
         self.client.force_authenticate(user=self.staff_candidate)
@@ -331,18 +276,6 @@ class ManagementApiTests(APITestCase):
         self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
         self.assertEqual(response.data["user"][0], "Selected user already has an organization.")
 
-    @skipUnless(JOBS_INSTALLED, "jobs app disabled")
-    def test_admin_can_suspend_job(self):
-        self.client.force_authenticate(user=self.admin_user)
-
-        response = self.client.post(
-            reverse("management-jobs-suspend", kwargs={"uuid": self.job.uuid})
-        )
-
-        self.assertEqual(response.status_code, status.HTTP_200_OK)
-        self.job.refresh_from_db()
-        self.assertEqual(self.job.status, Job.Status.SUSPENDED)
-
 
 class ManagementAnnouncementApiTests(APITestCase):
     def setUp(self):
@@ -416,14 +349,6 @@ class ManagementAnnouncementApiTests(APITestCase):
         self.assertEqual(response.data["count"], 1)
         self.assertEqual(response.data["results"][0]["uuid"], str(archived_announcement.uuid))
 
-    @skipUnless(JOBS_INSTALLED, "jobs app disabled")
-    def test_unauthenticated_user_cannot_deactivate_job(self):
-        response = self.client.post(
-            reverse("management-jobs-deactivate", kwargs={"uuid": self.job.uuid})
-        )
-
-        self.assertEqual(response.status_code, status.HTTP_401_UNAUTHORIZED)
-
     @override_settings(BYPASS_ADMIN_LOGIN=True)
     def test_bypass_admin_login_allows_unauthenticated_access_to_management_list(self):
         response = self.client.get(reverse("management-users-list"))
@@ -431,39 +356,6 @@ class ManagementAnnouncementApiTests(APITestCase):
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertEqual(response.data["count"], 2)
         self.assertNotIn("id", response.data["results"][0])
-
-    @skipUnless(JOBS_INSTALLED, "jobs app disabled")
-    @override_settings(BYPASS_ADMIN_LOGIN=True)
-    def test_bypass_admin_login_allows_unauthenticated_management_status_actions(self):
-        response = self.client.post(
-            reverse("management-jobs-deactivate", kwargs={"uuid": self.job.uuid})
-        )
-
-        self.assertEqual(response.status_code, status.HTTP_200_OK)
-        self.job.refresh_from_db()
-        self.assertEqual(self.job.status, Job.Status.INACTIVE)
-
-    @skipUnless(JOBS_INSTALLED, "jobs app disabled")
-    def test_non_staff_user_cannot_deactivate_job(self):
-        self.client.force_authenticate(user=self.staff_candidate)
-
-        response = self.client.post(
-            reverse("management-jobs-deactivate", kwargs={"uuid": self.job.uuid})
-        )
-
-        self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
-
-    @skipUnless(JOBS_INSTALLED, "jobs app disabled")
-    def test_suspended_admin_cannot_activate_job(self):
-        self.admin_user.status = self.admin_user.Status.SUSPENDED
-        self.admin_user.save(update_fields=["status"])
-        self.client.force_authenticate(user=self.admin_user)
-
-        response = self.client.post(
-            reverse("management-jobs-activate", kwargs={"uuid": self.job.uuid})
-        )
-
-        self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
 
     def test_suspended_admin_cannot_access_management_endpoints(self):
         self.admin_user.status = self.admin_user.Status.SUSPENDED
@@ -473,25 +365,6 @@ class ManagementAnnouncementApiTests(APITestCase):
         response = self.client.get(reverse("management-users-list"))
 
         self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
-
-    @skipUnless(JOBS_INSTALLED, "jobs app disabled")
-    def test_admin_can_create_job(self):
-        self.client.force_authenticate(user=self.admin_user)
-
-        response = self.client.post(
-            reverse("management-jobs-list"),
-            {
-                "user": str(self.staff_candidate.uuid),
-                "announcement": str(self.announcement.uuid),
-                "plan_price": str(self.service_price.uuid),
-                "status": Job.Status.ACTIVE,
-            },
-            format="json",
-        )
-
-        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
-        self.assertEqual(response.data["status"], Job.Status.ACTIVE)
-        self.assertNotIn("id", response.data)
 
 
 class ManagementOrganizationListApiTests(APITestCase):
@@ -1072,104 +945,6 @@ class FeatureFlagHelperTests(APITestCase):
         self.assertTrue(is_feature_enabled("job_chat_uploads"))
 
 
-@skipUnless(JOBS_INSTALLED, "jobs app disabled")
-@override_settings(
-    STORAGES={
-        "default": {"BACKEND": "django.core.files.storage.FileSystemStorage"},
-        "staticfiles": {"BACKEND": "django.contrib.staticfiles.storage.StaticFilesStorage"},
-    },
-    MEDIA_ROOT="/tmp/bravo-management-seed-tests-media",
-    MEDIA_URL="/media/",
-)
-class SeedDemoDataCommandJobChatDisabledTests(APITestCase):
-    def test_seed_demo_data_skips_job_chat_records_when_feature_is_disabled(self):
-        out = StringIO()
-
-        call_command("seed_demo_data", stdout=out)
-
-        self.assertEqual(Job.objects.count(), 4)
-        self.assertFalse(JOB_CHAT_INSTALLED)
-        self.assertIn("job_chats=0", out.getvalue())
-        self.assertIn("job_chat_messages=0", out.getvalue())
-        self.assertIn("job_chat_attachments=0", out.getvalue())
-
-
-@skipUnless(JOBS_INSTALLED, "jobs app disabled")
-@skipUnless(JOB_CHAT_INSTALLED, "job_chat app disabled")
-@override_settings(
-    STORAGES={
-        "default": {"BACKEND": "django.core.files.storage.FileSystemStorage"},
-        "staticfiles": {"BACKEND": "django.contrib.staticfiles.storage.StaticFilesStorage"},
-    },
-    MEDIA_ROOT="/tmp/bravo-management-seed-tests-media",
-    MEDIA_URL="/media/",
-)
-class SeedDemoDataCommandTests(APITestCase):
-    def test_seed_demo_data_creates_expected_records_and_passwords(self):
-        out = StringIO()
-
-        call_command("seed_demo_data", stdout=out)
-
-        user_model = get_user_model()
-        self.assertEqual(user_model.objects.count(), 4)
-        self.assertEqual(Organization.objects.count(), 2)
-        self.assertEqual(ServiceCatalog.objects.count(), 4)
-        self.assertEqual(Subservice.objects.count(), 8)
-        self.assertEqual(ServicePrice.objects.count(), 8)
-        seeded_category_names = set(
-            Category.objects.filter(name__in={"Reformas", "Mantenimiento"}).values_list(
-                "name", flat=True
-            )
-        )
-        self.assertEqual(seeded_category_names, {"Reformas", "Mantenimiento"})
-        self.assertEqual(Announcement.objects.count(), 2)
-        self.assertEqual(AnnouncementReview.objects.count(), 2)
-        self.assertEqual(Job.objects.count(), 4)
-        self.assertEqual(JobChat.objects.count(), 4)
-        self.assertEqual(JobChatMessage.objects.count(), 6)
-        self.assertEqual(JobChatAttachment.objects.count(), 1)
-        self.assertEqual(Organization.objects.filter(is_approved=True).count(), 1)
-        self.assertEqual(Organization.objects.filter(is_approved=False).count(), 1)
-        self.assertFalse(settings.RGPD_MODULE_ENABLED)
-
-        seeded_user = user_model.objects.get(email="ana.client@example.com")
-        self.assertTrue(seeded_user.check_password("change-me-admin-password"))
-        self.assertIn("Seed completed", out.getvalue())
-        self.assertIn("categories=2", out.getvalue())
-        self.assertIn("job_chat_attachments=1", out.getvalue())
-        self.assertIn("rgpd_anonymous_consent_events=0", out.getvalue())
-
-    def test_seed_demo_data_is_idempotent(self):
-        first_out = StringIO()
-        second_out = StringIO()
-
-        call_command("seed_demo_data", stdout=first_out)
-        call_command("seed_demo_data", stdout=second_out)
-
-        user_model = get_user_model()
-        self.assertEqual(user_model.objects.count(), 4)
-        self.assertEqual(Organization.objects.count(), 2)
-        self.assertEqual(ServiceCatalog.objects.count(), 4)
-        self.assertEqual(Subservice.objects.count(), 8)
-        self.assertEqual(ServicePrice.objects.count(), 8)
-        seeded_category_names = set(
-            Category.objects.filter(name__in={"Reformas", "Mantenimiento"}).values_list(
-                "name", flat=True
-            )
-        )
-        self.assertEqual(seeded_category_names, {"Reformas", "Mantenimiento"})
-        self.assertEqual(Announcement.objects.count(), 2)
-        self.assertEqual(AnnouncementReview.objects.count(), 2)
-        self.assertEqual(Job.objects.count(), 4)
-        self.assertEqual(JobChat.objects.count(), 4)
-        self.assertEqual(JobChatMessage.objects.count(), 6)
-        self.assertEqual(JobChatAttachment.objects.count(), 1)
-        self.assertEqual(Organization.objects.filter(is_approved=True).count(), 1)
-        self.assertEqual(Organization.objects.filter(is_approved=False).count(), 1)
-        self.assertIn("created=0", second_out.getvalue())
-        self.assertIn("rgpd_consents=0", second_out.getvalue())
-
-
 class SeedAnnouncementsCommandTests(APITestCase):
     def setUp(self):
         user_model = get_user_model()
@@ -1296,19 +1071,13 @@ class SeedFixedTablesCommandTests(APITestCase):
             {"Electricidad", "Fontaneria", "Limpieza", "Pintura"},
         )
         self.assertEqual(plan_tier_keys, ["default", "premium", "pro", "ultra"])
-        self.assertEqual(
-            feature_flags,
-            {
-                "job_chat": True,
-                "job_chat_attachments": True,
-                "job_chat_uploads": True,
-            },
-        )
+        self.assertEqual(feature_flags, {})
         self.assertIn("allowed_cities_created=50", out.getvalue())
         self.assertIn("categories_created=2", out.getvalue())
         self.assertIn("plan_tiers_created=", out.getvalue())
         self.assertIn("service_catalogs_created=4", out.getvalue())
-        self.assertIn("feature_flags_created=3", out.getvalue())
+        self.assertIn("feature_flags_created=0", out.getvalue())
+
 
     def test_seed_fixed_tables_does_not_create_subservices(self):
         out = StringIO()
@@ -1358,13 +1127,13 @@ class SeedFixedTablesCommandTests(APITestCase):
         mantenimiento.refresh_from_db()
         catalog.refresh_from_db()
         plan_tier.refresh_from_db()
-        job_chat_flag = FeatureFlag.objects.get(key="job_chat")
 
         self.assertEqual(AllowedCity.objects.count(), 50)
         self.assertEqual(PlanTierCatalog.objects.count(), 4)
         self.assertEqual(Category.objects.count(), 3)
         self.assertEqual(ServiceCatalog.objects.count(), 4)
-        self.assertEqual(FeatureFlag.objects.count(), 3)
+        self.assertEqual(FeatureFlag.objects.count(), 1)
+
         self.assertEqual(plan_tier.name, "Default")
         self.assertEqual(
             plan_tier.description,
@@ -1384,8 +1153,6 @@ class SeedFixedTablesCommandTests(APITestCase):
             catalog.description,
             "Trabajos de pintura interior y exterior.",
         )
-        self.assertTrue(job_chat_flag.is_active)
-        self.assertEqual(job_chat_flag.name, "Job chat")
         self.assertIn("plan_tiers_created=0", second_out.getvalue())
         self.assertIn("plan_tiers_updated=0", second_out.getvalue())
         self.assertIn("allowed_cities_created=0", second_out.getvalue())

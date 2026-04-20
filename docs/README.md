@@ -1,38 +1,37 @@
-# Índice de documentación
+# Documentation
 
-Este directorio se mantiene con una estructura lógica por dominios para facilitar navegación y mantenimiento.
+Documentación oficial del backend Bravo.
 
-## 1) Operación y entorno
+## Quick Start
 
-- [Setup de desarrollo](setup-dev-env.md)
-- [Variables de entorno](environment-variables.md)
-- [Operación diaria](operacion.md)
-- [Storage S3 para archivos](s3-storage.md)
+- **[GETTING_STARTED.md](./GETTING_STARTED.md)** — Arranque inicial en 5 minutos
+- **[ARCHITECTURE.md](./ARCHITECTURE.md)** — Visión general del sistema
+- **[ENVIRONMENT.md](./ENVIRONMENT.md)** — Variables de entorno
 
-## 2) Arquitectura y módulos
+## Reference
 
-- [Arquitectura](arquitectura.md)
+- **[WEBSOCKETS.md](./WEBSOCKETS.md)** — Contratos WebSocket (search, chat)
+- **[OPERATIONS.md](./OPERATIONS.md)** — Troubleshooting y producción
+- **[STORAGE.md](./STORAGE.md)** — S3 y LocalStack
+- **[WORKFLOW.md](./WORKFLOW.md)** — GitFlow, CI/CD, versionado
 
-## 3) API y contratos
+## API
 
-- [Swagger OpenAPI (YAML)](swagger.yaml)
-- [Swagger estático (HTML)](swagger.html)
-- [WS Auth Token Strategy](ws-auth-token-strategy.md)
-- [WS Organization Search](ws-organization-search.md)
+- **[swagger.yaml](./swagger.yaml)** — OpenAPI schema
+- **[swagger.html](./swagger.html)** — OpenAPI viewer (static)
+- **Swagger Live**: `http://localhost:8000/api/docs/` (desarrollo)
 
-## 4) Flujo de repositorio y release
+## History
 
-- [Workflow de ramas, CI/CD y versionado](workflow.md)
-
-## 5) Reportes técnicos
-
-- [Dev reports](devreports/README.md)
+- **[CHANGELOG.md](./CHANGELOG.md)** — Historial de cambios por versión
+- **[devreports/](./devreports/)** — Reportes técnicos históricos
 
 ---
 
-## Criterios de mantenimiento
+## Principios de Mantenimiento
 
-- Un tema debe tener un único documento canónico (fuente de verdad).
-- Si hay contenido histórico o de transición, debe indicarse explícitamente.
-- Evitar duplicar comandos entre documentos; enlazar al documento canónico.
-- Nuevos reportes de implementación deben ir a `devreports/` con prefijo de fecha `YYYY-MM-DD-...`.
+- **Fuente única de verdad**: cada tema en un documento, sin duplicación
+- **Progressive disclosure**: Getting Started → Architecture → Reference → Advanced
+- **Links**: enlazar, no copiar/pegar
+- **Changelog**: registrar cambios significativos, sin acumular notas
+- **Reportes técnicos**: ir a `devreports/YYYY-MM-DD-tema.md` para decisiones históricas

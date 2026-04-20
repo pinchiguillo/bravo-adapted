@@ -1,6 +1,8 @@
 from django.urls import path
 from rest_framework.routers import DefaultRouter
 
+from apps.jobs.views import create_announcement_job
+
 from .views import (
     AllowedCityViewSet,
     AnnouncementImageViewSet,
@@ -80,6 +82,11 @@ urlpatterns = [
         "announcements/<uuid:uuid>/",
         public_announcement_detail,
         name="public-announcement-detail",
+    ),
+    path(
+        "announcements/<uuid:announcement_uuid>/jobs/",
+        create_announcement_job,
+        name="announcement-job-create",
     ),
     path(
         "announcements/<uuid:uuid>/images/<uuid:image_uuid>/base64/",

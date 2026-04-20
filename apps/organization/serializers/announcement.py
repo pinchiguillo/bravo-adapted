@@ -1,10 +1,7 @@
-import io
 import mimetypes
 import os
 import uuid
 from collections import OrderedDict
-from datetime import timedelta
-from urllib.parse import urlsplit
 
 from django.conf import settings
 from django.core import signing
@@ -12,37 +9,27 @@ from django.db import transaction
 from django.db.models import Min
 from django.urls import reverse
 from django.utils import timezone
-from django.utils.encoding import filepath_to_uri
 from drf_spectacular.utils import extend_schema_field
-from PIL import Image, UnidentifiedImageError
 from rest_framework import serializers
 
-from ..models import Announcement, AnnouncementImage, Category, ServiceCatalog, Subservice
+from apps.assets.services import (
+    build_public_media_url,
+    cleanup_expired_pending_files,
+    generate_presigned_upload_url,
+    move_pending_to_confirmed,
+)
+
+from ..models import (
+    Announcement,
+    AnnouncementImage,
+    AnnouncementStatusChange,
+    Category,
+    ServiceCatalog,
+    ServicePrice,
+    Subservice,
+)
 from .catalog import CatalogReferenceField
-from .service import ServiceSerializer
-
-
-def build_public_media_url(file_name, *, request=None, signed_url=None) -> str | None:
-    if not file_name:
-        return None
-
-    media_url = getattr(settings, "MEDIA_URL", "")
-    query = ""
-    if signed_url:
-        query = urlsplit(signed_url).query
-
-    if media_url:
-        url = f"{media_url.rstrip('/')}/{filepath_to_uri(file_name).lstrip('/')}"
-        if query:
-            url = f"{url}?{query}"
-    elif signed_url:
-        url = signed_url
-    else:
-        return None
-
-    if request is None or not url.startswith("/"):
-        return url
-    return request.build_absolute_uri(url)
+from .service import ServiceSerializer, SubservicePriceWriteSerializer
 
 
 def build_announcement_image_upload_token(payload):
@@ -69,60 +56,6 @@ def build_pending_announcement_image_name(announcement, filename):
 def build_final_announcement_image_name(image_instance, filename):
     field = AnnouncementImage._meta.get_field("image")
     return field.generate_filename(image_instance, filename)
-
-
-def cleanup_expired_pending_announcement_images(storage):
-    if not hasattr(storage, "bucket_name") or not hasattr(storage, "connection"):
-        return
-
-    max_age = getattr(settings, "ORGANIZATION_ANNOUNCEMENT_IMAGE_PENDING_MAX_AGE_SECONDS", 3600)
-    if max_age <= 0:
-        return
-
-    cutoff = timezone.now() - timedelta(seconds=max_age)
-    client = storage.connection.meta.client
-    paginator = client.get_paginator("list_objects_v2")
-    pending_keys = []
-    for page in paginator.paginate(
-        Bucket=storage.bucket_name,
-        Prefix="organization-announcements-pending/",
-    ):
-        for obj in page.get("Contents", []):
-            last_modified = obj.get("LastModified")
-            if last_modified is None:
-                continue
-            if timezone.is_naive(last_modified):
-                last_modified = timezone.make_aware(last_modified)
-            if last_modified <= cutoff:
-                pending_keys.append({"Key": obj["Key"]})
-
-    while pending_keys:
-        chunk = pending_keys[:1000]
-        pending_keys = pending_keys[1000:]
-        client.delete_objects(
-            Bucket=storage.bucket_name,
-            Delete={"Objects": chunk, "Quiet": True},
-        )
-
-
-def validate_uploaded_announcement_image_content(file_bytes, expected_content_type):
-    sample = file_bytes[:512]
-    if expected_content_type == "image/png" and not sample.startswith(b"\x89PNG\r\n\x1a\n"):
-        raise serializers.ValidationError({"upload_token": "Uploaded file is not a valid PNG image."})
-    if expected_content_type == "image/jpeg" and not sample.startswith(b"\xff\xd8\xff"):
-        raise serializers.ValidationError({"upload_token": "Uploaded file is not a valid JPEG image."})
-
-    try:
-        with Image.open(io.BytesIO(file_bytes)) as image:
-            image.verify()
-    except (UnidentifiedImageError, OSError) as exc:
-        raise serializers.ValidationError({"upload_token": "Uploaded file is not a valid image."}) from exc
-
-
-def delete_pending_announcement_image(storage, file_name):
-    if not file_name or not hasattr(storage, "bucket_name") or not hasattr(storage, "connection"):
-        return
-    storage.connection.meta.client.delete_object(Bucket=storage.bucket_name, Key=file_name)
 
 
 class AnnouncementImageSerializer(serializers.ModelSerializer):
@@ -278,7 +211,11 @@ class AnnouncementImageUploadRequestSerializer(serializers.Serializer):
         if not hasattr(storage, "bucket_name") or not hasattr(storage, "connection"):
             raise serializers.ValidationError("Direct upload is not supported by the configured storage.")
 
-        cleanup_expired_pending_announcement_images(storage)
+        cleanup_expired_pending_files(
+            storage,
+            prefix="organization-announcements-pending/",
+            max_age_seconds=settings.ORGANIZATION_ANNOUNCEMENT_IMAGE_PENDING_MAX_AGE_SECONDS,
+        )
         pending_name = build_pending_announcement_image_name(announcement, validated_data["filename"])
         final_name = storage.get_available_name(
             build_final_announcement_image_name(
@@ -287,16 +224,11 @@ class AnnouncementImageUploadRequestSerializer(serializers.Serializer):
             )
         )
 
-        client = storage.connection.meta.client
-        signed_upload_url = client.generate_presigned_url(
-            "put_object",
-            Params={
-                "Bucket": storage.bucket_name,
-                "Key": pending_name,
-                "ContentType": validated_data["content_type"],
-            },
-            ExpiresIn=ttl_seconds,
-            HttpMethod="PUT",
+        signed_upload_url = generate_presigned_upload_url(
+            storage,
+            key=pending_name,
+            content_type=validated_data["content_type"],
+            ttl_seconds=ttl_seconds,
         )
         upload_token = build_announcement_image_upload_token(
             {
@@ -389,49 +321,14 @@ class AnnouncementImageUploadCompleteSerializer(serializers.Serializer):
         announcement = self.context["announcement"]
         field = AnnouncementImage._meta.get_field("image")
         storage = field.storage
-        client = storage.connection.meta.client
 
-        try:
-            head = client.head_object(Bucket=storage.bucket_name, Key=payload["pending_file_name"])
-        except client.exceptions.NoSuchKey as exc:
-            raise serializers.ValidationError({"upload_token": self.error_messages["missing_object"]}) from exc
-        except client.exceptions.ClientError as exc:
-            error_code = exc.response.get("Error", {}).get("Code")
-            if error_code in {"404", "NoSuchKey", "NotFound"}:
-                raise serializers.ValidationError(
-                    {"upload_token": self.error_messages["missing_object"]}
-                ) from exc
-            raise
-
-        if int(head.get("ContentLength", 0)) != int(payload["size_bytes"]):
-            delete_pending_announcement_image(storage, payload["pending_file_name"])
-            raise serializers.ValidationError({"upload_token": self.error_messages["mismatched_size"]})
-        if str(head.get("ContentType", "")).lower() != str(payload["content_type"]).lower():
-            delete_pending_announcement_image(storage, payload["pending_file_name"])
-            raise serializers.ValidationError({"upload_token": self.error_messages["mismatched_type"]})
-
-        uploaded_object = client.get_object(
-            Bucket=storage.bucket_name,
-            Key=payload["pending_file_name"],
+        move_pending_to_confirmed(
+            storage,
+            pending_key=payload["pending_file_name"],
+            final_key=payload["final_file_name"],
+            content_type=payload["content_type"],
+            expected_size=payload["size_bytes"],
         )
-        file_bytes = uploaded_object["Body"].read()
-        try:
-            validate_uploaded_announcement_image_content(file_bytes, payload["content_type"])
-        except serializers.ValidationError:
-            delete_pending_announcement_image(storage, payload["pending_file_name"])
-            raise
-
-        client.copy_object(
-            Bucket=storage.bucket_name,
-            CopySource={
-                "Bucket": storage.bucket_name,
-                "Key": payload["pending_file_name"],
-            },
-            Key=payload["final_file_name"],
-            ContentType=payload["content_type"],
-            MetadataDirective="REPLACE",
-        )
-        client.delete_object(Bucket=storage.bucket_name, Key=payload["pending_file_name"])
 
         image = AnnouncementImage.objects.create(
             announcement=announcement,
@@ -445,10 +342,11 @@ class AnnouncementSubserviceWriteSerializer(serializers.ModelSerializer):
         queryset=ServiceCatalog.objects.select_related("category"),
         slug_field="uuid",
     )
+    prices = SubservicePriceWriteSerializer(many=True, write_only=True, required=False)
 
     class Meta:
         model = Subservice
-        fields = ("service_catalog", "name", "description")
+        fields = ("service_catalog", "name", "description", "prices")
 
 
 class AnnouncementSerializer(serializers.ModelSerializer):
@@ -520,7 +418,10 @@ class AnnouncementSerializer(serializers.ModelSerializer):
         subservices = validated_data.pop("subservices", [])
         announcement = super().create(validated_data)
         for subservice_data in subservices:
-            Subservice.objects.create(announcement=announcement, **subservice_data)
+            prices_data = subservice_data.pop("prices", [])
+            subservice = Subservice.objects.create(announcement=announcement, **subservice_data)
+            for price_data in prices_data:
+                ServicePrice.objects.create(subservice=subservice, **price_data)
         return announcement
 
     @extend_schema_field(serializers.CharField(allow_null=True))
@@ -547,3 +448,21 @@ class AnnouncementSerializer(serializers.ModelSerializer):
             many=True,
             context=self.context,
         ).data
+
+
+class AnnouncementStatusChangeSerializer(serializers.ModelSerializer):
+    """Serializer for tracking announcement status changes with reasons."""
+
+    class Meta:
+        model = AnnouncementStatusChange
+        fields = [
+            'uuid',
+            'announcement',
+            'from_status',
+            'to_status',
+            'reason',
+            'reason_text',
+            'changed_by',
+            'created_at',
+        ]
+        read_only_fields = ['uuid', 'created_at']

@@ -153,6 +153,8 @@ AWS_LEGAL_DOCUMENTS_BUCKET_NAME = os.getenv(
     "AWS_LEGAL_DOCUMENTS_BUCKET_NAME",
     f"{AWS_STORAGE_BUCKET_NAME}-legal",
 )
+AWS_S3_PUBLIC_URL = os.getenv("AWS_S3_PUBLIC_URL", "")
+AWS_S3_PRESIGNED_URL_ENDPOINT = os.getenv("AWS_S3_PRESIGNED_URL_ENDPOINT", "")
 MEDIA_PUBLIC_BASE_URL = os.getenv("MEDIA_PUBLIC_BASE_URL", "/s3")
 LEGAL_DOCUMENTS_UPLOAD_PREFIX = os.getenv(
     "LEGAL_DOCUMENTS_UPLOAD_PREFIX",
@@ -265,6 +267,9 @@ INSTALLED_APPS = [
     'apps.auth.apps.AuthConfig',
     'apps.organization.apps.OrganizationConfig',
     'apps.management.apps.ManagementConfig',
+    'apps.jobs.apps.JobsConfig',
+    'apps.job_chat.apps.JobChatConfig',
+    'apps.assets.apps.AssetsConfig',
 ]
 
 if RGPD_MODULE_ENABLED:
@@ -402,6 +407,8 @@ if USE_S3_STORAGE:
     }
     if MEDIA_PUBLIC_BASE_URL:
         MEDIA_URL = f"{MEDIA_PUBLIC_BASE_URL.rstrip('/')}/{AWS_STORAGE_BUCKET_NAME}/"
+    elif AWS_S3_PUBLIC_URL:
+        MEDIA_URL = f"{AWS_S3_PUBLIC_URL.rstrip('/')}/{AWS_STORAGE_BUCKET_NAME}/"
     elif AWS_S3_ENDPOINT_URL:
         MEDIA_URL = f"{AWS_S3_ENDPOINT_URL.rstrip('/')}/{AWS_STORAGE_BUCKET_NAME}/"
     else:
@@ -440,11 +447,6 @@ REST_FRAMEWORK = {
         ),
         "organization_write": os.getenv("ORGANIZATION_WRITE_THROTTLE_RATE", "30/minute"),
         "organization_admin": os.getenv("ORGANIZATION_ADMIN_THROTTLE_RATE", "30/minute"),
-        "jobs_default": os.getenv("JOBS_DEFAULT_THROTTLE_RATE", "60/minute"),
-        "jobs_read": os.getenv("JOBS_READ_THROTTLE_RATE", "120/minute"),
-        "jobs_write": os.getenv("JOBS_WRITE_THROTTLE_RATE", "30/minute"),
-        "jobs_messages": os.getenv("JOBS_MESSAGES_THROTTLE_RATE", "30/minute"),
-        "jobs_attachments": os.getenv("JOBS_ATTACHMENTS_THROTTLE_RATE", "10/minute"),
         "rgpd_authenticated_read": os.getenv("RGPD_AUTHENTICATED_READ_THROTTLE_RATE", "120/minute"),
         "rgpd_authenticated_write": os.getenv("RGPD_AUTHENTICATED_WRITE_THROTTLE_RATE", "30/minute"),
         "rgpd_anonymous_write": os.getenv("RGPD_ANONYMOUS_WRITE_THROTTLE_RATE", "20/minute"),
@@ -465,9 +467,6 @@ spectacular_enum_name_overrides = {
     "ActiveStateStatusEnum": "apps.auth.models.CustomUser.Status",
     "AnnouncementStatusEnum": "apps.organization.models.announcement.Announcement.Status",
 }
-
-if "apps.jobs" in INSTALLED_APPS:
-    spectacular_enum_name_overrides["JobStatusEnum"] = "apps.jobs.models.Job.Status"
 
 SPECTACULAR_SETTINGS = {
     "TITLE": "Bravo API",

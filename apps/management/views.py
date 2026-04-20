@@ -1,6 +1,5 @@
 import uuid
 
-from django.apps import apps
 from django.conf import settings
 from django.contrib.auth import get_user_model
 from django.db.models import Q
@@ -9,11 +8,14 @@ from rest_framework import mixins, permissions, status, viewsets
 from rest_framework.decorators import action
 from rest_framework.exceptions import ValidationError
 from rest_framework.response import Response
+from rest_framework.views import APIView
 
+from apps.jobs.models import Job
 from apps.management.models import FeatureFlag
 from apps.organization.models import (
     AllowedCity,
     Announcement,
+    AnnouncementStatusChange,
     Category,
     Organization,
     PlanTierCatalog,
@@ -25,6 +27,7 @@ from common.throttling import ActionScopedRateThrottleMixin
 from .serializers import (
     ManagementAllowedCitySerializer,
     ManagementAnnouncementSerializer,
+    ManagementAnnouncementStatusChangeSerializer,
     ManagementCategorySerializer,
     ManagementFeatureFlagSerializer,
     ManagementOrganizationSerializer,
@@ -33,19 +36,31 @@ from .serializers import (
     ManagementUserSerializer,
 )
 
-if apps.is_installed("apps.jobs"):
-    from apps.jobs.models import Job
-
-    from .serializers import ManagementJobSerializer
-
 
 class ManagementStatusActionsMixin:
     status_serializer_class = None
 
     def _set_status(self, request, status_value):
         instance = self.get_object()
+        old_status = instance.status
         instance.status = status_value
         instance.save(update_fields=["status"])
+        
+        # Log the status change if it's an Announcement
+        if hasattr(instance, 'status_changes'):
+            from organization.models import AnnouncementStatusChange
+            reason_text = request.data.get('reason_text', '') if request.data else ''
+            reason = request.data.get('reason', 'admin_decision') if request.data else 'admin_decision'
+            
+            AnnouncementStatusChange.objects.create(
+                announcement=instance,
+                from_status=old_status,
+                to_status=status_value,
+                reason=reason,
+                reason_text=reason_text,
+                changed_by='admin',
+            )
+        
         serializer = self.get_serializer(instance)
         return Response(serializer.data, status=status.HTTP_200_OK)
 
@@ -333,8 +348,10 @@ management_announcement_status_parameter = OpenApiParameter(
         parameters=[management_announcement_search_parameter, management_announcement_status_parameter],
     ),
 )
+@extend_schema(tags=["Management / Announcements"])
 class ManagementAnnouncementViewSet(
     ManagementBypassAdminLoginMixin,
+    ManagementStatusActionsMixin,
     ActionScopedRateThrottleMixin,
     mixins.ListModelMixin,
     mixins.RetrieveModelMixin,
@@ -344,6 +361,7 @@ class ManagementAnnouncementViewSet(
 ):
     permission_classes = [IsActiveAccount, permissions.IsAdminUser]
     serializer_class = ManagementAnnouncementSerializer
+    status_serializer_class = Announcement.Status
     queryset = Announcement.objects.select_related("organization", "category").prefetch_related(
         "images", "subservices__service_catalog__category", "subservices__price_table"
     )
@@ -355,6 +373,9 @@ class ManagementAnnouncementViewSet(
         "update": "management_write",
         "partial_update": "management_write",
         "destroy": "management_write",
+        "activate": "management_write",
+        "deactivate": "management_write",
+        "suspend": "management_write",
     }
 
     def get_queryset(self):
@@ -442,40 +463,78 @@ class ManagementOrganizationViewSet(
     }
 
 
-if apps.is_installed("apps.jobs"):
-    @extend_schema(tags=["Management / Jobs"])
-    class ManagementJobViewSet(
-        ManagementBypassAdminLoginMixin,
-        ActionScopedRateThrottleMixin,
-        ManagementStatusActionsMixin,
-        mixins.ListModelMixin,
-        mixins.CreateModelMixin,
-        mixins.RetrieveModelMixin,
-        mixins.UpdateModelMixin,
-        viewsets.GenericViewSet,
-    ):
-        permission_classes = [IsActiveAccount, permissions.IsAdminUser]
-        serializer_class = ManagementJobSerializer
-        queryset = Job.objects.select_related(
-            "user",
-            "announcement",
-            "announcement__organization",
-            "announcement__organization__user",
-            "plan_price",
-            "plan_price__subservice",
-            "plan_price__subservice__announcement",
-            "plan_price__subservice__service_catalog",
-        ).order_by("-created_at", "-id")
-        lookup_field = "uuid"
-        status_serializer_class = Job.Status
-        throttle_scope_prefix = "management"
-        throttle_scope_action_map = {
-            "list": "management_read",
-            "retrieve": "management_read",
-            "create": "management_write",
-            "update": "management_write",
-            "partial_update": "management_write",
-            "activate": "management_status",
-            "deactivate": "management_status",
-            "suspend": "management_status",
-        }
+@extend_schema(tags=["Management / Announcements"])
+class ManagementAnnouncementStatusChangeViewSet(
+    mixins.ListModelMixin,
+    viewsets.GenericViewSet,
+):
+    """Read-only ViewSet for tracking announcement status changes."""
+
+    permission_classes = [IsActiveAccount, permissions.IsAdminUser]
+    serializer_class = ManagementAnnouncementStatusChangeSerializer
+    queryset = AnnouncementStatusChange.objects.select_related("announcement").order_by("-created_at")
+    filterset_fields = ["announcement__uuid", "to_status", "reason"]
+    throttle_scope_prefix = "management"
+    throttle_scope_action_map = {
+        "list": "management_read",
+    }
+
+    def get_queryset(self):
+        queryset = self.queryset
+        announcement_uuid = self.request.query_params.get("announcement__uuid")
+        if announcement_uuid:
+            queryset = queryset.filter(announcement__uuid=announcement_uuid)
+        return queryset
+
+
+@extend_schema(tags=["Management / Stats"])
+class ManagementStatsView(ManagementBypassAdminLoginMixin, APIView):
+    """Returns aggregate counts for all management entities in a single request."""
+
+    permission_classes = [IsActiveAccount, permissions.IsAdminUser]
+
+    @extend_schema(
+        summary="Get management statistics",
+        description="Aggregated counts for users, organizations, announcements, jobs and catalogs.",
+    )
+    def get(self, request):
+        User = get_user_model()
+
+        return Response({
+            "users": {
+                "total": User.objects.count(),
+                "active": User.objects.filter(status="active").count(),
+                "inactive": User.objects.filter(status="inactive").count(),
+                "suspended": User.objects.filter(status="suspended").count(),
+                "email_verified": User.objects.filter(email_verified=True).count(),
+                "staff": User.objects.filter(is_staff=True).count(),
+            },
+            "organizations": {
+                "total": Organization.objects.count(),
+                "active": Organization.objects.filter(status="active").count(),
+                "inactive": Organization.objects.filter(status="inactive").count(),
+                "suspended": Organization.objects.filter(status="suspended").count(),
+            },
+            "announcements": {
+                "total": Announcement.objects.count(),
+                "active": Announcement.objects.filter(status="active").count(),
+                "draft": Announcement.objects.filter(status="draft").count(),
+                "paused": Announcement.objects.filter(status="paused").count(),
+                "closed": Announcement.objects.filter(status="closed").count(),
+                "published": Announcement.objects.filter(status="published").count(),
+            },
+            "jobs": {
+                "total": Job.objects.count(),
+                "pending": Job.objects.filter(status="pending").count(),
+                "active": Job.objects.filter(status="active").count(),
+                "completed": Job.objects.filter(status="completed").count(),
+                "rejected": Job.objects.filter(status="rejected").count(),
+                "suspended": Job.objects.filter(status="suspended").count(),
+                "inactive": Job.objects.filter(status="inactive").count(),
+            },
+            "catalogs": {
+                "categories": Category.objects.count(),
+                "services": ServiceCatalog.objects.count(),
+                "allowed_cities": AllowedCity.objects.count(),
+            },
+        })

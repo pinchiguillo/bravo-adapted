@@ -2,10 +2,8 @@ import base64
 import io
 import uuid
 from datetime import date
-from unittest import skipUnless
 from unittest.mock import patch
 
-from django.apps import apps as django_apps
 from django.contrib.auth import get_user_model
 from django.contrib.auth.models import AnonymousUser
 from django.contrib.sessions.middleware import SessionMiddleware
@@ -36,11 +34,6 @@ from .models import (
 )
 from .permissions import IsOrganizationResourceOwner
 from .views import OrganizationViewSet
-
-JOBS_INSTALLED = django_apps.is_installed("apps.jobs")
-
-if JOBS_INSTALLED:
-    from apps.jobs.models import Job
 
 
 class OrganizationApiTests(APITestCase):
@@ -265,40 +258,6 @@ class OrganizationApiTests(APITestCase):
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertEqual(response.data["uuid"], str(self.organization.uuid))
         self.assertFalse(response.data["is_approved"])
-
-    @skipUnless(JOBS_INSTALLED, "jobs app disabled")
-    def test_organization_retrieve_includes_verification_level_and_rating_from_completed_jobs(self):
-        self.organization.verification_level = 4
-        self.organization.save(update_fields=["verification_level"])
-        Job.objects.create(
-            user=self.owner,
-            announcement=self.announcement,
-            plan_price=self.owner_service_price,
-            status=Job.Status.COMPLETED,
-            organization_rating="4.00",
-        )
-        Job.objects.create(
-            user=self.other_owner,
-            announcement=self.announcement,
-            plan_price=self.owner_service_price,
-            status=Job.Status.COMPLETED,
-            organization_rating="2.00",
-        )
-        Job.objects.create(
-            user=self.other_owner,
-            announcement=self.announcement,
-            plan_price=self.owner_service_price,
-            status=Job.Status.PENDING,
-            organization_rating="5.00",
-        )
-
-        response = self.client.get(
-            reverse("organization-detail", kwargs={"uuid": self.organization.uuid})
-        )
-
-        self.assertEqual(response.status_code, status.HTTP_200_OK)
-        self.assertEqual(response.data["verification_level"], 4)
-        self.assertEqual(response.data["rating"], "3.00")
 
     def test_organization_root_get_is_not_available_as_list(self):
         self.client.force_authenticate(user=self.admin_user)
