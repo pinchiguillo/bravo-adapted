@@ -4,8 +4,9 @@ from unittest.mock import patch
 
 from django.core.exceptions import ImproperlyConfigured
 from django.test import SimpleTestCase, override_settings
-from django.urls import NoReverseMatch, clear_url_caches, reverse
+from django.urls import NoReverseMatch, clear_url_caches, resolve, reverse
 from drf_spectacular.generators import SchemaGenerator
+from drf_spectacular.views import SpectacularSwaggerView
 
 from Core import settings as core_settings
 
@@ -200,6 +201,22 @@ class ApiDocsRoutingTests(SimpleTestCase):
         self._reload_urlconf()
         self.assertEqual(reverse("api-schema"), "/api/schema/")
         self.assertEqual(reverse("api-docs"), "/api/docs/")
+
+    @override_settings(HIDE_API_DOCS=False)
+    def test_docs_route_resolves_to_swagger_view(self):
+        self._reload_urlconf()
+
+        match = resolve("/api/docs/")
+
+        self.assertIs(match.func.view_class, SpectacularSwaggerView)
+
+    @override_settings(HIDE_API_DOCS=False)
+    def test_job_routes_keep_jobs_prefix(self):
+        self._reload_urlconf()
+        self.assertEqual(
+            reverse("job-detail", kwargs={"uuid": "11111111-1111-1111-1111-111111111111"}),
+            "/api/jobs/11111111-1111-1111-1111-111111111111/",
+        )
 
     @override_settings(HIDE_API_DOCS=True)
     def test_docs_routes_are_not_registered_when_hidden(self):

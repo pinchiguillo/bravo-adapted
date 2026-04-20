@@ -79,19 +79,27 @@ Las variables sin definir usan valores por defecto. En **producción** se exigen
   - Default: `http://localstack:4566` (desarrollo)
   - Producción: S3 real o compatible
 - **`AWS_STORAGE_BUCKET_NAME`** (REQUERIDO): bucket S3
-  - Default: `bravo-bucket`
+  - Default: `bravo-media`
+- **`AWS_LEGAL_DOCUMENTS_BUCKET_NAME`** (REQUERIDO en prod): bucket S3 para documentos legales
+  - Default: `<AWS_STORAGE_BUCKET_NAME>-legal`
 - **`AWS_SES_ENDPOINT_URL`**: endpoint SES (si `USE_SES_EMAIL=1`)
   - Default: `http://localstack:4566` (desarrollo)
 - **`MEDIA_PUBLIC_BASE_URL`**: base pública para URLs de media
   - Default: `/s3`
   - Desarrollo: `nginx` proxy hacia LocalStack en `/s3/*`
+- **`LEGAL_DOCUMENTS_UPLOAD_PREFIX`**: prefijo base para documentos legales
+  - Default: `legal-documents`
 - **`USE_S3_STORAGE`** (REQUERIDO): habilitar S3
   - Default: `1`
   - Si es `0`, falla en startup con `ImproperlyConfigured`
 - **`USE_SES_EMAIL`**: usar SES para emails
   - Default: `1` (desarrollo con LocalStack)
 - **`DEFAULT_FROM_EMAIL`**: remitente de emails
-  - Default: `noreply@bravo.local`
+  - Default: `no-reply@bravo.local`
+- **`LEGAL_DOCUMENT_MAX_BYTES`**: tamaño máximo de documentos legales
+  - Default: `10485760` (10MB)
+- **`LEGAL_DOCUMENT_ALLOWED_CONTENT_TYPES`**: MIME types permitidos para documentos legales
+  - Default: `application/pdf`
 
 ### Email (SMTP alternativo)
 
@@ -123,6 +131,8 @@ Si `USE_SES_EMAIL=0`, se usa SMTP:
   - Default: `1`
 - **`HIDE_API_DOCS`**: ocultar Swagger UI y schema
   - Default: `0` (desarrollo), `1` (producción)
+- **`RGPD_MODULE_ENABLED`**: habilita rutas y app RGPD
+  - Default: `0`
 
 ### Jobs & Job Chat
 
@@ -199,6 +209,7 @@ Formato: `N/M` donde N=requests, M=timeframe (e.g., `10/hour`)
 - [ ] `REDIS_URL` apuntando a Redis externo
 - [ ] `AWS_ACCESS_KEY_ID` y `AWS_SECRET_ACCESS_KEY` válidas
 - [ ] `AWS_STORAGE_BUCKET_NAME` existe en S3
+- [ ] `AWS_LEGAL_DOCUMENTS_BUCKET_NAME` existe en S3
 - [ ] `USE_S3_STORAGE=1`
 - [ ] `SECURE_SSL_REDIRECT=True`
 - [ ] `SESSION_COOKIE_SECURE=True`
@@ -223,8 +234,9 @@ ALLOWED_HOSTS=localhost,127.0.0.1
 DATABASE_URL=postgresql://postgres:postgres@postgres:5432/auth_db
 REDIS_URL=
 USE_S3_STORAGE=1
-AWS_STORAGE_BUCKET_NAME=bravo-bucket
-DEFAULT_FROM_EMAIL=noreply@bravo.local
+AWS_STORAGE_BUCKET_NAME=bravo-media
+AWS_LEGAL_DOCUMENTS_BUCKET_NAME=bravo-media-legal
+DEFAULT_FROM_EMAIL=no-reply@bravo.local
 AUTH_BYPASS_EMAIL_VERIFICATION=1
 ```
 
