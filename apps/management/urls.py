@@ -5,6 +5,8 @@ from .views import (
     ManagementAllowedCityViewSet,
     ManagementAnnouncementStatusChangeViewSet,
     ManagementAnnouncementViewSet,
+    ManagementAssetStatsView,
+    ManagementAssetViewSet,
     ManagementCategoryViewSet,
     ManagementFeatureFlagViewSet,
     ManagementOrganizationViewSet,
@@ -28,7 +30,10 @@ router.register(
     basename="management-announcement-status-changes",
 )
 router.register("organizations", ManagementOrganizationViewSet, basename="management-organizations")
+router.register("assets", ManagementAssetViewSet, basename="management-assets")
 
-urlpatterns = router.urls + [
+urlpatterns = [
+    path("assets/stats/", ManagementAssetStatsView.as_view(), name="management-assets-stats"),
+] + router.urls + [
     path("stats/", ManagementStatsView.as_view(), name="management-stats"),
 ]

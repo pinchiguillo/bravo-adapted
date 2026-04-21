@@ -4,6 +4,7 @@ from django.contrib.auth.password_validation import validate_password
 from drf_spectacular.utils import extend_schema_field
 from rest_framework import serializers
 
+from apps.assets.models import Asset
 from apps.management.models import FeatureFlag
 from apps.organization.models import (
     AllowedCity,
@@ -205,3 +206,25 @@ class ManagementAnnouncementStatusChangeSerializer(AnnouncementStatusChangeSeria
             'changed_by',
             'announcement',
         ]
+
+
+class ManagementAssetSerializer(serializers.ModelSerializer):
+    owner_email = serializers.CharField(source='owner.email', read_only=True)
+
+    class Meta:
+        model = Asset
+        fields = (
+            'id',
+            'kind',
+            'visibility',
+            'status',
+            'original_filename',
+            'content_type_client',
+            'size_client',
+            'size_actual',
+            'is_temporary',
+            'owner_email',
+            'created_at',
+            'confirmed_at',
+        )
+        read_only_fields = fields
