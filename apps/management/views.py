@@ -2,7 +2,7 @@ import uuid
 
 from django.conf import settings
 from django.contrib.auth import get_user_model
-from django.db.models import Q
+from django.db.models import Count, Q, Sum
 from drf_spectacular.utils import OpenApiParameter, extend_schema, extend_schema_view
 from rest_framework import mixins, permissions, status, viewsets
 from rest_framework.decorators import action
@@ -10,6 +10,7 @@ from rest_framework.exceptions import ValidationError
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
+from apps.assets.models import Asset
 from apps.jobs.models import Job
 from apps.management.models import FeatureFlag
 from apps.organization.models import (
@@ -28,6 +29,7 @@ from .serializers import (
     ManagementAllowedCitySerializer,
     ManagementAnnouncementSerializer,
     ManagementAnnouncementStatusChangeSerializer,
+    ManagementAssetSerializer,
     ManagementCategorySerializer,
     ManagementFeatureFlagSerializer,
     ManagementOrganizationSerializer,
@@ -537,4 +539,85 @@ class ManagementStatsView(ManagementBypassAdminLoginMixin, APIView):
                 "services": ServiceCatalog.objects.count(),
                 "allowed_cities": AllowedCity.objects.count(),
             },
+        })
+
+
+@extend_schema(tags=["Management / Assets"])
+class ManagementAssetViewSet(
+    ManagementBypassAdminLoginMixin,
+    ActionScopedRateThrottleMixin,
+    mixins.ListModelMixin,
+    mixins.RetrieveModelMixin,
+    mixins.DestroyModelMixin,
+    viewsets.GenericViewSet,
+):
+    permission_classes = [IsActiveAccount, permissions.IsAdminUser]
+    serializer_class = ManagementAssetSerializer
+    queryset = Asset.objects.select_related("owner").order_by("-created_at")
+    lookup_field = "id"
+    throttle_scope_prefix = "management"
+    throttle_scope_action_map = {
+        "list": "management_read",
+        "retrieve": "management_read",
+        "destroy": "management_write",
+    }
+
+    def get_queryset(self):
+        queryset = self.queryset
+        if self.action != "list":
+            return queryset
+
+        search_query = str(self.request.query_params.get("search", "")).strip()
+        if search_query:
+            queryset = queryset.filter(original_filename__icontains=search_query)
+
+        kind_value = str(self.request.query_params.get("kind", "")).strip()
+        if kind_value:
+            queryset = queryset.filter(kind=kind_value)
+
+        status_value = str(self.request.query_params.get("status", "")).strip()
+        if status_value:
+            queryset = queryset.filter(status=status_value)
+
+        return queryset
+
+
+@extend_schema(tags=["Management / Assets"])
+class ManagementAssetStatsView(ManagementBypassAdminLoginMixin, APIView):
+    """Returns aggregate statistics for assets."""
+
+    permission_classes = [IsActiveAccount, permissions.IsAdminUser]
+
+    @extend_schema(
+        summary="Get asset statistics",
+        description="Aggregated counts and sizes for assets by kind and status.",
+    )
+    def get(self, request):
+        base_queryset = Asset.objects.all()
+
+        # Total count and size
+        total_count = base_queryset.count()
+        total_size = base_queryset.aggregate(total=Sum("size_actual"))["total"] or 0
+
+        # By kind
+        by_kind = dict(
+            base_queryset
+            .values("kind")
+            .annotate(count=Count("id"))
+            .values_list("kind", "count")
+        )
+
+        # By status
+        by_status = dict(
+            base_queryset
+            .values("status")
+            .annotate(count=Count("id"))
+            .values_list("status", "count")
+        )
+
+        return Response({
+            "total": total_count,
+            "total_size_bytes": total_size,
+            "by_kind": by_kind,
+            "by_status": by_status,
         })
