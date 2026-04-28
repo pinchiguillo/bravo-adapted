@@ -180,6 +180,7 @@ class SubserviceViewSet(
                 "Announcement does not belong to the authenticated user organization."
             )
         self.ensure_organization_is_approved_for_write(announcement.organization)
+        self.ensure_announcement_is_editable_for_write(announcement)
         payload_announcement = serializer.validated_data.get("announcement", announcement)
         if payload_announcement.uuid != announcement.uuid:
             raise ValidationError({"announcement": "Announcement must match the announcement in the URL."})
@@ -192,6 +193,7 @@ class SubserviceViewSet(
                 "Announcement does not belong to the authenticated user organization."
             )
         self.ensure_organization_is_approved_for_write(announcement.organization)
+        self.ensure_announcement_is_editable_for_write(announcement)
         payload_announcement = serializer.validated_data.get(
             "announcement",
             serializer.instance.announcement,
@@ -202,6 +204,7 @@ class SubserviceViewSet(
 
     def perform_destroy(self, instance):
         self.ensure_organization_is_approved_for_write(instance.announcement.organization)
+        self.ensure_announcement_is_editable_for_write(instance.announcement)
         super().perform_destroy(instance)
 
 
@@ -325,6 +328,7 @@ class ServicePriceViewSet(
         if subservice.announcement.organization.user_id != self.request.user.id:
             raise PermissionDenied("Subservice does not belong to the authenticated user organization.")
         self.ensure_organization_is_approved_for_write(subservice.announcement.organization)
+        self.ensure_announcement_is_editable_for_write(subservice.announcement)
         payload_subservice = serializer.validated_data.get(
             "subservice",
             getattr(serializer.instance, "subservice", None),
@@ -345,6 +349,7 @@ class ServicePriceViewSet(
 
     def perform_destroy(self, instance):
         self.ensure_organization_is_approved_for_write(instance.subservice.announcement.organization)
+        self.ensure_announcement_is_editable_for_write(instance.subservice.announcement)
         super().perform_destroy(instance)
 
 

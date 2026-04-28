@@ -1633,6 +1633,103 @@ class OrganizationApiTests(APITestCase):
         self.assertIn("description", response.data)
         self.assertIn("free_text", response.data)
 
+    def test_owner_cannot_update_suspended_announcement(self):
+        self.announcement.status = Announcement.Status.SUSPENDED
+        self.announcement.save(update_fields=["status"])
+        self.client.force_authenticate(user=self.owner)
+
+        response = self.client.patch(
+            reverse(
+                "organization-announcement-detail",
+                kwargs={
+                    "organization_uuid": self.organization.uuid,
+                    "uuid": self.announcement.uuid,
+                },
+            ),
+            {"title": "Nuevo titulo"},
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
+        self.assertEqual(response.data["detail"], "Suspended announcements cannot be modified.")
+
+    def test_owner_can_patch_announcement_with_nested_subservices(self):
+        self.client.force_authenticate(user=self.owner)
+
+        response = self.client.patch(
+            reverse(
+                "organization-announcement-detail",
+                kwargs={
+                    "organization_uuid": self.organization.uuid,
+                    "uuid": self.announcement.uuid,
+                },
+            ),
+            {
+                "title": "Titulo actualizado",
+                "subservices": [
+                    {
+                        "service_catalog": str(self.other_service_catalog.uuid),
+                        "name": "Nuevo subservicio",
+                        "description": "Creado mediante PATCH",
+                        "prices": [
+                            {
+                                "amount": "79.99",
+                                "currency": "eur",
+                                "charging_type": ServicePrice.ChargingType.PER_PROJECT,
+                                "effective_from": "2026-05-01",
+                                "effective_to": "2026-05-02",
+                            }
+                        ],
+                    }
+                ],
+            },
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.announcement.refresh_from_db()
+        self.assertEqual(self.announcement.announcement, "Titulo actualizado")
+        self.assertEqual(self.announcement.subservices.count(), 1)
+        patched_subservice = self.announcement.subservices.get()
+        self.assertEqual(patched_subservice.service_catalog, self.other_service_catalog)
+        self.assertEqual(patched_subservice.name, "Nuevo subservicio")
+        self.assertEqual(patched_subservice.price_table.count(), 1)
+        patched_price = patched_subservice.price_table.get()
+        self.assertEqual(str(patched_price.amount), "79.99")
+        self.assertEqual(patched_price.currency, "EUR")
+        self.assertFalse(Subservice.objects.filter(uuid=self.owner_subservice.uuid).exists())
+        self.assertEqual(response.data["title"], "Titulo actualizado")
+        self.assertEqual(len(response.data["services"]), 1)
+        self.assertEqual(response.data["services"][0]["uuid"], str(self.other_service_catalog.uuid))
+        self.assertEqual(
+            response.data["services"][0]["subservices"][0]["name"],
+            "Nuevo subservicio",
+        )
+
+    def test_owner_cannot_create_subservice_for_suspended_announcement(self):
+        self.announcement.status = Announcement.Status.SUSPENDED
+        self.announcement.save(update_fields=["status"])
+        self.client.force_authenticate(user=self.owner)
+
+        response = self.client.post(
+            reverse(
+                "organization-subservice-list",
+                kwargs={
+                    "announcement_uuid": self.announcement.uuid,
+                },
+            ),
+            {
+                "announcement": str(self.announcement.uuid),
+                "service_catalog": str(self.owner_service_catalog.uuid),
+                "name": "Window Cleaning",
+                "description": "Interior and exterior windows",
+            },
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
+        self.assertEqual(response.data["detail"], "Suspended announcements cannot be modified.")
+
     def test_announcement_list_hides_foreign_organization_from_authenticated_user(self):
         self.client.force_authenticate(user=self.other_owner)
 
@@ -2189,3 +2286,27 @@ class AnnouncementImageApiTests(APITestCase):
 
         self.assertEqual(response.status_code, status.HTTP_204_NO_CONTENT)
         self.assertFalse(AnnouncementImage.objects.filter(pk=image.pk).exists())
+
+    def test_owner_cannot_request_image_upload_for_suspended_announcement(self):
+        self.announcement.status = Announcement.Status.SUSPENDED
+        self.announcement.save(update_fields=["status"])
+        self.client.force_authenticate(user=self.owner)
+
+        response = self.client.post(
+            reverse(
+                "organization-announcement-image-list",
+                kwargs={
+                    "organization_uuid": self.organization.uuid,
+                    "uuid": self.announcement.uuid,
+                },
+            ),
+            {
+                "filename": "announcement.png",
+                "content_type": "image/png",
+                "size_bytes": len(self._make_png_bytes()),
+            },
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
+        self.assertEqual(response.data["detail"], "Suspended announcements cannot be modified.")

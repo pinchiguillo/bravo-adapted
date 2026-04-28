@@ -413,15 +413,27 @@ class AnnouncementSerializer(serializers.ModelSerializer):
             seen_subservices.add(identifier)
         return subservices
 
-    @transaction.atomic
-    def create(self, validated_data):
-        subservices = validated_data.pop("subservices", [])
-        announcement = super().create(validated_data)
+    def _create_subservices(self, announcement, subservices):
         for subservice_data in subservices:
             prices_data = subservice_data.pop("prices", [])
             subservice = Subservice.objects.create(announcement=announcement, **subservice_data)
             for price_data in prices_data:
                 ServicePrice.objects.create(subservice=subservice, **price_data)
+
+    @transaction.atomic
+    def create(self, validated_data):
+        subservices = validated_data.pop("subservices", [])
+        announcement = super().create(validated_data)
+        self._create_subservices(announcement, subservices)
+        return announcement
+
+    @transaction.atomic
+    def update(self, instance, validated_data):
+        subservices = validated_data.pop("subservices", None)
+        announcement = super().update(instance, validated_data)
+        if subservices is not None:
+            announcement.subservices.all().delete()
+            self._create_subservices(announcement, subservices)
         return announcement
 
     @extend_schema_field(serializers.CharField(allow_null=True))
