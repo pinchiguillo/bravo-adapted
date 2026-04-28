@@ -272,10 +272,12 @@ class AnnouncementViewSet(
 
     def perform_update(self, serializer):
         self.ensure_organization_is_approved_for_write(serializer.instance.organization)
+        self.ensure_announcement_is_editable_for_write(serializer.instance)
         super().perform_update(serializer)
 
     def perform_destroy(self, instance):
         self.ensure_organization_is_approved_for_write(instance.organization)
+        self.ensure_announcement_is_editable_for_write(instance)
         super().perform_destroy(instance)
 
 
@@ -403,6 +405,7 @@ class AnnouncementImageViewSet(
 
         if for_write and not getattr(user, "is_staff", False):
             self.ensure_organization_is_approved_for_write(organization)
+            self.ensure_announcement_is_editable_for_write(announcement)
 
         return announcement
 

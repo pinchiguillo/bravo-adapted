@@ -233,6 +233,10 @@ class OrganizationVisibilityMixin:
         if not organization.is_validated:
             raise PermissionDenied("Organization must be approved for this action.")
 
+    def ensure_announcement_is_editable_for_write(self, announcement):
+        if announcement.status == announcement.Status.SUSPENDED:
+            raise PermissionDenied("Suspended announcements cannot be modified.")
+
 
 class AnnouncementQueryParamFilterMixin:
     text_filter_fields = {}
