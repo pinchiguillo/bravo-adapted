@@ -17,6 +17,8 @@ from .views import (
     ServiceCatalogViewSet,
     ServicePriceViewSet,
     SubserviceViewSet,
+    announcement_favorite,
+    list_my_favorites,
 )
 
 router = DefaultRouter()
@@ -47,6 +49,16 @@ service_price_detail = ServicePriceViewSet.as_view(
 )
 
 urlpatterns = [
+    path(
+        "announcements/favorites/",
+        list_my_favorites,
+        name="announcement-favorites-list",
+    ),
+    path(
+        "announcements/<uuid:uuid>/favorite/",
+        announcement_favorite,
+        name="announcement-favorite",
+    ),
     path(
         "announcements/<uuid:announcement_uuid>/subservices/",
         subservice_list,

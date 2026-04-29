@@ -1,16 +1,19 @@
 import base64
 
+from django.shortcuts import get_object_or_404
 from drf_spectacular.utils import extend_schema, extend_schema_view
 from rest_framework import mixins, permissions, status, viewsets
+from rest_framework.decorators import api_view, permission_classes
 from rest_framework.exceptions import NotFound, PermissionDenied
 from rest_framework.response import Response
 
 from common.permissions import IsActiveAccount
 from common.throttling import ActionScopedRateThrottleMixin
 
-from ..models import Announcement, AnnouncementImage, Organization
+from ..models import Announcement, AnnouncementFavorite, AnnouncementImage, Organization
 from ..permissions import IsOrganizationResourceOwner
 from ..serializers import (
+    AnnouncementFavoriteSerializer,
     AnnouncementImageBase64Serializer,
     AnnouncementImageSerializer,
     AnnouncementImageUploadCompleteSerializer,
@@ -513,3 +516,28 @@ class OrganizationAnnouncementImageBase64ViewSet(
 
     def retrieve(self, request, *args, **kwargs):
         return self._build_base64_response(self.get_object())
+
+@extend_schema(tags=["Announcements"])
+@api_view(["POST", "DELETE"])
+@permission_classes([IsActiveAccount])
+def announcement_favorite(request, uuid):
+    announcement = get_object_or_404(Announcement, uuid=uuid, status=Announcement.Status.ACTIVE)
+
+    if request.method == "POST":
+        _, created = AnnouncementFavorite.objects.get_or_create(user=request.user, announcement=announcement)
+        status_code = 201 if created else 200
+        return Response({"favorited": True}, status=status_code)
+
+    # DELETE
+    deleted, _ = AnnouncementFavorite.objects.filter(user=request.user, announcement=announcement).delete()
+    if not deleted:
+        return Response(status=404)
+    return Response(status=204)
+
+
+@extend_schema(tags=["Announcements"])
+@api_view(["GET"])
+@permission_classes([IsActiveAccount])
+def list_my_favorites(request):
+    uuids = AnnouncementFavorite.objects.filter(user=request.user).values_list("announcement__uuid", flat=True)
+    return Response({"favorites": [str(u) for u in uuids]})

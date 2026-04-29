@@ -6,7 +6,7 @@ from rest_framework.response import Response
 from common.permissions import IsActiveAccount
 
 from ..models import Job
-from ..serializers import JobSerializer, JobUpdateSerializer, JobListSerializer
+from ..serializers import JobListSerializer, JobSerializer, JobUpdateSerializer
 
 
 @extend_schema(tags=["Jobs"])

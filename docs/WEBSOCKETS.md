@@ -9,7 +9,7 @@ El backend usa Django Channels para WebSocket. Dos superficies principales:
 | Endpoint | Autenticación | Propósito |
 |----------|---------------|-----------|
 | `ws/organization/search/` | Opcional | Búsqueda de organizaciones en tiempo real |
-| `ws/jobs/<job_uuid>/chat/` | Requerida | Chat de job (messages, typing) |
+| `ws/jobs/<job_uuid>/chat/` | Requerida | Chat de job completo: history, messages, widgets, typing |
 
 ## 1. Organización Search (Público)
 
@@ -136,26 +136,14 @@ wss://api.example.com/ws/jobs/<job_uuid>/chat/?token=<jwt_token>  (producción)
 
 ### Autenticación
 
-**Requerida**. Dos opciones:
-
-**Opción 1: Token en query string** (recomendado)
+**Requerida**. Se usa token JWT en query string.
 
 ```
 ws://localhost:8000/ws/jobs/abc-123/chat/?token=eyJ0eXAi...
 ```
 
-**Opción 2: Token en header HTTP** (fallback)
-
-```javascript
-const headers = new Headers({
-  'Authorization': 'Bearer eyJ0eXAi...'
-});
-
-// Algunos clientes no soportan headers personalizadas en WebSocket
-```
-
 Proceso de validación:
-1. Extrae token de query string o header
+1. Extrae token de query string
 2. Valida token JWT (signature, expiración)
 3. Resuelve usuario
 4. Verifica que usuario es owner del job o staff
@@ -167,7 +155,7 @@ Si falla: cierra conexión con código `4001` (Unauthorized).
 Solo owner del job o staff pueden conectarse:
 
 ```python
-# Si job.hired_user != request.user and no es staff:
+# Si job.user != request.user y no es staff:
 # ❌ Rechaza conexión (4001)
 
 # Si es owner o staff:
@@ -182,6 +170,36 @@ Solo owner del job o staff pueden conectarse:
 
 ### Mensaje de Entrada
 
+#### Pedir Historial Inicial
+
+Cliente → Servidor:
+
+```json
+{
+  "type": "history"
+}
+```
+
+Servidor → Cliente:
+
+```json
+{
+  "type": "history",
+  "data": [
+    {
+      "uuid": "msg-uuid",
+      "user_id": 12,
+      "username": "john",
+      "type": "plain_text",
+      "content": "Hola",
+      "attachments": [],
+      "created_at": "2026-04-20T20:28:53Z",
+      "updated_at": "2026-04-20T20:28:53Z"
+    }
+  ]
+}
+```
+
 #### Enviar Mensaje
 
 Cliente → Servidor:
@@ -189,15 +207,17 @@ Cliente → Servidor:
 ```json
 {
   "type": "message",
-  "text": "Hola, ¿cómo estás?"
+  "content": "Hola, ¿cómo estás?",
+  "msg_type": "plain_text"
 }
 ```
 
 Reglas:
-- `type` debe ser `message` o `typing`
-- `text` es requerido si `type` es `message`
-- Máximo `JOB_CHAT_ATTACHMENT_MAX_BYTES` (default 5MB) por adjunto
-- Se replican a todos los conectados a ese job
+- `type` debe ser `history`, `message`, `proposal_status` o `typing`
+- `content` es requerido si `type` es `message`
+- `msg_type` admite `plain_text` y `widget`
+- Para widgets, `content` contiene el JSON serializado del widget
+- Se replica a todos los conectados a ese job
 
 #### Notificar Escritura
 
@@ -209,35 +229,47 @@ Cliente → Servidor:
 }
 ```
 
-No replica a otros; es informativo (puede usarse para UI "está escribiendo...").
+#### Actualizar Estado de Widget Propuesta
+
+Cliente → Servidor:
+
+```json
+{
+  "type": "proposal_status",
+  "message_uuid": "msg-uuid",
+  "status": "accepted"
+}
+```
+
+Reglas:
+- `message_uuid` es obligatorio
+- `status` admite `accepted` o `rejected`
+- solo funciona sobre mensajes `widget` con `widget_type = proposal`
+- la actualización se persiste y luego se reemite como `type = message`
 
 ### Mensaje de Salida
 
-#### Nuevo Mensaje
+#### Nuevo Mensaje o Widget Actualizado
 
 Servidor → Clientes:
 
 ```json
 {
   "type": "message",
-  "id": "msg-uuid",
-  "author": {
-    "id": "user-uuid",
-    "name": "John Doe",
-    "avatar_url": "https://..."
-  },
-  "text": "Hola, ¿cómo estás?",
-  "created_at": "2026-04-20T20:28:53Z",
-  "attachments": [
-    {
-      "id": "att-uuid",
-      "filename": "document.pdf",
-      "content_type": "application/pdf",
-      "download_url": "https://api.example.com/api/jobs/.../attachments/.../download"
-    }
-  ]
+  "data": {
+    "uuid": "msg-uuid",
+    "user_id": 12,
+    "username": "john",
+    "type": "plain_text",
+    "content": "Hola, ¿cómo estás?",
+    "attachments": [],
+    "created_at": "2026-04-20T20:28:53Z",
+    "updated_at": "2026-04-20T20:28:53Z"
+  }
 }
 ```
+
+Si el mensaje es widget, `data.content` contiene el JSON serializado del widget.
 
 #### Confirmación de Escritura
 
@@ -247,7 +279,7 @@ Servidor → Clientes:
 {
   "type": "typing",
   "user_id": "user-uuid",
-  "user_name": "Jane Smith"
+  "username": "Jane Smith"
 }
 ```
 
@@ -258,33 +290,65 @@ Servidor → Cliente:
 ```json
 {
   "type": "error",
-  "message": "Rate limited",
-  "code": "rate_limited"
+  "message": "Unknown message type"
 }
 ```
 
-Códigos de error:
-- `rate_limited` — excedió rate limit
-- `invalid_message` — formato inválido
-- `permission_denied` — no es owner/staff
-- `internal_error` — error del servidor
-
 ### Comportamiento
 
-- **Historial**: GET REST `/api/jobs/<uuid>/messages/` para recuperar historial
-- **Adjuntos**: se suben vía REST `POST /api/jobs/<uuid>/send/` (multipart), no por WebSocket
-- **Replicación**: cada usuario conectado recibe mensajes de otros en tiempo real
-- **Ciclo de vida**: conexión persiste mientras cliente permanezca conectado
+- **Historial**: se obtiene por WebSocket con `{"type":"history"}`; no hay endpoint REST de mensajes para el flujo principal del chat
+- **Mensajes**: se crean por WebSocket con `{"type":"message", ...}`
+- **Widgets**: se crean por WebSocket enviando `msg_type = "widget"`
+- **Acciones sobre widgets**: se realizan por WebSocket con `type = "proposal_status"`
+- **Adjuntos**: siguen usando REST para ciclo de upload/attach, pero el mensaje/chat ya no se consulta por REST
 
 ### Ejemplo Cliente JavaScript
 
 ```javascript
-// Conectar
-const token = 'eyJ0eXAi...';
-const ws = new WebSocket(
-  `ws://localhost:8000/ws/jobs/abc-123/chat/?token=${token}`
-);
+const ws = new WebSocket('ws://localhost:8000/ws/jobs/abc-123/chat/?token=jwt');
 
+ws.addEventListener('open', () => {
+  ws.send(JSON.stringify({ type: 'history' }));
+});
+
+ws.addEventListener('message', (event) => {
+  const data = JSON.parse(event.data);
+
+  if (data.type === 'history') {
+    console.log('Initial messages:', data.data);
+  } else if (data.type === 'message') {
+    console.log('New or updated message:', data.data);
+  } else if (data.type === 'typing') {
+    console.log('Typing:', data.username);
+  } else if (data.type === 'error') {
+    console.error(data.message);
+  }
+});
+
+function sendText(content) {
+  ws.send(JSON.stringify({
+    type: 'message',
+    msg_type: 'plain_text',
+    content,
+  }));
+}
+
+function sendProposal(widget) {
+  ws.send(JSON.stringify({
+    type: 'message',
+    msg_type: 'widget',
+    content: JSON.stringify(widget),
+  }));
+}
+
+function updateProposalStatus(messageUuid, status) {
+  ws.send(JSON.stringify({
+    type: 'proposal_status',
+    message_uuid: messageUuid,
+    status,
+  }));
+}
+```
 ws.addEventListener('open', () => {
   console.log('Connected');
 });

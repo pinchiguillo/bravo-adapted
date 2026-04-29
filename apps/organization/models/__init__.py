@@ -1,4 +1,10 @@
-from .announcement import Announcement, AnnouncementImage, AnnouncementReview, AnnouncementStatusChange
+from .announcement import (
+    Announcement,
+    AnnouncementFavorite,
+    AnnouncementImage,
+    AnnouncementReview,
+    AnnouncementStatusChange,
+)
 from .catalog import AllowedCity, Category, PlanTierCatalog, ServiceCatalog
 from .organization import Organization, OrganizationQuerySet
 from .pricing import OrganizationPricing
@@ -7,6 +13,7 @@ from .service import ServicePrice, Subservice
 __all__ = [
     "AllowedCity",
     "Announcement",
+    "AnnouncementFavorite",
     "AnnouncementImage",
     "AnnouncementReview",
     "AnnouncementStatusChange",
