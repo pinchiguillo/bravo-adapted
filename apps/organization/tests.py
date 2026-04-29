@@ -1091,6 +1091,7 @@ class OrganizationApiTests(APITestCase):
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertEqual(response.data["uuid"], str(self.announcement.uuid))
         self.assertEqual(response.data["organization"], str(self.organization.uuid))
+        self.assertEqual(response.data["organization_name"], self.organization.name)
         self.assertEqual(
             response.data["category"],
             {
@@ -1968,6 +1969,14 @@ class AnnouncementSerializerTests(SimpleTestCase):
 
         self.assertIn("image_uuids", serializer.get_fields())
         self.assertTrue(serializer.get_fields()["image_uuids"].write_only)
+
+    def test_announcement_serializer_exposes_organization_name_as_read_only(self):
+        from .serializers import AnnouncementSerializer
+
+        serializer = AnnouncementSerializer()
+
+        self.assertIn("organization_name", serializer.get_fields())
+        self.assertTrue(serializer.get_fields()["organization_name"].read_only)
 
 
 class AnnouncementViewCountMiddlewareTests(APITestCase):

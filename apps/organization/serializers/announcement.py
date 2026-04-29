@@ -21,6 +21,7 @@ from apps.assets.services import (
 
 from ..models import (
     Announcement,
+    AnnouncementFavorite,
     AnnouncementImage,
     AnnouncementStatusChange,
     Category,
@@ -351,6 +352,7 @@ class AnnouncementSubserviceWriteSerializer(serializers.ModelSerializer):
 
 class AnnouncementSerializer(serializers.ModelSerializer):
     organization = serializers.UUIDField(source="organization.uuid", read_only=True)
+    organization_name = serializers.CharField(source="organization.name", read_only=True)
     title = serializers.CharField(source="announcement")
     category = CatalogReferenceField(queryset=Category.objects.all(), slug_field="uuid")
     subservices = AnnouncementSubserviceWriteSerializer(many=True, write_only=True, required=False)
@@ -370,6 +372,7 @@ class AnnouncementSerializer(serializers.ModelSerializer):
         fields = (
             "uuid",
             "organization",
+            "organization_name",
             "category",
             "subservices",
             "image_uuids",
@@ -391,6 +394,7 @@ class AnnouncementSerializer(serializers.ModelSerializer):
         read_only_fields = (
             "uuid",
             "organization",
+            "organization_name",
             "view_count",
             "created_at",
             "updated_at",
@@ -510,3 +514,12 @@ class AnnouncementStatusChangeSerializer(serializers.ModelSerializer):
             'created_at',
         ]
         read_only_fields = ['uuid', 'created_at']
+
+
+class AnnouncementFavoriteSerializer(serializers.ModelSerializer):
+    announcement_uuid = serializers.UUIDField(source='announcement.uuid', read_only=True)
+
+    class Meta:
+        model = AnnouncementFavorite
+        fields = ('announcement_uuid', 'created_at')
+        read_only_fields = ('announcement_uuid', 'created_at')

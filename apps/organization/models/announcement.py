@@ -1,5 +1,6 @@
 import uuid
 
+from django.conf import settings
 from django.db import models
 
 
@@ -137,3 +138,26 @@ class AnnouncementStatusChange(models.Model):
 
     def __str__(self):
         return f"{self.announcement.uuid}: {self.from_status} → {self.to_status}"
+
+
+class AnnouncementFavorite(models.Model):
+    user = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name="announcement_favorites",
+    )
+    announcement = models.ForeignKey(
+        "organization.Announcement",
+        on_delete=models.CASCADE,
+        related_name="favorited_by",
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        unique_together = ("user", "announcement")
+        indexes = [
+            models.Index(fields=["user", "-created_at"]),
+        ]
+
+    def __str__(self):
+        return f"{self.user_id}:favorite:{self.announcement_id}"

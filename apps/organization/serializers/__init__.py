@@ -1,4 +1,5 @@
 from .announcement import (
+    AnnouncementFavoriteSerializer,
     AnnouncementImageBase64Serializer,
     AnnouncementImageSerializer,
     AnnouncementImageUploadCompleteSerializer,
@@ -27,6 +28,7 @@ from .service import (
 
 __all__ = [
     "AllowedCitySerializer",
+    "AnnouncementFavoriteSerializer",
     "AnnouncementImageBase64Serializer",
     "AnnouncementImageUploadCompleteSerializer",
     "AnnouncementImageSerializer",

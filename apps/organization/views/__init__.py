@@ -5,6 +5,8 @@ from .announcement import (
     PublicAnnouncementDetailViewSet,
     PublicAnnouncementImageBase64ViewSet,
     PublicAnnouncementViewSet,
+    announcement_favorite,
+    list_my_favorites,
 )
 from .catalog import AllowedCityViewSet, CategoryViewSet, PlanTierCatalogViewSet, ServiceCatalogViewSet
 from .organization import OrganizationViewSet
@@ -31,4 +33,6 @@ __all__ = [
     "ServiceCatalogViewSet",
     "ServicePriceViewSet",
     "SubserviceViewSet",
+    "announcement_favorite",
+    "list_my_favorites",
 ]
