@@ -116,6 +116,7 @@ class OpenApiSecuritySchemaTests(SimpleTestCase):
     def test_private_endpoints_keep_jwt_auth_in_schema(self):
         private_operations = (
             ("/api/auth/me/", "get"),
+            (self._reverse_path("job-list"), "get"),
             (self._reverse_path("organization-me"), "get"),
             (self._reverse_path("organization-me"), "patch"),
             (self._reverse_path("organization-me"), "delete"),

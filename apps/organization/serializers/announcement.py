@@ -354,6 +354,13 @@ class AnnouncementSerializer(serializers.ModelSerializer):
     title = serializers.CharField(source="announcement")
     category = CatalogReferenceField(queryset=Category.objects.all(), slug_field="uuid")
     subservices = AnnouncementSubserviceWriteSerializer(many=True, write_only=True, required=False)
+    image_uuids = serializers.SlugRelatedField(
+        many=True,
+        slug_field="uuid",
+        queryset=AnnouncementImage.objects.select_related("announcement"),
+        write_only=True,
+        required=False,
+    )
     images = AnnouncementImageSerializer(many=True, read_only=True)
     lowest_price = serializers.SerializerMethodField()
     services = serializers.SerializerMethodField()
@@ -365,6 +372,7 @@ class AnnouncementSerializer(serializers.ModelSerializer):
             "organization",
             "category",
             "subservices",
+            "image_uuids",
             "images",
             "lowest_price",
             "services",
@@ -413,6 +421,27 @@ class AnnouncementSerializer(serializers.ModelSerializer):
             seen_subservices.add(identifier)
         return subservices
 
+    def validate_image_uuids(self, images):
+        if self.instance is None:
+            raise serializers.ValidationError(
+                "image_uuids can only be used when updating an existing announcement."
+            )
+
+        seen_image_ids = set()
+        invalid_images = []
+        for image in images:
+            if image.uuid in seen_image_ids:
+                raise serializers.ValidationError("image_uuids must not contain duplicates.")
+            seen_image_ids.add(image.uuid)
+            if image.announcement_id != self.instance.id:
+                invalid_images.append(str(image.uuid))
+
+        if invalid_images:
+            raise serializers.ValidationError(
+                f"Images do not belong to this announcement: {', '.join(invalid_images)}"
+            )
+        return images
+
     def _create_subservices(self, announcement, subservices):
         for subservice_data in subservices:
             prices_data = subservice_data.pop("prices", [])
@@ -430,10 +459,13 @@ class AnnouncementSerializer(serializers.ModelSerializer):
     @transaction.atomic
     def update(self, instance, validated_data):
         subservices = validated_data.pop("subservices", None)
+        images = validated_data.pop("image_uuids", None)
         announcement = super().update(instance, validated_data)
         if subservices is not None:
             announcement.subservices.all().delete()
             self._create_subservices(announcement, subservices)
+        if images is not None:
+            announcement.images.exclude(uuid__in=[image.uuid for image in images]).delete()
         return announcement
 
     @extend_schema_field(serializers.CharField(allow_null=True))

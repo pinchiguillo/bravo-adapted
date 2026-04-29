@@ -1961,6 +1961,14 @@ class AnnouncementSerializerTests(SimpleTestCase):
 
         self.assertTrue(serializer.get_fields()["subservices"].read_only)
 
+    def test_announcement_serializer_exposes_image_uuids_as_write_only(self):
+        from .serializers import AnnouncementSerializer
+
+        serializer = AnnouncementSerializer()
+
+        self.assertIn("image_uuids", serializer.get_fields())
+        self.assertTrue(serializer.get_fields()["image_uuids"].write_only)
+
 
 class AnnouncementViewCountMiddlewareTests(APITestCase):
     def setUp(self):
@@ -2286,6 +2294,74 @@ class AnnouncementImageApiTests(APITestCase):
 
         self.assertEqual(response.status_code, status.HTTP_204_NO_CONTENT)
         self.assertFalse(AnnouncementImage.objects.filter(pk=image.pk).exists())
+
+    def test_owner_can_patch_announcement_image_set_with_image_uuids(self):
+        kept_image = AnnouncementImage.objects.create(
+            announcement=self.announcement,
+            image=self._make_png_upload(name="kept.png"),
+        )
+        removed_image = AnnouncementImage.objects.create(
+            announcement=self.announcement,
+            image=self._make_png_upload(name="removed.png"),
+        )
+        self.client.force_authenticate(user=self.owner)
+
+        response = self.client.patch(
+            reverse(
+                "organization-announcement-detail",
+                kwargs={
+                    "organization_uuid": self.organization.uuid,
+                    "uuid": self.announcement.uuid,
+                },
+            ),
+            {
+                "title": "Conjunto de imagenes actualizado",
+                "image_uuids": [str(kept_image.uuid)],
+            },
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.data["title"], "Conjunto de imagenes actualizado")
+        self.assertEqual(len(response.data["images"]), 1)
+        self.assertEqual(response.data["images"][0]["uuid"], str(kept_image.uuid))
+        self.assertTrue(AnnouncementImage.objects.filter(uuid=kept_image.uuid).exists())
+        self.assertFalse(AnnouncementImage.objects.filter(uuid=removed_image.uuid).exists())
+
+    def test_patch_image_uuids_rejects_image_from_other_announcement(self):
+        other_announcement = Announcement.objects.create(
+            organization=self.organization,
+            category=self.category,
+            name="Other Image Announcement",
+            location="Madrid",
+            announcement="Otro anuncio",
+            status=Announcement.Status.ACTIVE,
+            description="Descripcion",
+            free_text="Texto",
+        )
+        foreign_image = AnnouncementImage.objects.create(
+            announcement=other_announcement,
+            image=self._make_png_upload(name="foreign.png"),
+        )
+        self.client.force_authenticate(user=self.owner)
+
+        response = self.client.patch(
+            reverse(
+                "organization-announcement-detail",
+                kwargs={
+                    "organization_uuid": self.organization.uuid,
+                    "uuid": self.announcement.uuid,
+                },
+            ),
+            {
+                "image_uuids": [str(foreign_image.uuid)],
+            },
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn("image_uuids", response.data)
+        self.assertTrue(AnnouncementImage.objects.filter(uuid=foreign_image.uuid).exists())
 
     def test_owner_cannot_request_image_upload_for_suspended_announcement(self):
         self.announcement.status = Announcement.Status.SUSPENDED

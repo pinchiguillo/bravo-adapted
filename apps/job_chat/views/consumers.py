@@ -87,6 +87,7 @@ class JobChatConsumer(AsyncWebsocketConsumer):
     async def handle_message(self, data):
         """Handle incoming chat message."""
         content = data.get("content", "").strip()
+        msg_type = data.get("msg_type", "plain_text")
 
         if not content:
             await self.send(
@@ -96,7 +97,7 @@ class JobChatConsumer(AsyncWebsocketConsumer):
             )
             return
 
-        message = await self.save_message(content)
+        message = await self.save_message(content, msg_type)
         if message:
             await self.channel_layer.group_send(
                 self.job_chat_group,
@@ -167,7 +168,7 @@ class JobChatConsumer(AsyncWebsocketConsumer):
             return False
 
     @database_sync_to_async
-    def save_message(self, content):
+    def save_message(self, content, msg_type="plain_text"):
         """Save message to database."""
         try:
             job = Job.objects.get(uuid=self.job_uuid)
@@ -176,6 +177,7 @@ class JobChatConsumer(AsyncWebsocketConsumer):
             message = JobChatMessage.objects.create(
                 job_chat=job_chat,
                 user=self.user,
+                type=msg_type,
                 content=content,
             )
 
