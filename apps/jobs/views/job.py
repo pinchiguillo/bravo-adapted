@@ -1,15 +1,21 @@
 from drf_spectacular.utils import OpenApiResponse, extend_schema, extend_schema_view
 from rest_framework import mixins, status, viewsets
 from rest_framework.exceptions import NotFound, PermissionDenied
+from rest_framework.response import Response
 
 from common.permissions import IsActiveAccount
 
 from ..models import Job
-from ..serializers import JobSerializer, JobUpdateSerializer
+from ..serializers import JobSerializer, JobUpdateSerializer, JobListSerializer
 
 
 @extend_schema(tags=["Jobs"])
 @extend_schema_view(
+    list=extend_schema(
+        summary="List my jobs",
+        description="Returns all jobs (conversations) for the current user with chat metadata.",
+        responses={status.HTTP_200_OK: JobListSerializer(many=True)},
+    ),
     retrieve=extend_schema(
         summary="Get job details",
         description="Returns the details of a specific job by UUID.",
@@ -51,6 +57,7 @@ from ..serializers import JobSerializer, JobUpdateSerializer
     ),
 )
 class JobViewSet(
+    mixins.ListModelMixin,
     mixins.RetrieveModelMixin,
     mixins.UpdateModelMixin,
     mixins.DestroyModelMixin,
@@ -62,9 +69,28 @@ class JobViewSet(
     permission_classes = [IsActiveAccount]
 
     def get_serializer_class(self):
+        if self.action == "list":
+            return JobListSerializer
         if self.action in ("update", "partial_update"):
             return JobUpdateSerializer
         return JobSerializer
+
+    def get_queryset(self):
+        base_queryset = super().get_queryset()
+
+        if self.action == "list":
+            return (
+                base_queryset.filter(user=self.request.user)
+                .select_related("announcement", "announcement__organization", "announcement__category", "chat")
+                .prefetch_related("chat__messages")
+            )
+
+        return base_queryset
+
+    def list(self, request, *args, **kwargs):
+        queryset = self.filter_queryset(self.get_queryset())
+        serializer = self.get_serializer(queryset, many=True)
+        return Response(serializer.data)
 
     def perform_update(self, serializer):
         job = self.get_object()

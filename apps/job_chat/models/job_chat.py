@@ -27,10 +27,19 @@ class JobChat(models.Model):
 class JobChatMessage(models.Model):
     """Message in a JobChat thread."""
 
+    class MessageType(models.TextChoices):
+        PLAIN_TEXT = "plain_text", "Plain text"
+        WIDGET = "widget", "Widget"
+
     id = models.AutoField(primary_key=True)
     uuid = models.UUIDField(unique=True, default=uuid.uuid4)
     job_chat = models.ForeignKey(JobChat, on_delete=models.CASCADE, related_name="messages")
     user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="job_chat_messages")
+    type = models.CharField(
+        max_length=20,
+        choices=MessageType.choices,
+        default=MessageType.PLAIN_TEXT,
+    )
     content = models.TextField()
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)

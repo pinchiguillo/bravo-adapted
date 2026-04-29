@@ -52,3 +52,43 @@ class JobUpdateSerializer(serializers.ModelSerializer):
             "organization_rating",
             "plan_price",
         )
+
+
+class JobListSerializer(serializers.ModelSerializer):
+    organization_name = serializers.CharField(source="announcement.organization.name", read_only=True)
+    announcement_name = serializers.CharField(source="announcement.name", read_only=True)
+    announcement_category = serializers.CharField(source="announcement.category", read_only=True)
+    last_message_time = serializers.SerializerMethodField()
+    last_message_preview = serializers.SerializerMethodField()
+    unread_count = serializers.SerializerMethodField()
+
+    def get_last_message_time(self, obj):
+        if hasattr(obj, "chat") and obj.chat:
+            msg = obj.chat.messages.order_by("-created_at").first()
+            return msg.created_at.isoformat() if msg else None
+        return None
+
+    def get_last_message_preview(self, obj):
+        if hasattr(obj, "chat") and obj.chat:
+            msg = obj.chat.messages.order_by("-created_at").first()
+            if msg:
+                return msg.content[:60] if msg.type == "plain_text" else "📋 Propuesta"
+        return None
+
+    def get_unread_count(self, obj):
+        return 0
+
+    class Meta:
+        model = Job
+        fields = (
+            "uuid",
+            "status",
+            "organization_name",
+            "announcement_name",
+            "announcement_category",
+            "last_message_time",
+            "last_message_preview",
+            "unread_count",
+            "created_at",
+        )
+        read_only_fields = fields

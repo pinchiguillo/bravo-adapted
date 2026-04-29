@@ -24,14 +24,20 @@ class JobChatMessageSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = JobChatMessage
-        fields = ("uuid", "user_id", "username", "content", "attachments", "created_at", "updated_at")
-        read_only_fields = ("uuid", "user_id", "username", "created_at", "updated_at", "attachments")
+        fields = ("uuid", "user_id", "username", "type", "content", "attachments", "created_at", "updated_at")
+        read_only_fields = ("uuid", "user_id", "username", "type", "created_at", "updated_at", "attachments")
 
 
 class JobChatMessageCreateSerializer(serializers.ModelSerializer):
+    type = serializers.ChoiceField(
+        choices=JobChatMessage.MessageType.choices,
+        default=JobChatMessage.MessageType.PLAIN_TEXT,
+        required=False,
+    )
+
     class Meta:
         model = JobChatMessage
-        fields = ("content",)
+        fields = ("type", "content")
 
 
 class JobChatSerializer(serializers.ModelSerializer):
@@ -41,6 +47,12 @@ class JobChatSerializer(serializers.ModelSerializer):
         model = JobChat
         fields = ("uuid", "job", "messages", "created_at", "updated_at")
         read_only_fields = ("uuid", "job", "messages", "created_at", "updated_at")
+
+
+class ProposalStatusUpdateSerializer(serializers.Serializer):
+    """Update the status of a proposal widget message."""
+
+    status = serializers.ChoiceField(choices=["accepted", "rejected"])
 
 
 class JobChatAttachmentCreateSerializer(serializers.Serializer):

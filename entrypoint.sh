@@ -11,8 +11,4 @@ export DJANGO_SETTINGS_MODULE="${DJANGO_SETTINGS_MODULE:-Core.settings}"
 
 python manage.py migrate
 
-if [ "$APP_MODE" = "production" ]; then
-  exec daphne -b 0.0.0.0 -p "$PORT" Core.asgi:application
-fi
-
-exec python manage.py runserver 0.0.0.0:"$PORT"
+exec daphne -b 0.0.0.0 -p "$PORT" Core.asgi:application
