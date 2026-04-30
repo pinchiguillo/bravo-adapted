@@ -1,6 +1,6 @@
-from drf_spectacular.utils import OpenApiResponse, extend_schema, extend_schema_view
+from drf_spectacular.utils import OpenApiParameter, OpenApiResponse, extend_schema, extend_schema_view
 from rest_framework import mixins, status, viewsets
-from rest_framework.exceptions import NotFound, PermissionDenied
+from rest_framework.exceptions import NotFound, PermissionDenied, ValidationError
 from rest_framework.response import Response
 
 from common.permissions import IsActiveAccount
@@ -13,7 +13,20 @@ from ..serializers import JobListSerializer, JobSerializer, JobUpdateSerializer
 @extend_schema_view(
     list=extend_schema(
         summary="List my jobs",
-        description="Returns all jobs (conversations) for the current user with chat metadata.",
+        description=(
+            "Returns jobs for the current user with chat metadata. "
+            "Use role=user to list jobs as requester or role=provider/organization "
+            "to list jobs for announcements owned by the authenticated provider."
+        ),
+        parameters=[
+            OpenApiParameter(
+                name="role",
+                type=str,
+                location=OpenApiParameter.QUERY,
+                required=False,
+                description="Participant role filter: user, provider, or organization.",
+            )
+        ],
         responses={status.HTTP_200_OK: JobListSerializer(many=True)},
     ),
     retrieve=extend_schema(
@@ -63,6 +76,10 @@ class JobViewSet(
     mixins.DestroyModelMixin,
     viewsets.GenericViewSet,
 ):
+    ROLE_USER = "user"
+    ROLE_PROVIDER = "provider"
+    ROLE_ORGANIZATION = "organization"
+
     serializer_class = JobSerializer
     queryset = Job.objects.select_related("user", "announcement", "plan_price").order_by("-created_at")
     lookup_field = "uuid"
@@ -79,8 +96,13 @@ class JobViewSet(
         base_queryset = super().get_queryset()
 
         if self.action == "list":
+            role = self._get_list_role()
+            if role == self.ROLE_PROVIDER:
+                base_queryset = base_queryset.filter(announcement__organization__user=self.request.user)
+            else:
+                base_queryset = base_queryset.filter(user=self.request.user)
             return (
-                base_queryset.filter(user=self.request.user)
+                base_queryset
                 .select_related(
                     "user",
                     "announcement",
@@ -93,6 +115,14 @@ class JobViewSet(
             )
 
         return base_queryset
+
+    def _get_list_role(self):
+        role = self.request.query_params.get("role", self.ROLE_USER).strip().lower()
+        if role == self.ROLE_ORGANIZATION:
+            return self.ROLE_PROVIDER
+        if role not in {self.ROLE_USER, self.ROLE_PROVIDER}:
+            raise ValidationError({"role": "Invalid role. Expected 'user', 'provider', or 'organization'."})
+        return role
 
     def list(self, request, *args, **kwargs):
         queryset = self.filter_queryset(self.get_queryset())
