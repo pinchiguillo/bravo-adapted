@@ -81,7 +81,14 @@ class JobViewSet(
         if self.action == "list":
             return (
                 base_queryset.filter(user=self.request.user)
-                .select_related("announcement", "announcement__organization", "announcement__category", "chat")
+                .select_related(
+                    "user",
+                    "announcement",
+                    "announcement__organization",
+                    "announcement__category",
+                    "plan_price",
+                    "chat",
+                )
                 .prefetch_related("chat__messages")
             )
 

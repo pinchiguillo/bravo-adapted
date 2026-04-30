@@ -13,7 +13,6 @@ from common.throttling import ActionScopedRateThrottleMixin
 from ..models import Announcement, AnnouncementFavorite, AnnouncementImage, Organization
 from ..permissions import IsOrganizationResourceOwner
 from ..serializers import (
-    AnnouncementFavoriteSerializer,
     AnnouncementImageBase64Serializer,
     AnnouncementImageSerializer,
     AnnouncementImageUploadCompleteSerializer,

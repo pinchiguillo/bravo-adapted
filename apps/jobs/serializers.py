@@ -5,6 +5,26 @@ from apps.organization.serializers import AnnouncementSerializer
 from .models import Job
 
 
+class JobListUserSerializer(serializers.Serializer):
+    uuid = serializers.UUIDField(read_only=True)
+    first_name = serializers.CharField(read_only=True)
+    last_name = serializers.CharField(read_only=True)
+
+
+class JobListProviderSerializer(serializers.Serializer):
+    uuid = serializers.UUIDField(read_only=True)
+    name = serializers.CharField(read_only=True)
+
+
+class JobListPriceSerializer(serializers.Serializer):
+    uuid = serializers.UUIDField(read_only=True)
+    amount = serializers.DecimalField(max_digits=10, decimal_places=2, read_only=True)
+    currency = serializers.CharField(read_only=True)
+    charging_type = serializers.CharField(read_only=True)
+    effective_from = serializers.DateField(read_only=True)
+    effective_to = serializers.DateField(read_only=True, allow_null=True)
+
+
 class JobSerializer(serializers.ModelSerializer):
     announcement_details = AnnouncementSerializer(source="announcement", read_only=True)
 
@@ -55,6 +75,10 @@ class JobUpdateSerializer(serializers.ModelSerializer):
 
 
 class JobListSerializer(serializers.ModelSerializer):
+    announcement = serializers.UUIDField(source="announcement.uuid", read_only=True)
+    user = JobListUserSerializer(read_only=True)
+    provider = JobListProviderSerializer(source="announcement.organization", read_only=True)
+    price = JobListPriceSerializer(source="plan_price", read_only=True)
     organization_name = serializers.CharField(source="announcement.organization.name", read_only=True)
     announcement_name = serializers.CharField(source="announcement.name", read_only=True)
     announcement_category = serializers.CharField(source="announcement.category", read_only=True)
@@ -83,6 +107,10 @@ class JobListSerializer(serializers.ModelSerializer):
         fields = (
             "uuid",
             "status",
+            "announcement",
+            "price",
+            "user",
+            "provider",
             "organization_name",
             "announcement_name",
             "announcement_category",
