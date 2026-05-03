@@ -142,6 +142,6 @@ class JobViewSet(
 
     def get_object(self):
         obj = super().get_object()
-        if obj.user != self.request.user and not self.request.user.is_staff:
+        if not obj.can_access_as_participant(self.request.user):
             raise NotFound("Job not found.")
         return obj

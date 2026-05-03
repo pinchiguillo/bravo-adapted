@@ -225,6 +225,15 @@ class JobApiTests(APITestCase):
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertEqual(response.data, [])
 
+    def test_job_detail_allows_provider_participant(self):
+        self.client.force_authenticate(user=self.other_user)
+
+        response = self.client.get(reverse("job-detail", kwargs={"uuid": self.user_job.uuid}))
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.data["uuid"], str(self.user_job.uuid))
+        self.assertEqual(response.data["announcement_details"]["uuid"], str(self.announcement.uuid))
+
     def test_job_list_requires_authentication(self):
         response = self.client.get(reverse("job-list"))
 

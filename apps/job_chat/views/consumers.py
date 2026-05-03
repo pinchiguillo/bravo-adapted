@@ -210,7 +210,7 @@ class JobChatConsumer(AsyncWebsocketConsumer):
         """Check if user has permission to access this job chat."""
         try:
             job = Job.objects.get(uuid=self.job_uuid)
-            return job.user == self.user or self.user.is_staff
+            return job.can_access_as_participant(self.user)
         except Job.DoesNotExist:
             return False
 

@@ -1,5 +1,6 @@
 import base64
 
+from django.db.models import Prefetch
 from django.shortcuts import get_object_or_404
 from drf_spectacular.utils import extend_schema, extend_schema_view
 from rest_framework import mixins, permissions, status, viewsets
@@ -96,7 +97,21 @@ class PublicAnnouncementViewSet(
     }
 
     def get_queryset(self):
-        return self.filter_announcements(self.queryset).order_by("-created_at", "-id")
+        queryset = self.filter_announcements(self.queryset).order_by("-created_at", "-id")
+        return self._prefetch_request_user_favorites(queryset)
+
+    def _prefetch_request_user_favorites(self, queryset):
+        user = getattr(self.request, "user", None)
+        if user is None or not user.is_authenticated:
+            return queryset
+
+        return queryset.prefetch_related(
+            Prefetch(
+                "favorited_by",
+                queryset=AnnouncementFavorite.objects.filter(user=user),
+                to_attr="_favorite_for_request_user",
+            )
+        )
 
 
 @extend_schema(tags=["Announcements"])
@@ -129,8 +144,19 @@ class PublicAnnouncementDetailViewSet(
     }
 
     def get_queryset(self):
-        return self.queryset.filter(
+        queryset = self.queryset.filter(
             **Organization.validated_filter_kwargs(prefix="organization__"),
+        )
+        user = getattr(self.request, "user", None)
+        if user is None or not user.is_authenticated:
+            return queryset
+
+        return queryset.prefetch_related(
+            Prefetch(
+                "favorited_by",
+                queryset=AnnouncementFavorite.objects.filter(user=user),
+                to_attr="_favorite_for_request_user",
+            )
         )
 
 
@@ -253,7 +279,19 @@ class AnnouncementViewSet(
         queryset = self._apply_text_filters(queryset)
         queryset = self._apply_has_coordinates_filter(queryset)
         queryset = self._apply_search_filter(queryset, self.search_fields, self.search_uuid_fields)
-        return queryset.distinct()
+        queryset = queryset.distinct()
+
+        user = getattr(self.request, "user", None)
+        if user is None or not user.is_authenticated:
+            return queryset
+
+        return queryset.prefetch_related(
+            Prefetch(
+                "favorited_by",
+                queryset=AnnouncementFavorite.objects.filter(user=user),
+                to_attr="_favorite_for_request_user",
+            )
+        )
 
     def get_serializer_context(self):
         context = super().get_serializer_context()
