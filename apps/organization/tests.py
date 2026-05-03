@@ -1,7 +1,7 @@
 import base64
 import io
 import uuid
-from datetime import date
+from datetime import date, timedelta
 from unittest.mock import patch
 
 from django.contrib.auth import get_user_model
@@ -1669,6 +1669,8 @@ class OrganizationApiTests(APITestCase):
 
     def test_owner_can_patch_announcement_with_nested_subservices(self):
         self.client.force_authenticate(user=self.owner)
+        effective_from = date.today() + timedelta(days=1)
+        effective_to = date.today() + timedelta(days=2)
 
         response = self.client.patch(
             reverse(
@@ -1690,8 +1692,8 @@ class OrganizationApiTests(APITestCase):
                                 "amount": "79.99",
                                 "currency": "eur",
                                 "charging_type": ServicePrice.ChargingType.PER_PROJECT,
-                                "effective_from": "2026-05-01",
-                                "effective_to": "2026-05-02",
+                                "effective_from": effective_from.isoformat(),
+                                "effective_to": effective_to.isoformat(),
                             }
                         ],
                     }
