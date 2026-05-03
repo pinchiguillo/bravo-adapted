@@ -68,4 +68,12 @@ class Job(models.Model):
         )
 
     def can_access_as_participant(self, user):
-        return bool(user and user.is_authenticated and (user.is_staff or self.is_requester(user) or self.is_provider(user)))
+        return bool(
+            user
+            and user.is_authenticated
+            and (
+                user.is_staff
+                or self.is_requester(user)
+                or self.is_provider(user)
+            )
+        )
