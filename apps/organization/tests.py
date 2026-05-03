@@ -22,6 +22,7 @@ from .middleware import AnnouncementViewCountMiddleware
 from .models import (
     AllowedCity,
     Announcement,
+    AnnouncementFavorite,
     AnnouncementImage,
     AnnouncementReview,
     Category,
@@ -789,7 +790,19 @@ class OrganizationApiTests(APITestCase):
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertEqual(response.data["count"], 1)
         self.assertEqual(response.data["results"][0]["uuid"], str(self.announcement.uuid))
+        self.assertFalse(response.data["results"][0]["favorite"])
         self.assertNotIn("review", response.data["results"][0])
+
+    def test_public_announcement_detail_marks_favorite_for_authenticated_user(self):
+        AnnouncementFavorite.objects.create(user=self.other_owner, announcement=self.announcement)
+        self.client.force_authenticate(user=self.other_owner)
+
+        response = self.client.get(
+            reverse("public-announcement-detail", kwargs={"uuid": self.announcement.uuid})
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertTrue(response.data["favorite"])
 
     def test_public_announcement_list_hides_unapproved_organization_announcements(self):
         self.organization.is_approved = False
@@ -1977,6 +1990,14 @@ class AnnouncementSerializerTests(SimpleTestCase):
 
         self.assertIn("organization_name", serializer.get_fields())
         self.assertTrue(serializer.get_fields()["organization_name"].read_only)
+
+    def test_announcement_serializer_exposes_favorite_as_read_only(self):
+        from .serializers import AnnouncementSerializer
+
+        serializer = AnnouncementSerializer()
+
+        self.assertIn("favorite", serializer.get_fields())
+        self.assertTrue(serializer.get_fields()["favorite"].read_only)
 
 
 class AnnouncementViewCountMiddlewareTests(APITestCase):

@@ -353,6 +353,7 @@ class AnnouncementSubserviceWriteSerializer(serializers.ModelSerializer):
 class AnnouncementSerializer(serializers.ModelSerializer):
     organization = serializers.UUIDField(source="organization.uuid", read_only=True)
     organization_name = serializers.CharField(source="organization.name", read_only=True)
+    favorite = serializers.SerializerMethodField()
     title = serializers.CharField(source="announcement")
     category = CatalogReferenceField(queryset=Category.objects.all(), slug_field="uuid")
     subservices = AnnouncementSubserviceWriteSerializer(many=True, write_only=True, required=False)
@@ -373,6 +374,7 @@ class AnnouncementSerializer(serializers.ModelSerializer):
             "uuid",
             "organization",
             "organization_name",
+            "favorite",
             "category",
             "subservices",
             "image_uuids",
@@ -496,6 +498,20 @@ class AnnouncementSerializer(serializers.ModelSerializer):
             many=True,
             context=self.context,
         ).data
+
+    @extend_schema_field(serializers.BooleanField())
+    def get_favorite(self, obj) -> bool:
+        request = self.context.get("request")
+        user = getattr(request, "user", None)
+
+        if user is None or not getattr(user, "is_authenticated", False):
+            return False
+
+        prefetched_favorites = getattr(obj, "_favorite_for_request_user", None)
+        if prefetched_favorites is not None:
+            return bool(prefetched_favorites)
+
+        return AnnouncementFavorite.objects.filter(user=user, announcement=obj).exists()
 
 
 class AnnouncementStatusChangeSerializer(serializers.ModelSerializer):
