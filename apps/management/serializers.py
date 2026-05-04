@@ -5,6 +5,9 @@ from drf_spectacular.utils import extend_schema_field
 from rest_framework import serializers
 
 from apps.assets.models import Asset
+from apps.job_chat.models import JobChat
+from apps.job_chat.serializers import JobChatMessageSerializer
+from apps.jobs.models import Job
 from apps.management.models import FeatureFlag
 from apps.organization.models import (
     AllowedCity,
@@ -22,12 +25,37 @@ from apps.organization.serializers import (
 from apps.organization.serializers.catalog import CatalogReferenceField
 
 
+class ManagementUserOrganizationSerializer(serializers.ModelSerializer):
+    admin_url = serializers.SerializerMethodField()
+
+    class Meta:
+        model = Organization
+        fields = (
+            "uuid",
+            "name",
+            "admin_url",
+        )
+        read_only_fields = fields
+
+    def get_admin_url(self, obj):
+        request = self.context.get("request")
+        admin_path = f"/admin/organization/organization/{obj.pk}/change/"
+
+        if request is None:
+            return admin_path
+
+        return request.build_absolute_uri(admin_path)
+
+
 class ManagementUserSerializer(serializers.ModelSerializer):
     password = serializers.CharField(
         write_only=True,
         required=False,
         min_length=8 if settings.AUTH_ENFORCE_PASSWORD_RESTRICTIONS else None,
     )
+    has_organization = serializers.SerializerMethodField()
+    is_provider = serializers.SerializerMethodField()
+    organization = serializers.SerializerMethodField()
 
     class Meta:
         model = get_user_model()
@@ -43,8 +71,30 @@ class ManagementUserSerializer(serializers.ModelSerializer):
             "is_staff",
             "is_superuser",
             "is_active",
+            "has_organization",
+            "is_provider",
+            "organization",
         )
         read_only_fields = ("uuid",)
+
+    @extend_schema_field(serializers.BooleanField())
+    def get_has_organization(self, obj):
+        return getattr(obj, "organization", None) is not None
+
+    @extend_schema_field(serializers.BooleanField())
+    def get_is_provider(self, obj):
+        return self.get_has_organization(obj)
+
+    @extend_schema_field(ManagementUserOrganizationSerializer(allow_null=True))
+    def get_organization(self, obj):
+        organization = getattr(obj, "organization", None)
+        if organization is None:
+            return None
+
+        return ManagementUserOrganizationSerializer(
+            organization,
+            context=self.context,
+        ).data
 
     def validate(self, attrs):
         errors = {}
@@ -235,3 +285,189 @@ class ManagementAssetSerializer(serializers.ModelSerializer):
             'confirmed_at',
         )
         read_only_fields = fields
+
+
+class ManagementUserSummarySerializer(serializers.Serializer):
+    uuid = serializers.UUIDField(read_only=True)
+    username = serializers.CharField(read_only=True)
+    email = serializers.EmailField(read_only=True)
+    first_name = serializers.CharField(read_only=True)
+    last_name = serializers.CharField(read_only=True)
+    full_name = serializers.SerializerMethodField()
+
+    @extend_schema_field(serializers.CharField())
+    def get_full_name(self, obj):
+        return " ".join(
+            part.strip()
+            for part in [getattr(obj, "first_name", ""), getattr(obj, "last_name", "")]
+            if part and part.strip()
+        )
+
+
+class ManagementOrganizationSummarySerializer(serializers.Serializer):
+    uuid = serializers.UUIDField(read_only=True)
+    name = serializers.CharField(read_only=True)
+    status = serializers.CharField(read_only=True)
+
+
+class ManagementAnnouncementSummarySerializer(serializers.Serializer):
+    uuid = serializers.UUIDField(read_only=True)
+    name = serializers.CharField(read_only=True)
+    status = serializers.CharField(read_only=True)
+    location = serializers.CharField(read_only=True)
+
+
+class ManagementServicePriceSummarySerializer(serializers.Serializer):
+    uuid = serializers.UUIDField(read_only=True)
+    amount = serializers.DecimalField(max_digits=10, decimal_places=2, read_only=True)
+    currency = serializers.CharField(read_only=True)
+    charging_type = serializers.CharField(read_only=True)
+
+
+class ManagementJobChatSummarySerializer(serializers.Serializer):
+    uuid = serializers.UUIDField(read_only=True)
+    message_count = serializers.IntegerField(read_only=True)
+    last_message_time = serializers.DateTimeField(read_only=True, allow_null=True)
+    last_message_preview = serializers.CharField(read_only=True, allow_blank=True, allow_null=True)
+
+
+class ManagementJobSerializer(serializers.ModelSerializer):
+    user = ManagementUserSummarySerializer(read_only=True)
+    provider = serializers.SerializerMethodField()
+    announcement = serializers.SerializerMethodField()
+    plan_price = ManagementServicePriceSummarySerializer(read_only=True)
+    chat = serializers.SerializerMethodField()
+
+    class Meta:
+        model = Job
+        fields = (
+            "id",
+            "uuid",
+            "status",
+            "organization_rating",
+            "created_at",
+            "updated_at",
+            "user",
+            "provider",
+            "announcement",
+            "plan_price",
+            "chat",
+        )
+        read_only_fields = fields
+
+    @extend_schema_field(ManagementOrganizationSummarySerializer())
+    def get_provider(self, obj):
+        return ManagementOrganizationSummarySerializer(obj.announcement.organization).data
+
+    @extend_schema_field(ManagementAnnouncementSummarySerializer())
+    def get_announcement(self, obj):
+        return ManagementAnnouncementSummarySerializer(obj.announcement).data
+
+    @extend_schema_field(ManagementJobChatSummarySerializer(allow_null=True))
+    def get_chat(self, obj):
+        chat = getattr(obj, "chat", None)
+        if chat is None:
+            return None
+
+        message_count = getattr(chat, "message_count", None)
+        if message_count is None:
+            message_count = chat.messages.count()
+
+        last_message = getattr(chat, "_prefetched_last_message", None)
+        if last_message is None:
+            last_message = chat.messages.order_by("-created_at").first()
+
+        last_message_preview = None
+        last_message_time = None
+        if last_message is not None:
+            last_message_time = last_message.created_at
+            last_message_preview = last_message.content[:120]
+
+        return {
+            "uuid": chat.uuid,
+            "message_count": message_count,
+            "last_message_time": last_message_time,
+            "last_message_preview": last_message_preview,
+        }
+
+
+class ManagementJobChatListSerializer(serializers.ModelSerializer):
+    job_uuid = serializers.UUIDField(source="job.uuid", read_only=True)
+    job_status = serializers.CharField(source="job.status", read_only=True)
+    user = ManagementUserSummarySerializer(source="job.user", read_only=True)
+    provider = ManagementOrganizationSummarySerializer(
+        source="job.announcement.organization",
+        read_only=True,
+    )
+    announcement = ManagementAnnouncementSummarySerializer(source="job.announcement", read_only=True)
+    message_count = serializers.SerializerMethodField()
+    last_message_time = serializers.SerializerMethodField()
+    last_message_preview = serializers.SerializerMethodField()
+
+    class Meta:
+        model = JobChat
+        fields = (
+            "uuid",
+            "job_uuid",
+            "job_status",
+            "user",
+            "provider",
+            "announcement",
+            "message_count",
+            "last_message_time",
+            "last_message_preview",
+            "created_at",
+            "updated_at",
+        )
+        read_only_fields = fields
+
+    @extend_schema_field(serializers.IntegerField())
+    def get_message_count(self, obj):
+        return getattr(obj, "message_count", obj.messages.count())
+
+    @extend_schema_field(serializers.DateTimeField(allow_null=True))
+    def get_last_message_time(self, obj):
+        last_message = getattr(obj, "_prefetched_last_message", None)
+        if last_message is None:
+            last_message = obj.messages.order_by("-created_at").first()
+        return None if last_message is None else last_message.created_at
+
+    @extend_schema_field(serializers.CharField(allow_null=True))
+    def get_last_message_preview(self, obj):
+        last_message = getattr(obj, "_prefetched_last_message", None)
+        if last_message is None:
+            last_message = obj.messages.order_by("-created_at").first()
+        return None if last_message is None else last_message.content[:120]
+
+
+class ManagementJobChatDetailSerializer(serializers.ModelSerializer):
+    job_uuid = serializers.UUIDField(source="job.uuid", read_only=True)
+    job_status = serializers.CharField(source="job.status", read_only=True)
+    user = ManagementUserSummarySerializer(source="job.user", read_only=True)
+    provider = ManagementOrganizationSummarySerializer(
+        source="job.announcement.organization",
+        read_only=True,
+    )
+    announcement = ManagementAnnouncementSummarySerializer(source="job.announcement", read_only=True)
+    messages = JobChatMessageSerializer(many=True, read_only=True)
+    message_count = serializers.SerializerMethodField()
+
+    class Meta:
+        model = JobChat
+        fields = (
+            "uuid",
+            "job_uuid",
+            "job_status",
+            "user",
+            "provider",
+            "announcement",
+            "message_count",
+            "created_at",
+            "updated_at",
+            "messages",
+        )
+        read_only_fields = fields
+
+    @extend_schema_field(serializers.IntegerField())
+    def get_message_count(self, obj):
+        return getattr(obj, "message_count", obj.messages.count())

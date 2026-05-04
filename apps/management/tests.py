@@ -1,6 +1,7 @@
 from io import StringIO
 from pathlib import Path
 from tempfile import TemporaryDirectory
+from datetime import date
 
 from django.contrib.auth import get_user_model
 from django.core.management import call_command
@@ -9,6 +10,8 @@ from django.urls import reverse
 from rest_framework import status
 from rest_framework.test import APITestCase
 
+from apps.job_chat.models import JobChat, JobChatMessage
+from apps.jobs.models import Job
 from apps.management.feature_flags import is_feature_enabled
 from apps.management.models import FeatureFlag
 from apps.organization.models import (
@@ -19,6 +22,7 @@ from apps.organization.models import (
     OrganizationPricing,
     PlanTierCatalog,
     ServiceCatalog,
+    ServicePrice,
     Subservice,
 )
 
@@ -137,6 +141,25 @@ class ManagementApiTests(APITestCase):
         response = self.client.get(reverse("management-users-list"))
 
         self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
+
+    def test_admin_list_users_includes_provider_metadata(self):
+        self.client.force_authenticate(user=self.admin_user)
+
+        response = self.client.get(reverse("management-users-list"))
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        managed_owner = next(
+            user for user in response.data["results"] if user["uuid"] == str(self.organization_owner.uuid)
+        )
+        self.assertTrue(managed_owner["has_organization"])
+        self.assertTrue(managed_owner["is_provider"])
+        self.assertEqual(managed_owner["organization"]["uuid"], str(self.organization.uuid))
+        self.assertEqual(managed_owner["organization"]["name"], self.organization.name)
+        self.assertTrue(
+            managed_owner["organization"]["admin_url"].endswith(
+                f"/admin/organization/organization/{self.organization.pk}/change/"
+            )
+        )
 
     def test_admin_can_create_user(self):
         self.client.force_authenticate(user=self.admin_user)
@@ -465,6 +488,270 @@ class ManagementOrganizationListApiTests(APITestCase):
         self.assertEqual(response.data["count"], 1)
         self.assertEqual(response.data["results"][0]["uuid"], str(self.organization.uuid))
         self.assertEqual(response.data["results"][0]["plan_tier"]["key"], "mgmt-default")
+
+
+class ManagementJobApiTests(APITestCase):
+    def setUp(self):
+        user_model = get_user_model()
+        self.admin_user = user_model.objects.create_user(
+            username="management-jobs-admin",
+            email="management-jobs-admin@example.com",
+            password="testpass123",
+            is_staff=True,
+        )
+        self.regular_user = user_model.objects.create_user(
+            username="management-jobs-user",
+            email="management-jobs-user@example.com",
+            password="testpass123",
+        )
+        self.provider_user = user_model.objects.create_user(
+            username="management-jobs-provider",
+            email="management-jobs-provider@example.com",
+            password="testpass123",
+        )
+        self.requester = user_model.objects.create_user(
+            username="management-jobs-requester",
+            email="management-jobs-requester@example.com",
+            password="testpass123",
+            first_name="Maria",
+            last_name="Requester",
+        )
+        self.category = Category.objects.create(
+            name="Management Jobs Category",
+            description="Categoria para jobs management",
+        )
+        self.organization = Organization.objects.create(
+            user=self.provider_user,
+            name="Management Jobs Org",
+            legal_name="Management Jobs Org SL",
+            tax_id="MGMTJOB123",
+            billing_email="billing@management-jobs-org.com",
+            billing_address="Main 11",
+            billing_city="Madrid",
+            billing_country="ES",
+            billing_postal_code="28011",
+        )
+        self.announcement = Announcement.objects.create(
+            organization=self.organization,
+            category=self.category,
+            name="Managed Job Announcement",
+            location="Madrid",
+            announcement="Managed job announcement",
+            description="Managed jobs description",
+            free_text="Managed jobs free text",
+            status=Announcement.Status.ACTIVE,
+        )
+        self.service = ServiceCatalog.objects.create(
+            category=self.category,
+            name="Managed Service",
+            description="Servicio para jobs management",
+        )
+        self.subservice = Subservice.objects.create(
+            announcement=self.announcement,
+            service_catalog=self.service,
+            name="Managed Subservice",
+            description="Subservice for jobs management",
+        )
+        self.price = ServicePrice.objects.create(
+            subservice=self.subservice,
+            amount="99.00",
+            currency="EUR",
+            charging_type=ServicePrice.ChargingType.PER_PROJECT,
+            effective_from=date(2026, 1, 1),
+        )
+        self.job = Job.objects.create(
+            user=self.requester,
+            announcement=self.announcement,
+            status=Job.Status.PENDING,
+            plan_price=self.price,
+            organization_rating="4.50",
+        )
+        self.chat = JobChat.objects.create(job=self.job)
+        self.message = JobChatMessage.objects.create(
+            job_chat=self.chat,
+            user=self.requester,
+            content="Necesito confirmar detalles del presupuesto.",
+        )
+
+    def test_admin_can_list_management_jobs(self):
+        self.client.force_authenticate(user=self.admin_user)
+
+        response = self.client.get(reverse("management-jobs-list"))
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.data["count"], 1)
+        result = response.data["results"][0]
+        self.assertEqual(result["uuid"], str(self.job.uuid))
+        self.assertEqual(result["status"], Job.Status.PENDING)
+        self.assertEqual(result["user"]["uuid"], str(self.requester.uuid))
+        self.assertEqual(result["provider"]["uuid"], str(self.organization.uuid))
+        self.assertEqual(result["announcement"]["uuid"], str(self.announcement.uuid))
+        self.assertEqual(result["plan_price"]["uuid"], str(self.price.uuid))
+        self.assertEqual(str(result["chat"]["uuid"]), str(self.chat.uuid))
+
+    def test_admin_can_filter_management_jobs_by_status(self):
+        Job.objects.create(
+            user=self.requester,
+            announcement=self.announcement,
+            status=Job.Status.SUSPENDED,
+        )
+        self.client.force_authenticate(user=self.admin_user)
+
+        response = self.client.get(
+            reverse("management-jobs-list"),
+            {"status": Job.Status.SUSPENDED},
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.data["count"], 1)
+        self.assertEqual(response.data["results"][0]["status"], Job.Status.SUSPENDED)
+
+    def test_admin_can_search_management_jobs(self):
+        self.client.force_authenticate(user=self.admin_user)
+
+        response = self.client.get(
+            reverse("management-jobs-list"),
+            {"search": "Management Jobs Org"},
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.data["count"], 1)
+        self.assertEqual(response.data["results"][0]["uuid"], str(self.job.uuid))
+
+    def test_admin_can_suspend_management_job(self):
+        self.client.force_authenticate(user=self.admin_user)
+
+        response = self.client.post(
+            reverse("management-jobs-suspend", kwargs={"uuid": self.job.uuid})
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.job.refresh_from_db()
+        self.assertEqual(self.job.status, Job.Status.SUSPENDED)
+
+    def test_non_staff_cannot_access_management_jobs(self):
+        self.client.force_authenticate(user=self.regular_user)
+
+        response = self.client.get(reverse("management-jobs-list"))
+
+        self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
+
+
+class ManagementChatApiTests(APITestCase):
+    def setUp(self):
+        user_model = get_user_model()
+        self.admin_user = user_model.objects.create_user(
+            username="management-chats-admin",
+            email="management-chats-admin@example.com",
+            password="testpass123",
+            is_staff=True,
+        )
+        self.regular_user = user_model.objects.create_user(
+            username="management-chats-user",
+            email="management-chats-user@example.com",
+            password="testpass123",
+        )
+        self.provider_user = user_model.objects.create_user(
+            username="management-chats-provider",
+            email="management-chats-provider@example.com",
+            password="testpass123",
+        )
+        self.requester = user_model.objects.create_user(
+            username="management-chats-requester",
+            email="management-chats-requester@example.com",
+            password="testpass123",
+        )
+        self.category = Category.objects.create(
+            name="Management Chats Category",
+            description="Categoria para chats management",
+        )
+        self.organization = Organization.objects.create(
+            user=self.provider_user,
+            name="Management Chats Org",
+            legal_name="Management Chats Org SL",
+            tax_id="MGMTCHAT123",
+            billing_email="billing@management-chats-org.com",
+            billing_address="Second 22",
+            billing_city="Valencia",
+            billing_country="ES",
+            billing_postal_code="46001",
+        )
+        self.announcement = Announcement.objects.create(
+            organization=self.organization,
+            category=self.category,
+            name="Managed Chat Announcement",
+            location="Valencia",
+            announcement="Managed chat announcement",
+            description="Managed chats description",
+            free_text="Managed chats free text",
+            status=Announcement.Status.ACTIVE,
+        )
+        self.job = Job.objects.create(
+            user=self.requester,
+            announcement=self.announcement,
+            status=Job.Status.ACTIVE,
+        )
+        self.chat = JobChat.objects.create(job=self.job)
+        self.first_message = JobChatMessage.objects.create(
+            job_chat=self.chat,
+            user=self.requester,
+            content="Primer mensaje del hilo.",
+        )
+        self.second_message = JobChatMessage.objects.create(
+            job_chat=self.chat,
+            user=self.provider_user,
+            content="Respuesta del proveedor en el hilo.",
+        )
+
+    def test_admin_can_list_management_chats(self):
+        self.client.force_authenticate(user=self.admin_user)
+
+        response = self.client.get(reverse("management-chats-list"))
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.data["count"], 1)
+        result = response.data["results"][0]
+        self.assertEqual(result["uuid"], str(self.chat.uuid))
+        self.assertEqual(result["job_uuid"], str(self.job.uuid))
+        self.assertEqual(result["message_count"], 2)
+        self.assertEqual(result["provider"]["uuid"], str(self.organization.uuid))
+
+    def test_admin_can_search_management_chats_by_message_content(self):
+        self.client.force_authenticate(user=self.admin_user)
+
+        response = self.client.get(
+            reverse("management-chats-list"),
+            {"search": "proveedor"},
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.data["count"], 1)
+        self.assertEqual(response.data["results"][0]["uuid"], str(self.chat.uuid))
+
+    def test_admin_can_retrieve_management_chat_detail(self):
+        self.client.force_authenticate(user=self.admin_user)
+
+        response = self.client.get(
+            reverse("management-chats-detail", kwargs={"job_uuid": self.job.uuid})
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.data["uuid"], str(self.chat.uuid))
+        self.assertEqual(response.data["job_uuid"], str(self.job.uuid))
+        self.assertEqual(response.data["message_count"], 2)
+        self.assertEqual(response.data["messages"]["count"], 2)
+        self.assertEqual(len(response.data["messages"]["results"]), 2)
+        self.assertEqual(
+            response.data["messages"]["results"][0]["uuid"],
+            str(self.first_message.uuid),
+        )
+
+    def test_non_staff_cannot_access_management_chats(self):
+        self.client.force_authenticate(user=self.regular_user)
+
+        response = self.client.get(reverse("management-chats-list"))
+
+        self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
 
 
 class ManagementUserListApiTests(APITestCase):

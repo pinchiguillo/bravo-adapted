@@ -8,7 +8,9 @@ from .views import (
     ManagementAssetStatsView,
     ManagementAssetViewSet,
     ManagementCategoryViewSet,
+    ManagementChatViewSet,
     ManagementFeatureFlagViewSet,
+    ManagementJobViewSet,
     ManagementOrganizationViewSet,
     ManagementPlanTierCatalogViewSet,
     ManagementServiceCatalogViewSet,
@@ -24,6 +26,8 @@ router.register("plan-tiers", ManagementPlanTierCatalogViewSet, basename="manage
 router.register("services", ManagementServiceCatalogViewSet, basename="management-services")
 router.register("allowed-cities", ManagementAllowedCityViewSet, basename="management-allowed-cities")
 router.register("announcements", ManagementAnnouncementViewSet, basename="management-announcements")
+router.register("jobs", ManagementJobViewSet, basename="management-jobs")
+router.register("chats", ManagementChatViewSet, basename="management-chats")
 router.register(
     "announcement-status-changes",
     ManagementAnnouncementStatusChangeViewSet,
