@@ -11,6 +11,8 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from apps.assets.models import Asset
+from apps.job_chat.models import JobChat
+from apps.job_chat.serializers import JobChatMessageSerializer
 from apps.jobs.models import Job
 from apps.management.models import FeatureFlag
 from apps.organization.models import (
@@ -32,6 +34,9 @@ from .serializers import (
     ManagementAssetSerializer,
     ManagementCategorySerializer,
     ManagementFeatureFlagSerializer,
+    ManagementJobChatDetailSerializer,
+    ManagementJobChatListSerializer,
+    ManagementJobSerializer,
     ManagementOrganizationSerializer,
     ManagementPlanTierCatalogSerializer,
     ManagementServiceCatalogSerializer,
@@ -158,7 +163,7 @@ class ManagementUserViewSet(
 ):
     permission_classes = [IsActiveAccount, permissions.IsAdminUser]
     serializer_class = ManagementUserSerializer
-    queryset = get_user_model().objects.all().order_by("id")
+    queryset = get_user_model().objects.select_related("organization").all().order_by("id")
     lookup_field = "uuid"
     status_serializer_class = get_user_model().Status
     throttle_scope_prefix = "management"
@@ -216,6 +221,13 @@ class ManagementUserViewSet(
             return uuid.UUID(str(raw_value).strip())
         except (AttributeError, TypeError, ValueError):
             return None
+
+
+def parse_optional_uuid(raw_value):
+    try:
+        return uuid.UUID(str(raw_value).strip())
+    except (AttributeError, TypeError, ValueError):
+        return None
 
 
 @extend_schema(tags=["Management / Feature Flags"])
@@ -340,6 +352,30 @@ management_announcement_status_parameter = OpenApiParameter(
     description="Exact announcement status filter.",
 )
 
+management_job_search_parameter = OpenApiParameter(
+    name="search",
+    type=str,
+    location=OpenApiParameter.QUERY,
+    required=False,
+    description="Free text search over job UUID, status, requester, provider, and announcement fields.",
+)
+
+management_job_status_parameter = OpenApiParameter(
+    name="status",
+    type=str,
+    location=OpenApiParameter.QUERY,
+    required=False,
+    description="Exact job status filter.",
+)
+
+management_chat_search_parameter = OpenApiParameter(
+    name="search",
+    type=str,
+    location=OpenApiParameter.QUERY,
+    required=False,
+    description="Free text search over chat UUID, job UUID, participants, announcement, and message content.",
+)
+
 
 @extend_schema(tags=["Management / Announcements"])
 @extend_schema_view(
@@ -404,6 +440,181 @@ class ManagementAnnouncementViewSet(
             queryset = queryset.filter(status=status_value)
 
         return queryset.distinct()
+
+
+@extend_schema(tags=["Management / Jobs"])
+@extend_schema_view(
+    list=extend_schema(
+        tags=["Management / Jobs"],
+        summary="List managed jobs",
+        description="Returns the paginated list of jobs for administrative management.",
+        parameters=[management_job_search_parameter, management_job_status_parameter],
+    ),
+)
+class ManagementJobViewSet(
+    ManagementBypassAdminLoginMixin,
+    ManagementStatusActionsMixin,
+    ActionScopedRateThrottleMixin,
+    mixins.ListModelMixin,
+    mixins.RetrieveModelMixin,
+    viewsets.GenericViewSet,
+):
+    permission_classes = [IsActiveAccount, permissions.IsAdminUser]
+    serializer_class = ManagementJobSerializer
+    queryset = (
+        Job.objects.select_related(
+            "user",
+            "announcement",
+            "announcement__organization",
+            "plan_price",
+            "chat",
+        )
+        .order_by("-created_at", "-id")
+    )
+    lookup_field = "uuid"
+    status_serializer_class = Job.Status
+    throttle_scope_prefix = "management"
+    throttle_scope_action_map = {
+        "list": "management_read",
+        "retrieve": "management_read",
+        "activate": "management_status",
+        "deactivate": "management_status",
+        "suspend": "management_status",
+    }
+
+    def get_queryset(self):
+        queryset = self.queryset
+        if self.action == "list":
+            search_query = str(self.request.query_params.get("search", "")).strip()
+            if search_query:
+                search_filter = (
+                    Q(status__icontains=search_query)
+                    | Q(user__username__icontains=search_query)
+                    | Q(user__email__icontains=search_query)
+                    | Q(user__first_name__icontains=search_query)
+                    | Q(user__last_name__icontains=search_query)
+                    | Q(announcement__name__icontains=search_query)
+                    | Q(announcement__location__icontains=search_query)
+                    | Q(announcement__organization__name__icontains=search_query)
+                )
+                search_uuid = parse_optional_uuid(search_query)
+                if search_uuid is not None:
+                    search_filter |= Q(uuid=search_uuid)
+                queryset = queryset.filter(search_filter)
+
+            status_value = str(self.request.query_params.get("status", "")).strip()
+            if status_value:
+                queryset = queryset.filter(status=status_value)
+
+        return queryset
+
+
+@extend_schema(tags=["Management / Chats"])
+@extend_schema_view(
+    list=extend_schema(
+        tags=["Management / Chats"],
+        summary="List managed chats",
+        description="Returns the paginated list of job chats for administrative inspection.",
+        parameters=[management_chat_search_parameter],
+    ),
+    retrieve=extend_schema(
+        tags=["Management / Chats"],
+        summary="Get managed chat detail",
+        description="Returns the full chat thread for a job chat by job UUID.",
+    ),
+)
+class ManagementChatViewSet(
+    ManagementBypassAdminLoginMixin,
+    ActionScopedRateThrottleMixin,
+    mixins.ListModelMixin,
+    mixins.RetrieveModelMixin,
+    viewsets.GenericViewSet,
+):
+    permission_classes = [IsActiveAccount, permissions.IsAdminUser]
+    throttle_scope_prefix = "management"
+    throttle_scope_action_map = {
+        "list": "management_read",
+        "retrieve": "management_read",
+    }
+    lookup_field = "job__uuid"
+    lookup_url_kwarg = "job_uuid"
+
+    def get_queryset(self):
+        queryset = JobChat.objects.select_related(
+            "job",
+            "job__user",
+            "job__announcement",
+            "job__announcement__organization",
+        ).prefetch_related("messages__attachments__asset")
+
+        search_query = str(self.request.query_params.get("search", "")).strip()
+        if search_query:
+            search_filter = (
+                Q(job__status__icontains=search_query)
+                | Q(job__user__username__icontains=search_query)
+                | Q(job__user__email__icontains=search_query)
+                | Q(job__announcement__name__icontains=search_query)
+                | Q(job__announcement__organization__name__icontains=search_query)
+                | Q(messages__content__icontains=search_query)
+            )
+            search_uuid = parse_optional_uuid(search_query)
+            if search_uuid is not None:
+                search_filter |= Q(uuid=search_uuid) | Q(job__uuid=search_uuid)
+            queryset = queryset.filter(search_filter)
+
+        return queryset.annotate(message_count=Count("messages", distinct=True)).distinct().order_by(
+            "-updated_at",
+            "-id",
+        )
+
+    def get_serializer_class(self):
+        if self.action == "retrieve":
+            return ManagementJobChatDetailSerializer
+        return ManagementJobChatListSerializer
+
+    def list(self, request, *args, **kwargs):
+        queryset = self.filter_queryset(self.get_queryset())
+        chats = list(queryset)
+        self._attach_last_messages(chats)
+        page = self.paginate_queryset(chats)
+        if page is not None:
+            serializer = self.get_serializer(page, many=True)
+            return self.get_paginated_response(serializer.data)
+
+        serializer = self.get_serializer(chats, many=True)
+        return Response(serializer.data)
+
+    def retrieve(self, request, *args, **kwargs):
+        chat = self.get_object()
+        messages_queryset = chat.messages.select_related("user").prefetch_related("attachments__asset").order_by(
+            "created_at",
+            "id",
+        )
+        page = self.paginator.paginate_queryset(messages_queryset, request, view=self)
+        if page is None:
+            page_payload = {
+                "count": messages_queryset.count(),
+                "next": None,
+                "previous": None,
+                "results": [],
+            }
+            messages = messages_queryset
+        else:
+            messages = page
+            page_payload = self.paginator.get_paginated_response(
+                []
+            ).data
+
+        serializer = self.get_serializer(chat)
+        data = serializer.data
+        message_serializer = JobChatMessageSerializer(messages, many=True)
+        page_payload["results"] = message_serializer.data
+        data["messages"] = page_payload
+        return Response(data)
+
+    def _attach_last_messages(self, chats):
+        for chat in chats:
+            chat._prefetched_last_message = chat.messages.order_by("-created_at", "-id").first()
 
 
 @extend_schema(tags=["Management / Services"])
