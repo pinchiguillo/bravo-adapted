@@ -41,6 +41,7 @@ class ManagementUserSerializer(serializers.ModelSerializer):
             "email_verified",
             "status",
             "is_staff",
+            "is_superuser",
             "is_active",
         )
         read_only_fields = ("uuid",)
@@ -51,8 +52,12 @@ class ManagementUserSerializer(serializers.ModelSerializer):
         if self.instance is None and not attrs.get("password"):
             errors["password"] = "This field is required."
 
-        if "is_staff" in self.initial_data:
+        if self.instance is None and (
+            "is_staff" in self.initial_data or "is_superuser" in self.initial_data
+        ):
             errors["is_staff"] = "is_staff cannot be changed in this endpoint."
+            if "is_superuser" in self.initial_data:
+                errors["is_superuser"] = "is_superuser cannot be changed in this endpoint."
 
         if errors:
             raise serializers.ValidationError(errors)
@@ -70,6 +75,8 @@ class ManagementUserSerializer(serializers.ModelSerializer):
 
     def update(self, instance, validated_data):
         password = validated_data.pop("password", None)
+        if validated_data.get("is_superuser") is True:
+            validated_data["is_staff"] = True
         for attr, value in validated_data.items():
             setattr(instance, attr, value)
         if password:

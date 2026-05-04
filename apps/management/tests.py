@@ -207,6 +207,55 @@ class ManagementApiTests(APITestCase):
         self.staff_candidate.refresh_from_db()
         self.assertEqual(self.staff_candidate.status, self.staff_candidate.Status.SUSPENDED)
 
+    def test_admin_can_patch_managed_user_flags(self):
+        self.client.force_authenticate(user=self.admin_user)
+
+        response = self.client.patch(
+            reverse("management-users-detail", kwargs={"uuid": self.staff_candidate.uuid}),
+            {
+                "email_verified": True,
+                "status": "suspended",
+                "is_active": False,
+                "is_staff": True,
+            },
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.staff_candidate.refresh_from_db()
+        self.assertTrue(self.staff_candidate.email_verified)
+        self.assertEqual(self.staff_candidate.status, self.staff_candidate.Status.SUSPENDED)
+        self.assertFalse(self.staff_candidate.is_active)
+        self.assertTrue(self.staff_candidate.is_staff)
+
+    def test_admin_can_promote_managed_user_to_admin_role(self):
+        self.client.force_authenticate(user=self.admin_user)
+
+        response = self.client.patch(
+            reverse("management-users-detail", kwargs={"uuid": self.staff_candidate.uuid}),
+            {
+                "is_staff": True,
+                "is_superuser": True,
+            },
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.staff_candidate.refresh_from_db()
+        self.assertTrue(self.staff_candidate.is_staff)
+        self.assertTrue(self.staff_candidate.is_superuser)
+
+    def test_non_staff_cannot_patch_managed_user(self):
+        self.client.force_authenticate(user=self.staff_candidate)
+
+        response = self.client.patch(
+            reverse("management-users-detail", kwargs={"uuid": self.organization_owner.uuid}),
+            {"email_verified": True},
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
+
     def test_admin_can_deactivate_organization(self):
         self.client.force_authenticate(user=self.admin_user)
 
