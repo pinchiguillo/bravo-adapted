@@ -91,7 +91,12 @@ def refresh_daily_platform_stats(start_date, end_date) -> None:
         return
 
     new_users = _aggregate_daily_counts(User.objects, "date_joined", start_date, end_date)
-    active_users = _aggregate_daily_counts(User.objects.exclude(last_login__isnull=True), "last_login", start_date, end_date)
+    active_users = _aggregate_daily_counts(
+        User.objects.exclude(last_login__isnull=True),
+        "last_login",
+        start_date,
+        end_date,
+    )
     new_organizations = _aggregate_daily_counts(Organization.objects, "created_at", start_date, end_date)
     new_announcements = _aggregate_daily_counts(Announcement.objects, "created_at", start_date, end_date)
     announcement_favorites = _aggregate_daily_counts(AnnouncementFavorite.objects, "created_at", start_date, end_date)
