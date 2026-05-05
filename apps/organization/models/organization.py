@@ -61,11 +61,16 @@ class Organization(models.Model):
     def validated_filter_kwargs(cls, prefix=""):
         if cls.validation_bypassed():
             return {}
-        return {f"{prefix}is_approved": True}
+        return {
+            f"{prefix}is_approved": True,
+            f"{prefix}status": cls.Status.ACTIVE,
+        }
 
     @property
     def is_validated(self):
-        return self.validation_bypassed() or self.is_approved
+        return self.validation_bypassed() or (
+            self.is_approved and self.status == self.Status.ACTIVE
+        )
 
     def get_rating(self):
         return None

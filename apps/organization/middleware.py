@@ -41,7 +41,17 @@ class AnnouncementViewCountMiddleware:
             int(getattr(settings, "ORGANIZATION_ANNOUNCEMENT_VIEW_TTL_SECONDS", 60 * 60 * 24 * 30)),
         )
         if cache.add(cache_key, True, timeout=ttl):
-            Announcement.objects.filter(uuid=announcement_uuid).update(view_count=F("view_count") + 1)
+            updated = Announcement.objects.filter(uuid=announcement_uuid).update(view_count=F("view_count") + 1)
+            if updated:
+                from apps.statistics.services import increment_announcement_view_stats
+
+                announcement_id = (
+                    Announcement.objects.filter(uuid=announcement_uuid)
+                    .values_list("id", flat=True)
+                    .first()
+                )
+                if announcement_id is not None:
+                    increment_announcement_view_stats(announcement_id)
 
     def _get_visitor_identifier(self, request):
         user = getattr(request, "user", None)

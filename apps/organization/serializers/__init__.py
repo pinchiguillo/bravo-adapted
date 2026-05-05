@@ -15,6 +15,9 @@ from .catalog import (
     ServiceCatalogSerializer,
 )
 from .organization import (
+    OrganizationAvailabilityExceptionSerializer,
+    OrganizationAvailabilitySettingsSerializer,
+    OrganizationWeeklyAvailabilitySerializer,
     OrganizationPublicSerializer,
     OrganizationRatingMixin,
     OrganizationSerializer,
@@ -38,9 +41,12 @@ __all__ = [
     "AnnouncementStatusChangeSerializer",
     "CategorySerializer",
     "PlanTierCatalogSerializer",
+    "OrganizationAvailabilityExceptionSerializer",
+    "OrganizationAvailabilitySettingsSerializer",
     "OrganizationPublicSerializer",
     "OrganizationRatingMixin",
     "OrganizationSerializer",
+    "OrganizationWeeklyAvailabilitySerializer",
     "PublicServicePriceSerializer",
     "ServiceCatalogSerializer",
     "ServicePriceSerializer",

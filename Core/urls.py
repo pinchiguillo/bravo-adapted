@@ -26,11 +26,14 @@ urlpatterns = [
     path("health/", healthcheck, name="healthcheck"),
     path("api/version/", api_version, name="api-version"),
     path("api/auth/", include("apps.auth.urls")),
+    path("api/notifications/", include("apps.notifications.urls")),
+    path("api/management/notifications/", include("apps.notifications.management_urls")),
     path("api/", include("apps.organization.urls")),
     path("api/management/", include("apps.management.urls")),
     path("api/assets/", include("apps.assets.urls")),
     path("api/jobs/", include("apps.jobs.urls")),
     path("api/", include("apps.job_chat.urls")),
+    path("api/management/statistics/", include("apps.statistics.management_urls")),
 ]
 
 if not settings.HIDE_API_DOCS:
@@ -47,3 +50,4 @@ if not settings.HIDE_API_DOCS:
 
 if settings.RGPD_MODULE_ENABLED:
     urlpatterns.append(path("api/rgpd/", include("apps.rgpd.urls")))
+    urlpatterns.append(path("api/management/rgpd/", include("apps.rgpd.management_urls")))

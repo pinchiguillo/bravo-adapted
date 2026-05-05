@@ -3,7 +3,10 @@ from django.contrib import admin
 from .models import (
     Category,
     Organization,
+    OrganizationAvailabilityException,
+    OrganizationAvailabilitySettings,
     OrganizationPricing,
+    OrganizationWeeklyAvailability,
     PlanTierCatalog,
     ServiceCatalog,
     ServicePrice,
@@ -29,6 +32,27 @@ class OrganizationPricingAdmin(admin.ModelAdmin):
     )
     list_filter = ("plan_tier", "currency")
     search_fields = ("organization__name", "organization__legal_name", "organization__user__email")
+
+
+@admin.register(OrganizationAvailabilitySettings)
+class OrganizationAvailabilitySettingsAdmin(admin.ModelAdmin):
+    list_display = ("organization", "timezone", "is_enabled", "updated_at")
+    list_filter = ("is_enabled", "timezone")
+    search_fields = ("organization__name", "organization__user__email", "timezone")
+
+
+@admin.register(OrganizationWeeklyAvailability)
+class OrganizationWeeklyAvailabilityAdmin(admin.ModelAdmin):
+    list_display = ("settings", "weekday", "start_time", "end_time")
+    list_filter = ("weekday",)
+    search_fields = ("settings__organization__name", "settings__organization__user__email")
+
+
+@admin.register(OrganizationAvailabilityException)
+class OrganizationAvailabilityExceptionAdmin(admin.ModelAdmin):
+    list_display = ("settings", "date", "mode", "start_time", "end_time", "label")
+    list_filter = ("mode", "date")
+    search_fields = ("settings__organization__name", "settings__organization__user__email", "label")
 
 
 @admin.register(PlanTierCatalog)

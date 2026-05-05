@@ -23,6 +23,9 @@ from .models import (
     AllowedCity,
     Announcement,
     AnnouncementFavorite,
+    OrganizationAvailabilityException,
+    OrganizationAvailabilitySettings,
+    OrganizationWeeklyAvailability,
     AnnouncementImage,
     AnnouncementReview,
     Category,
@@ -33,6 +36,7 @@ from .models import (
     ServicePrice,
     Subservice,
 )
+from apps.statistics.models import DailyAnnouncementStats, DailyPlatformStats
 from .permissions import IsOrganizationResourceOwner
 from .views import OrganizationViewSet
 
@@ -195,6 +199,12 @@ class OrganizationApiTests(APITestCase):
                     "description": self.premium_plan_tier.description,
                 },
                 "rating": None,
+                "availability": {
+                    "enabled": False,
+                    "timezone": "Europe/Madrid",
+                    "weekly_schedule": [],
+                    "exceptions": [],
+                },
             },
         )
 
@@ -225,6 +235,15 @@ class OrganizationApiTests(APITestCase):
         self.assertEqual(response.data["verification_level"], self.organization.verification_level)
         self.assertEqual(response.data["plan_tier"]["key"], self.premium_plan_tier.key)
         self.assertIsNone(response.data["rating"])
+        self.assertEqual(
+            response.data["availability"],
+            {
+                "enabled": False,
+                "timezone": "Europe/Madrid",
+                "weekly_schedule": [],
+                "exceptions": [],
+            },
+        )
 
     def test_public_retrieve_hides_unapproved_organization_for_anonymous_user(self):
         self.organization.is_approved = False
@@ -240,6 +259,16 @@ class OrganizationApiTests(APITestCase):
         self.organization.is_approved = False
         self.organization.save(update_fields=["is_approved"])
         self.client.force_authenticate(user=self.other_owner)
+
+        response = self.client.get(
+            reverse("organization-detail", kwargs={"uuid": self.organization.uuid})
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_404_NOT_FOUND)
+
+    def test_public_retrieve_hides_suspended_organization_for_anonymous_user(self):
+        self.organization.status = Organization.Status.SUSPENDED
+        self.organization.save(update_fields=["status"])
 
         response = self.client.get(
             reverse("organization-detail", kwargs={"uuid": self.organization.uuid})
@@ -449,6 +478,175 @@ class OrganizationApiTests(APITestCase):
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.organization.refresh_from_db()
         self.assertEqual(self.organization.name, "Acme Via User Endpoint")
+
+    def test_me_endpoint_can_create_and_replace_organization_availability(self):
+        self.client.force_authenticate(user=self.owner)
+
+        response = self.client.patch(
+            reverse("organization-me"),
+            {
+                "availability": {
+                    "enabled": True,
+                    "timezone": "Europe/Madrid",
+                    "weekly_schedule": [
+                        {"weekday": 0, "start_time": "09:00:00", "end_time": "14:00:00"},
+                        {"weekday": 0, "start_time": "16:00:00", "end_time": "18:00:00"},
+                        {"weekday": 1, "start_time": "10:00:00", "end_time": "13:00:00"},
+                    ],
+                    "exceptions": [
+                        {
+                            "date": "2026-12-24",
+                            "mode": "closed",
+                            "start_time": "09:00:00",
+                            "end_time": "18:00:00",
+                            "label": "Nochebuena",
+                        },
+                        {
+                            "date": "2026-12-28",
+                            "mode": "open",
+                            "start_time": "19:00:00",
+                            "end_time": "21:00:00",
+                            "label": "Refuerzo navidad",
+                        },
+                    ],
+                }
+            },
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.organization.refresh_from_db()
+        settings = self.organization.availability_settings
+        self.assertTrue(settings.is_enabled)
+        self.assertEqual(settings.timezone, "Europe/Madrid")
+        self.assertEqual(settings.weekly_schedule.count(), 3)
+        self.assertEqual(settings.exceptions.count(), 2)
+        self.assertEqual(response.data["availability"]["enabled"], True)
+        self.assertEqual(len(response.data["availability"]["weekly_schedule"]), 3)
+        self.assertEqual(len(response.data["availability"]["exceptions"]), 2)
+
+    def test_me_endpoint_partial_update_keeps_existing_availability_when_block_missing(self):
+        availability_settings = OrganizationAvailabilitySettings.objects.create(
+            organization=self.organization,
+            timezone="Europe/Madrid",
+            is_enabled=True,
+        )
+        OrganizationWeeklyAvailability.objects.create(
+            settings=availability_settings,
+            weekday=0,
+            start_time="09:00:00",
+            end_time="14:00:00",
+        )
+        self.client.force_authenticate(user=self.owner)
+
+        response = self.client.patch(
+            reverse("organization-me"),
+            {"name": "Acme sin tocar disponibilidad"},
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.organization.refresh_from_db()
+        self.assertEqual(self.organization.name, "Acme sin tocar disponibilidad")
+        self.assertEqual(self.organization.availability_settings.weekly_schedule.count(), 1)
+        self.assertTrue(self.organization.availability_settings.is_enabled)
+
+    def test_public_retrieve_exposes_enabled_availability(self):
+        availability_settings = OrganizationAvailabilitySettings.objects.create(
+            organization=self.organization,
+            timezone="Europe/Madrid",
+            is_enabled=True,
+        )
+        OrganizationWeeklyAvailability.objects.create(
+            settings=availability_settings,
+            weekday=0,
+            start_time="09:00:00",
+            end_time="14:00:00",
+        )
+        OrganizationAvailabilityException.objects.create(
+            settings=availability_settings,
+            date=date(2026, 12, 24),
+            mode=OrganizationAvailabilityException.Mode.CLOSED,
+            start_time="09:00:00",
+            end_time="18:00:00",
+            label="Nochebuena",
+        )
+
+        response = self.client.get(
+            reverse("organization-detail", kwargs={"uuid": self.organization.uuid})
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.data["availability"]["enabled"], True)
+        self.assertEqual(response.data["availability"]["timezone"], "Europe/Madrid")
+        self.assertEqual(len(response.data["availability"]["weekly_schedule"]), 1)
+        self.assertEqual(len(response.data["availability"]["exceptions"]), 1)
+
+    def test_public_retrieve_hides_availability_ranges_when_disabled(self):
+        availability_settings = OrganizationAvailabilitySettings.objects.create(
+            organization=self.organization,
+            timezone="Europe/Madrid",
+            is_enabled=False,
+        )
+        OrganizationWeeklyAvailability.objects.create(
+            settings=availability_settings,
+            weekday=0,
+            start_time="09:00:00",
+            end_time="14:00:00",
+        )
+
+        response = self.client.get(
+            reverse("organization-detail", kwargs={"uuid": self.organization.uuid})
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(
+            response.data["availability"],
+            {
+                "enabled": False,
+                "timezone": "Europe/Madrid",
+                "weekly_schedule": [],
+                "exceptions": [],
+            },
+        )
+
+    def test_me_endpoint_rejects_overlapping_weekly_availability_ranges(self):
+        self.client.force_authenticate(user=self.owner)
+
+        response = self.client.patch(
+            reverse("organization-me"),
+            {
+                "availability": {
+                    "enabled": True,
+                    "timezone": "Europe/Madrid",
+                    "weekly_schedule": [
+                        {"weekday": 0, "start_time": "09:00:00", "end_time": "12:00:00"},
+                        {"weekday": 0, "start_time": "11:00:00", "end_time": "14:00:00"},
+                    ],
+                }
+            },
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn("availability", response.data)
+
+    def test_me_endpoint_rejects_invalid_timezone_in_availability(self):
+        self.client.force_authenticate(user=self.owner)
+
+        response = self.client.patch(
+            reverse("organization-me"),
+            {
+                "availability": {
+                    "enabled": True,
+                    "timezone": "Mars/Olympus",
+                }
+            },
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn("availability", response.data)
 
     def test_user_endpoint_does_not_exist(self):
         with self.assertRaises(NoReverseMatch):
@@ -807,6 +1005,15 @@ class OrganizationApiTests(APITestCase):
     def test_public_announcement_list_hides_unapproved_organization_announcements(self):
         self.organization.is_approved = False
         self.organization.save(update_fields=["is_approved"])
+
+        response = self.client.get(reverse("public-announcement-list"))
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.data["count"], 0)
+
+    def test_public_announcement_list_hides_suspended_organization_announcements(self):
+        self.organization.status = Organization.Status.SUSPENDED
+        self.organization.save(update_fields=["status"])
 
         response = self.client.get(reverse("public-announcement-list"))
 
@@ -1908,6 +2115,85 @@ class OrganizationPricingModelTests(TestCase):
             pricing.full_clean()
 
 
+class OrganizationAvailabilityModelTests(TestCase):
+    def setUp(self):
+        user_model = get_user_model()
+        self.owner = user_model.objects.create_user(
+            username="availability-owner",
+            email="availability-owner@example.com",
+            password="testpass123",
+        )
+        self.organization = Organization.objects.create(
+            user=self.owner,
+            name="Availability Org",
+            legal_name="Availability Org SL",
+            tax_id="AV123",
+            billing_email="billing@availability.example.com",
+            billing_address="Main 1",
+            billing_city="Madrid",
+            billing_country="ES",
+            billing_postal_code="28001",
+        )
+        self.settings = OrganizationAvailabilitySettings.objects.create(
+            organization=self.organization,
+            timezone="Europe/Madrid",
+            is_enabled=True,
+        )
+
+    def test_availability_settings_reject_invalid_timezone(self):
+        self.settings.timezone = "Invalid/Timezone"
+
+        with self.assertRaises(ValidationError):
+            self.settings.full_clean()
+
+    def test_weekly_availability_rejects_end_time_before_start_time(self):
+        weekly = OrganizationWeeklyAvailability(
+            settings=self.settings,
+            weekday=0,
+            start_time="14:00:00",
+            end_time="09:00:00",
+        )
+
+        with self.assertRaises(ValidationError):
+            weekly.full_clean()
+
+    def test_weekly_availability_rejects_overlapping_ranges(self):
+        OrganizationWeeklyAvailability.objects.create(
+            settings=self.settings,
+            weekday=0,
+            start_time="09:00:00",
+            end_time="12:00:00",
+        )
+        overlapping = OrganizationWeeklyAvailability(
+            settings=self.settings,
+            weekday=0,
+            start_time="11:00:00",
+            end_time="14:00:00",
+        )
+
+        with self.assertRaises(ValidationError):
+            overlapping.full_clean()
+
+    def test_exception_rejects_overlapping_ranges_on_same_date(self):
+        OrganizationAvailabilityException.objects.create(
+            settings=self.settings,
+            date=date(2026, 12, 24),
+            mode=OrganizationAvailabilityException.Mode.CLOSED,
+            start_time="09:00:00",
+            end_time="12:00:00",
+        )
+        overlapping = OrganizationAvailabilityException(
+            settings=self.settings,
+            date=date(2026, 12, 24),
+            mode=OrganizationAvailabilityException.Mode.OPEN,
+            start_time="11:00:00",
+            end_time="13:00:00",
+        )
+
+        with self.assertRaises(ValidationError):
+            overlapping.full_clean()
+
+
 class AnnouncementSerializerTests(SimpleTestCase):
     def test_serializer_does_not_expose_announcement_review_field(self):
         from .serializers import AnnouncementSerializer
@@ -2046,6 +2332,17 @@ class AnnouncementViewCountMiddlewareTests(APITestCase):
 
         self.announcement.refresh_from_db()
         self.assertEqual(self.announcement.view_count, 1)
+        self.assertEqual(
+            DailyPlatformStats.objects.get(date=date.today()).announcement_views,
+            1,
+        )
+        self.assertEqual(
+            DailyAnnouncementStats.objects.get(
+                announcement=self.announcement,
+                date=date.today(),
+            ).views,
+            1,
+        )
 
     def _build_anonymous_request(self, session_key="anon-visitor"):
         request = self.factory.get(
@@ -2273,6 +2570,23 @@ class AnnouncementImageApiTests(APITestCase):
         image = AnnouncementImage.objects.create(
             announcement=self.announcement,
             image=self._make_png_upload(name="closed.png"),
+        )
+
+        response = self.client.get(
+            reverse(
+                "public-announcement-image-base64",
+                kwargs={"uuid": self.announcement.uuid, "image_uuid": image.uuid},
+            )
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_404_NOT_FOUND)
+
+    def test_public_base64_returns_404_for_suspended_organization(self):
+        self.organization.status = Organization.Status.SUSPENDED
+        self.organization.save(update_fields=["status"])
+        image = AnnouncementImage.objects.create(
+            announcement=self.announcement,
+            image=self._make_png_upload(name="suspended-org.png"),
         )
 
         response = self.client.get(
