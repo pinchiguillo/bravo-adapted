@@ -33,16 +33,27 @@ class AuthApiTests(APITestCase):
         )
         mail.outbox = []
 
+    def build_register_payload(self, **overrides):
+        payload = {
+            "username": "new-user",
+            "email": "new-user@example.com",
+            "password": "ChangeMe123!",
+            "first_name": "New",
+            "last_name": "User",
+            "rgpd": {
+                "privacy_policy_accepted": True,
+                "terms_and_conditions_accepted": True,
+                "cookies_accepted": False,
+                "source": "auth-tests",
+            },
+        }
+        payload.update(overrides)
+        return payload
+
     def test_register_sends_verification_email(self):
         response = self.client.post(
             "/api/auth/register/",
-            {
-                "username": "new-user",
-                "email": "new-user@example.com",
-                "password": "ChangeMe123!",
-                "first_name": "New",
-                "last_name": "User",
-            },
+            self.build_register_payload(),
             format="json",
         )
 
@@ -102,13 +113,7 @@ class AuthApiTests(APITestCase):
     def test_register_rejects_passwords_blocked_by_django_validators(self):
         response = self.client.post(
             "/api/auth/register/",
-            {
-                "username": "new-user",
-                "email": "new-user@example.com",
-                "password": "password123",
-                "first_name": "New",
-                "last_name": "User",
-            },
+            self.build_register_payload(password="password123"),
             format="json",
         )
 
@@ -319,13 +324,18 @@ class AuthApiTests(APITestCase):
     def test_register_bypass_marks_user_as_verified_and_skips_email(self):
         response = self.client.post(
             "/api/auth/register/",
-            {
-                "username": "bypass-user",
-                "email": "bypass-user@example.com",
-                "password": "ChangeMe123!",
-                "first_name": "Bypass",
-                "last_name": "User",
-            },
+            self.build_register_payload(
+                username="bypass-user",
+                email="bypass-user@example.com",
+                first_name="Bypass",
+                last_name="User",
+                rgpd={
+                    "privacy_policy_accepted": True,
+                    "terms_and_conditions_accepted": True,
+                    "cookies_accepted": False,
+                    "source": "auth-bypass-tests",
+                },
+            ),
             format="json",
         )
 
@@ -379,6 +389,23 @@ class AuthThrottleTests(APITestCase):
             email_verified=True,
         )
 
+    def build_register_payload(self, **overrides):
+        payload = {
+            "username": "new-throttle-user",
+            "email": "new-throttle@example.com",
+            "password": "ChangeMe123!",
+            "first_name": "New",
+            "last_name": "User",
+            "rgpd": {
+                "privacy_policy_accepted": True,
+                "terms_and_conditions_accepted": True,
+                "cookies_accepted": False,
+                "source": "auth-throttle-tests",
+            },
+        }
+        payload.update(overrides)
+        return payload
+
     def test_login_is_throttled_after_rate_limit(self):
         class LoginTestThrottle(SimpleRateThrottle):
             scope = "auth_login_test"
@@ -411,13 +438,7 @@ class AuthThrottleTests(APITestCase):
                 }
 
         url = "/api/auth/register/"
-        payload = {
-            "username": "new-throttle-user",
-            "email": "new-throttle@example.com",
-            "password": "ChangeMe123!",
-            "first_name": "New",
-            "last_name": "User",
-        }
+        payload = self.build_register_payload()
         with patch.object(AuthViewSet, "throttle_classes", [RegisterTestThrottle]):
             first_response = self.client.post(url, payload, format="json")
             second_response = self.client.post(url, payload, format="json")
