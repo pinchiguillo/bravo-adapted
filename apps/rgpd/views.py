@@ -2,7 +2,7 @@ from django.conf import settings
 from drf_spectacular.utils import extend_schema, extend_schema_view
 from rest_framework import mixins, permissions, status, viewsets
 from rest_framework.decorators import action
-from rest_framework.exceptions import NotFound
+from rest_framework.exceptions import NotFound, ValidationError
 from rest_framework.response import Response
 
 from common.permissions import IsActiveAccount
@@ -13,15 +13,27 @@ from .models import (
     RgpdAnonymousConsentEvent,
     RgpdConsent,
     RgpdConsentEvent,
+    RgpdDataRequest,
     RgpdLegalDocument,
+    RgpdPolicyDocument,
+    RgpdPolicyVersion,
 )
 from .serializers import (
+    ManagementRgpdDataRequestSerializer,
+    ManagementRgpdDataRequestUpdateSerializer,
+    ManagementRgpdPolicyDocumentSerializer,
+    ManagementRgpdPolicyVersionCreateSerializer,
+    ManagementRgpdPolicyVersionSerializer,
     RgpdAnonymousConsentSerializer,
     RgpdAnonymousConsentUpsertSerializer,
     RgpdConsentSerializer,
     RgpdConsentUpsertSerializer,
+    RgpdDataRequestCreateSerializer,
+    RgpdDataRequestSerializer,
     RgpdLegalDocumentSerializer,
+    RgpdPublicPolicyVersionSerializer,
 )
+from .services import publish_policy_version, record_policy_acceptances, set_data_request_status
 from .utils import (
     extract_client_ip,
     generate_anonymous_identifier,
@@ -62,9 +74,24 @@ class RgpdConsentViewSet(ActionScopedRateThrottleMixin, viewsets.GenericViewSet)
         validated_data = dict(serializer.validated_data)
         validated_data["ip_address"] = extract_client_ip(request)
         validated_data["user_agent"] = request.META.get("HTTP_USER_AGENT", "")
+        try:
+            record_policy_acceptances(
+                validated_data=validated_data,
+                source=validated_data.get("source", ""),
+                ip_address=validated_data["ip_address"],
+                user_agent=validated_data["user_agent"],
+                user=request.user,
+            )
+        except ValueError as exc:
+            raise ValidationError(str(exc)) from exc
+
         consent.apply_acceptance_changes(validated_data)
         consent.save()
-        RgpdConsentEvent.objects.create(consent=consent, action=action, **consent.build_event_payload())
+        RgpdConsentEvent.objects.create(
+            consent=consent,
+            action=action,
+            **consent.build_event_payload(),
+        )
         return Response(RgpdConsentSerializer(consent).data, status=status.HTTP_200_OK)
 
     @action(detail=False, methods=["get"], url_path="me")
@@ -139,6 +166,17 @@ class RgpdAnonymousConsentViewSet(ActionScopedRateThrottleMixin, viewsets.Generi
         validated_data.pop("write_token", None)
         validated_data["ip_address"] = extract_client_ip(request)
         validated_data["user_agent"] = request.META.get("HTTP_USER_AGENT", "")
+        try:
+            record_policy_acceptances(
+                validated_data=validated_data,
+                source=validated_data.get("source", ""),
+                ip_address=validated_data["ip_address"],
+                user_agent=validated_data["user_agent"],
+                anonymous_consent=consent,
+            )
+        except ValueError as exc:
+            raise ValidationError(str(exc)) from exc
+
         consent.apply_acceptance_changes(validated_data)
         consent.save()
         RgpdAnonymousConsentEvent.objects.create(
@@ -166,7 +204,75 @@ class RgpdAnonymousConsentViewSet(ActionScopedRateThrottleMixin, viewsets.Generi
             identifier=generate_anonymous_identifier(),
             write_token_hash=hash_write_token(write_token),
         )
+        consent.save()
         return consent, write_token, RgpdAnonymousConsentEvent.Action.CREATE, status.HTTP_201_CREATED
+
+
+@extend_schema_view(
+    list=extend_schema(
+        tags=["RGPD"],
+        summary="List current published RGPD documents",
+        description="Returns the currently published public versions for privacy, terms, and cookies.",
+        responses=RgpdPublicPolicyVersionSerializer(many=True),
+        auth=[],
+    ),
+)
+class RgpdPublicPolicyViewSet(mixins.ListModelMixin, viewsets.GenericViewSet):
+    serializer_class = RgpdPublicPolicyVersionSerializer
+    permission_classes = [permissions.AllowAny]
+    queryset = RgpdPolicyVersion.objects.select_related("document").filter(
+        is_published=True,
+        is_current=True,
+    )
+
+    @action(detail=False, methods=["get"], url_path="active")
+    def active(self, request):
+        queryset = self.filter_queryset(self.get_queryset())
+        serializer = self.get_serializer(queryset, many=True)
+        return Response(serializer.data, status=status.HTTP_200_OK)
+
+
+@extend_schema_view(
+    list=extend_schema(
+        tags=["RGPD"],
+        summary="List my RGPD requests",
+        responses=RgpdDataRequestSerializer(many=True),
+    ),
+    create=extend_schema(
+        tags=["RGPD"],
+        summary="Create RGPD request",
+        request=RgpdDataRequestCreateSerializer,
+        responses={201: RgpdDataRequestSerializer},
+    ),
+)
+class RgpdDataRequestViewSet(ActionScopedRateThrottleMixin, viewsets.GenericViewSet):
+    permission_classes = [IsActiveAccount]
+    throttle_scope_prefix = "rgpd"
+    throttle_scope_action_map = {
+        "me": "rgpd_authenticated_read",
+        "create_me": "rgpd_authenticated_write",
+    }
+
+    def get_queryset(self):
+        return RgpdDataRequest.objects.filter(user=self.request.user).order_by("-submitted_at", "-id")
+
+    @action(detail=False, methods=["get"], url_path="me")
+    def me(self, request):
+        serializer = RgpdDataRequestSerializer(self.get_queryset(), many=True)
+        return Response(serializer.data, status=status.HTTP_200_OK)
+
+    @me.mapping.post
+    def create_me(self, request):
+        serializer = RgpdDataRequestCreateSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        data_request = RgpdDataRequest.objects.create(
+            user=request.user,
+            **serializer.validated_data,
+        )
+        return Response(
+            RgpdDataRequestSerializer(data_request).data,
+            status=status.HTTP_201_CREATED,
+        )
 
 
 @extend_schema_view(
@@ -210,3 +316,77 @@ class RgpdLegalDocumentViewSet(
         context["allowed_content_types"] = settings.LEGAL_DOCUMENT_ALLOWED_CONTENT_TYPES
         context["max_bytes"] = settings.LEGAL_DOCUMENT_MAX_BYTES
         return context
+
+
+@extend_schema(tags=["Management / RGPD"])
+class ManagementRgpdPolicyDocumentViewSet(mixins.ListModelMixin, viewsets.GenericViewSet):
+    permission_classes = [IsActiveAccount, permissions.IsAdminUser]
+    serializer_class = ManagementRgpdPolicyDocumentSerializer
+    queryset = RgpdPolicyDocument.objects.all().order_by("document_type")
+    lookup_field = "uuid"
+
+
+@extend_schema(tags=["Management / RGPD"])
+class ManagementRgpdPolicyVersionViewSet(
+    mixins.ListModelMixin,
+    mixins.CreateModelMixin,
+    mixins.RetrieveModelMixin,
+    mixins.UpdateModelMixin,
+    viewsets.GenericViewSet,
+):
+    permission_classes = [IsActiveAccount, permissions.IsAdminUser]
+    queryset = RgpdPolicyVersion.objects.select_related("document").all()
+    lookup_field = "uuid"
+
+    def get_serializer_class(self):
+        if self.action == "create":
+            return ManagementRgpdPolicyVersionCreateSerializer
+        return ManagementRgpdPolicyVersionSerializer
+
+    def create(self, request, *args, **kwargs):
+        serializer = self.get_serializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        instance = serializer.save()
+        output = ManagementRgpdPolicyVersionSerializer(instance)
+        return Response(output.data, status=status.HTTP_201_CREATED)
+
+    @action(detail=True, methods=["post"], url_path="publish")
+    def publish(self, request, uuid=None):
+        policy_version = self.get_object()
+        policy_version = publish_policy_version(policy_version)
+        return Response(
+            ManagementRgpdPolicyVersionSerializer(policy_version).data,
+            status=status.HTTP_200_OK,
+        )
+
+
+@extend_schema(tags=["Management / RGPD"])
+class ManagementRgpdDataRequestViewSet(
+    mixins.ListModelMixin,
+    mixins.RetrieveModelMixin,
+    mixins.UpdateModelMixin,
+    viewsets.GenericViewSet,
+):
+    permission_classes = [IsActiveAccount, permissions.IsAdminUser]
+    queryset = RgpdDataRequest.objects.select_related("user", "resolved_by").all()
+    lookup_field = "uuid"
+
+    def get_serializer_class(self):
+        if self.action in {"update", "partial_update"}:
+            return ManagementRgpdDataRequestUpdateSerializer
+        return ManagementRgpdDataRequestSerializer
+
+    def update(self, request, *args, **kwargs):
+        data_request = self.get_object()
+        serializer = self.get_serializer(data_request, data=request.data, partial=kwargs.get("partial", False))
+        serializer.is_valid(raise_exception=True)
+        data_request = set_data_request_status(
+            data_request=data_request,
+            status_value=serializer.validated_data["status"],
+            resolved_by=request.user,
+            resolution_notes=serializer.validated_data.get("resolution_notes"),
+        )
+        return Response(
+            ManagementRgpdDataRequestSerializer(data_request).data,
+            status=status.HTTP_200_OK,
+        )

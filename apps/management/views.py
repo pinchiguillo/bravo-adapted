@@ -15,6 +15,7 @@ from apps.job_chat.models import JobChat
 from apps.job_chat.serializers import JobChatMessageSerializer
 from apps.jobs.models import Job
 from apps.management.models import FeatureFlag
+from apps.notifications.services import emit_status_change_notification
 from apps.organization.models import (
     AllowedCity,
     Announcement,
@@ -55,7 +56,7 @@ class ManagementStatusActionsMixin:
         
         # Log the status change if it's an Announcement
         if hasattr(instance, 'status_changes'):
-            from organization.models import AnnouncementStatusChange
+            from apps.organization.models import AnnouncementStatusChange
             reason_text = request.data.get('reason_text', '') if request.data else ''
             reason = request.data.get('reason', 'admin_decision') if request.data else 'admin_decision'
             
@@ -67,6 +68,14 @@ class ManagementStatusActionsMixin:
                 reason_text=reason_text,
                 changed_by='admin',
             )
+
+        emit_status_change_notification(
+            instance,
+            old_status,
+            status_value,
+            actor=request.user if getattr(request.user, "is_authenticated", False) else None,
+            reason_text=request.data.get("reason_text", "") if request.data else "",
+        )
         
         serializer = self.get_serializer(instance)
         return Response(serializer.data, status=status.HTTP_200_OK)

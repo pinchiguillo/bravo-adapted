@@ -20,8 +20,13 @@ if RGPD_INSTALLED:
         RgpdAnonymousConsentEvent,
         RgpdConsent,
         RgpdConsentEvent,
+        RgpdDataRequest,
         RgpdLegalDocument,
+        RgpdPolicyAcceptance,
+        RgpdPolicyDocument,
+        RgpdPolicyVersion,
     )
+    from .services import get_current_policy_versions
     from .views import RgpdAnonymousConsentViewSet
 else:
     raise SkipTest("rgpd app disabled")
@@ -36,6 +41,7 @@ class RgpdConsentApiTests(APITestCase):
             password="testpass123",
         )
         self.url = reverse("rgpd-me")
+        self.current_versions = get_current_policy_versions()
 
     def test_me_requires_authentication(self):
         response = self.client.get(self.url)
@@ -93,15 +99,33 @@ class RgpdConsentApiTests(APITestCase):
         self.assertTrue(consent.cookies_accepted)
         self.assertTrue(consent.privacy_policy_accepted)
         self.assertTrue(consent.terms_and_conditions_accepted)
-        self.assertEqual(consent.cookies_version, "2026-03")
-        self.assertEqual(consent.privacy_policy_version, "v3")
-        self.assertEqual(consent.terms_and_conditions_version, "v7")
+        self.assertEqual(
+            consent.cookies_version,
+            self.current_versions[RgpdPolicyDocument.DocumentType.COOKIES_POLICY].version,
+        )
+        self.assertEqual(
+            consent.privacy_policy_version,
+            self.current_versions[RgpdPolicyDocument.DocumentType.PRIVACY_POLICY].version,
+        )
+        self.assertEqual(
+            consent.terms_and_conditions_version,
+            self.current_versions[RgpdPolicyDocument.DocumentType.TERMS_AND_CONDITIONS].version,
+        )
         self.assertEqual(consent.source, "web-register")
         self.assertEqual(consent.ip_address, "203.0.113.10")
         self.assertEqual(consent.user_agent, "BravoApp/1.0")
         self.assertIsNotNone(consent.cookies_accepted_at)
         self.assertIsNotNone(consent.privacy_policy_accepted_at)
         self.assertIsNotNone(consent.terms_and_conditions_accepted_at)
+        self.assertEqual(
+            RgpdPolicyAcceptance.objects.filter(
+                user=self.user,
+                policy_version=self.current_versions[
+                    RgpdPolicyDocument.DocumentType.PRIVACY_POLICY
+                ],
+            ).count(),
+            1,
+        )
 
         event = RgpdConsentEvent.objects.get(consent=consent)
         self.assertEqual(event.action, "upsert")
@@ -182,11 +206,13 @@ class RgpdConsentApiTests(APITestCase):
         self.assertEqual(consent.ip_address, "198.51.100.5")
         self.assertEqual(consent.user_agent, "BravoApp/1.1")
         self.assertEqual(RgpdConsentEvent.objects.filter(consent=consent).count(), 2)
+        self.assertTrue(response.data["requires_reacceptance"])
 
 
 class RgpdAnonymousConsentApiTests(APITestCase):
     def setUp(self):
         self.url = reverse("rgpd-anonymous-list")
+        self.current_versions = get_current_policy_versions()
 
     def test_public_anonymous_endpoint_creates_consent_with_server_generated_credentials(self):
         response = self.client.post(
@@ -406,6 +432,7 @@ class RgpdLegalDocumentApiTests(APITestCase):
 class RgpdAnonymousConsentBehaviorTests(APITestCase):
     def setUp(self):
         self.url = reverse("rgpd-anonymous-list")
+        self.current_versions = get_current_policy_versions()
 
     def test_public_anonymous_endpoint_updates_existing_identifier_when_write_token_matches(self):
         create_response = self.client.post(
@@ -441,7 +468,12 @@ class RgpdAnonymousConsentBehaviorTests(APITestCase):
         consent = RgpdAnonymousConsent.objects.get(identifier=create_response.data["identifier"])
         self.assertFalse(consent.cookies_accepted)
         self.assertTrue(consent.terms_and_conditions_accepted)
-        self.assertEqual(consent.terms_and_conditions_version, "v7")
+        self.assertEqual(
+            consent.terms_and_conditions_version,
+            self.current_versions[
+                RgpdPolicyDocument.DocumentType.TERMS_AND_CONDITIONS
+            ].version,
+        )
         self.assertEqual(consent.source, "checkout")
         self.assertEqual(consent.ip_address, "198.51.100.9")
         self.assertEqual(consent.user_agent, "BravoLanding/1.1")
@@ -477,3 +509,179 @@ class RgpdAnonymousConsentBehaviorTests(APITestCase):
                 allowed_results.append(throttle.allow_request(request, view))
 
         self.assertEqual(allowed_results, [True, True, False])
+
+
+class RgpdPublicDocumentsApiTests(APITestCase):
+    def test_active_documents_endpoint_returns_current_published_versions(self):
+        response = self.client.get(reverse("rgpd-documents-active"))
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(len(response.data), 3)
+        self.assertEqual(
+            {item["type"] for item in response.data},
+            {
+                RgpdPolicyDocument.DocumentType.PRIVACY_POLICY,
+                RgpdPolicyDocument.DocumentType.TERMS_AND_CONDITIONS,
+                RgpdPolicyDocument.DocumentType.COOKIES_POLICY,
+            },
+        )
+
+
+class RgpdDataRequestApiTests(APITestCase):
+    def setUp(self):
+        user_model = get_user_model()
+        self.user = user_model.objects.create_user(
+            username="rgpd-request-user",
+            email="rgpd-request-user@example.com",
+            password="testpass123",
+        )
+        self.url = reverse("rgpd-requests-me")
+
+    def test_authenticated_user_can_create_and_list_data_requests(self):
+        self.client.force_authenticate(user=self.user)
+
+        create_response = self.client.post(
+            self.url,
+            {
+                "request_type": "portability",
+                "details": "Exportad mis datos de cuenta y actividad.",
+            },
+            format="json",
+        )
+        list_response = self.client.get(self.url)
+
+        self.assertEqual(create_response.status_code, status.HTTP_201_CREATED)
+        self.assertEqual(create_response.data["status"], "submitted")
+        self.assertEqual(list_response.status_code, status.HTTP_200_OK)
+        self.assertEqual(len(list_response.data), 1)
+        self.assertEqual(list_response.data[0]["request_type"], "portability")
+
+
+class RgpdRegisterIntegrationTests(APITestCase):
+    def test_register_requires_rgpd_payload_when_module_is_enabled(self):
+        response = self.client.post(
+            "/api/auth/register/",
+            {
+                "username": "new-user",
+                "email": "new-user@example.com",
+                "password": "ChangeMe123!",
+                "first_name": "New",
+                "last_name": "User",
+            },
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn("rgpd", response.data)
+
+    def test_register_creates_user_and_rgpd_acceptances(self):
+        response = self.client.post(
+            "/api/auth/register/",
+            {
+                "username": "rgpd-register",
+                "email": "rgpd-register@example.com",
+                "password": "ChangeMe123!",
+                "first_name": "Rgpd",
+                "last_name": "Register",
+                "rgpd": {
+                    "privacy_policy_accepted": True,
+                    "terms_and_conditions_accepted": True,
+                    "cookies_accepted": False,
+                    "source": "web-signup",
+                },
+            },
+            format="json",
+            HTTP_USER_AGENT="BravoWeb/1.0",
+            REMOTE_ADDR="203.0.113.7",
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+        user = get_user_model().objects.get(email="rgpd-register@example.com")
+        consent = RgpdConsent.objects.get(user=user)
+        self.assertTrue(consent.privacy_policy_accepted)
+        self.assertTrue(consent.terms_and_conditions_accepted)
+        self.assertFalse(consent.cookies_accepted)
+        self.assertEqual(consent.source, "web-signup")
+        self.assertEqual(
+            RgpdPolicyAcceptance.objects.filter(
+                user=user,
+                policy_version__document__document_type=RgpdPolicyDocument.DocumentType.PRIVACY_POLICY,
+            ).count(),
+            1,
+        )
+
+
+class ManagementRgpdApiTests(APITestCase):
+    def setUp(self):
+        user_model = get_user_model()
+        self.admin_user = user_model.objects.create_user(
+            username="rgpd-admin",
+            email="rgpd-admin@example.com",
+            password="testpass123",
+            is_staff=True,
+        )
+        self.user = user_model.objects.create_user(
+            username="rgpd-managed-user",
+            email="rgpd-managed-user@example.com",
+            password="testpass123",
+        )
+        self.data_request = RgpdDataRequest.objects.create(
+            user=self.user,
+            request_type=RgpdDataRequest.RequestType.ACCESS,
+            details="Necesito copia de mis datos.",
+        )
+
+    def test_admin_can_list_documents_and_publish_new_version(self):
+        self.client.force_authenticate(user=self.admin_user)
+        create_response = self.client.post(
+            reverse("management-rgpd-document-versions-list"),
+            {
+                "document_type": RgpdPolicyDocument.DocumentType.PRIVACY_POLICY,
+                "version": "2026-06",
+                "title": "Politica de privacidad junio 2026",
+                "body_markdown": "Nuevo texto legal.",
+            },
+            format="json",
+        )
+
+        self.assertEqual(create_response.status_code, status.HTTP_201_CREATED)
+        publish_response = self.client.post(
+            reverse(
+                "management-rgpd-document-versions-publish",
+                kwargs={"uuid": create_response.data["uuid"]},
+            )
+        )
+        documents_response = self.client.get(reverse("management-rgpd-documents-list"))
+
+        self.assertEqual(publish_response.status_code, status.HTTP_200_OK)
+        self.assertEqual(documents_response.status_code, status.HTTP_200_OK)
+        privacy_document = next(
+            item
+            for item in documents_response.data["results"]
+            if item["document_type"] == RgpdPolicyDocument.DocumentType.PRIVACY_POLICY
+        )
+        self.assertEqual(privacy_document["current_version"]["version"], "2026-06")
+
+    def test_admin_can_resolve_rgpd_data_request(self):
+        self.client.force_authenticate(user=self.admin_user)
+
+        response = self.client.patch(
+            reverse(
+                "management-rgpd-requests-detail",
+                kwargs={"uuid": self.data_request.uuid},
+            ),
+            {
+                "status": "completed",
+                "resolution_notes": "Exportacion enviada por canal seguro.",
+            },
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.data_request.refresh_from_db()
+        self.assertEqual(self.data_request.status, RgpdDataRequest.Status.COMPLETED)
+        self.assertEqual(
+            self.data_request.resolution_notes,
+            "Exportacion enviada por canal seguro.",
+        )
+        self.assertEqual(self.data_request.resolved_by, self.admin_user)

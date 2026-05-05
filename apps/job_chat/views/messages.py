@@ -8,6 +8,7 @@ from rest_framework.response import Response
 
 from apps.jobs.models import Job
 from common.permissions import IsActiveAccount
+from apps.notifications.services import emit_job_chat_message_notification
 
 from ..models import JobChat, JobChatMessage
 from ..serializers import (
@@ -77,6 +78,7 @@ def send_job_chat_message(request, job_uuid):
             type=serializer.validated_data.get("type", JobChatMessage.MessageType.PLAIN_TEXT),
             content=serializer.validated_data["content"],
         )
+        emit_job_chat_message_notification(message)
         output_serializer = JobChatMessageSerializer(message)
         return Response(output_serializer.data, status=status.HTTP_201_CREATED)
 

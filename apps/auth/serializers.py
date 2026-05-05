@@ -1,4 +1,5 @@
 from django.conf import settings
+from django.apps import apps as django_apps
 from django.contrib.auth import get_user_model
 from django.contrib.auth.password_validation import validate_password
 from django.core import signing
@@ -13,6 +14,10 @@ from rest_framework_simplejwt.serializers import TokenObtainPairSerializer
 from common.permissions import get_email_verification_denial_message
 
 from .services import load_verify_email_user_id, send_verification_email
+
+if django_apps.is_installed("apps.rgpd"):
+    from apps.rgpd.serializers import RegisterRgpdSerializer
+    from apps.rgpd.services import create_user_rgpd_consent
 
 
 class UserSerializer(serializers.ModelSerializer):
@@ -75,12 +80,20 @@ class RegisterSerializer(serializers.ModelSerializer):
         write_only=True,
         min_length=8 if settings.AUTH_ENFORCE_PASSWORD_RESTRICTIONS else None,
     )
+    if django_apps.is_installed("apps.rgpd"):
+        rgpd = RegisterRgpdSerializer()
 
     class Meta:
         model = get_user_model()
-        fields = ("username", "email", "password", "first_name", "last_name")
+        fields = ("username", "email", "password", "first_name", "last_name") + (
+            ("rgpd",) if django_apps.is_installed("apps.rgpd") else ()
+        )
 
     def validate(self, attrs):
+        if django_apps.is_installed("apps.rgpd") and settings.RGPD_MODULE_ENABLED:
+            if "rgpd" not in attrs:
+                raise serializers.ValidationError({"rgpd": ["This field is required."]})
+
         user = get_user_model()(
             username=attrs.get("username", ""),
             email=attrs.get("email", ""),
@@ -96,8 +109,19 @@ class RegisterSerializer(serializers.ModelSerializer):
 
     def create(self, validated_data):
         user_model = get_user_model()
+        rgpd_data = validated_data.pop("rgpd", None)
         with transaction.atomic():
             user = user_model.objects.create_user(**validated_data)
+            if rgpd_data is not None and django_apps.is_installed("apps.rgpd") and settings.RGPD_MODULE_ENABLED:
+                from apps.rgpd.utils import extract_client_ip
+
+                request = self.context.get("request")
+                create_user_rgpd_consent(
+                    user=user,
+                    consent_data=rgpd_data,
+                    ip_address=extract_client_ip(request) if request is not None else None,
+                    user_agent=request.META.get("HTTP_USER_AGENT", "") if request is not None else "",
+                )
             if user.is_email_verified:
                 user.mark_email_verified()
             else:

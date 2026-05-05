@@ -17,6 +17,7 @@ from apps.management.models import FeatureFlag
 from apps.organization.models import (
     AllowedCity,
     Announcement,
+    AnnouncementStatusChange,
     Category,
     Organization,
     OrganizationPricing,
@@ -293,6 +294,27 @@ class ManagementApiTests(APITestCase):
         self.organization.refresh_from_db()
         self.assertEqual(self.organization.status, Organization.Status.INACTIVE)
 
+    def test_admin_can_patch_organization(self):
+        self.client.force_authenticate(user=self.admin_user)
+
+        response = self.client.patch(
+            reverse("management-organizations-detail", kwargs={"uuid": self.organization.uuid}),
+            {
+                "name": "Managed Org Updated",
+                "billing_email": "new-billing@managed-org.com",
+                "verification_level": 4,
+                "status": Organization.Status.SUSPENDED,
+            },
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.organization.refresh_from_db()
+        self.assertEqual(self.organization.name, "Managed Org Updated")
+        self.assertEqual(self.organization.billing_email, "new-billing@managed-org.com")
+        self.assertEqual(self.organization.verification_level, 4)
+        self.assertEqual(self.organization.status, Organization.Status.SUSPENDED)
+
     def test_admin_can_create_organization(self):
         managed_user = get_user_model().objects.create_user(
             username="new-org-owner",
@@ -420,6 +442,34 @@ class ManagementAnnouncementApiTests(APITestCase):
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertEqual(response.data["count"], 1)
         self.assertEqual(response.data["results"][0]["uuid"], str(archived_announcement.uuid))
+
+    def test_admin_can_suspend_management_announcement_and_log_status_change(self):
+        self.client.force_authenticate(user=self.admin_user)
+
+        response = self.client.post(
+            reverse("management-announcements-suspend", kwargs={"uuid": self.announcement.uuid}),
+            {
+                "reason": AnnouncementStatusChange.ChangeReason.ADMIN_DECISION,
+                "reason_text": "Suspension aplicada desde management.",
+            },
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.data["status"], Announcement.Status.SUSPENDED)
+
+        self.announcement.refresh_from_db()
+        self.assertEqual(self.announcement.status, Announcement.Status.SUSPENDED)
+
+        status_change = self.announcement.status_changes.get()
+        self.assertEqual(status_change.from_status, Announcement.Status.ACTIVE)
+        self.assertEqual(status_change.to_status, Announcement.Status.SUSPENDED)
+        self.assertEqual(
+            status_change.reason,
+            AnnouncementStatusChange.ChangeReason.ADMIN_DECISION,
+        )
+        self.assertEqual(status_change.reason_text, "Suspension aplicada desde management.")
+        self.assertEqual(status_change.changed_by, "admin")
 
     @override_settings(BYPASS_ADMIN_LOGIN=True)
     def test_bypass_admin_login_allows_unauthenticated_access_to_management_list(self):

@@ -1,3 +1,8 @@
+from .availability import (
+    OrganizationAvailabilityException,
+    OrganizationAvailabilitySettings,
+    OrganizationWeeklyAvailability,
+)
 from .announcement import (
     Announcement,
     AnnouncementFavorite,
@@ -19,8 +24,11 @@ __all__ = [
     "AnnouncementStatusChange",
     "Category",
     "Organization",
+    "OrganizationAvailabilityException",
+    "OrganizationAvailabilitySettings",
     "OrganizationPricing",
     "OrganizationQuerySet",
+    "OrganizationWeeklyAvailability",
     "PlanTierCatalog",
     "ServiceCatalog",
     "ServicePrice",

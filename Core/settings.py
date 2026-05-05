@@ -267,9 +267,11 @@ INSTALLED_APPS = [
     'apps.auth.apps.AuthConfig',
     'apps.organization.apps.OrganizationConfig',
     'apps.management.apps.ManagementConfig',
+    'apps.notifications.apps.NotificationsConfig',
     'apps.jobs.apps.JobsConfig',
     'apps.job_chat.apps.JobChatConfig',
     'apps.assets.apps.AssetsConfig',
+    'apps.statistics.apps.StatisticsConfig',
 ]
 
 if RGPD_MODULE_ENABLED:

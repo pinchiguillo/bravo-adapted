@@ -39,7 +39,19 @@ class OrganizationViewSet(
     viewsets.GenericViewSet,
 ):
     serializer_class = OrganizationSerializer
-    queryset = Organization.objects.select_related("user", "pricing", "pricing__plan_tier").with_rating()
+    queryset = (
+        Organization.objects.select_related(
+            "user",
+            "pricing",
+            "pricing__plan_tier",
+            "availability_settings",
+        )
+        .prefetch_related(
+            "availability_settings__weekly_schedule",
+            "availability_settings__exceptions",
+        )
+        .with_rating()
+    )
     lookup_field = "uuid"
     throttle_scope_prefix = "organization"
     throttle_scope_action_map = {
@@ -81,7 +93,16 @@ class OrganizationViewSet(
 
     def _get_authenticated_user_organization(self, user):
         return (
-            Organization.objects.select_related("user", "pricing", "pricing__plan_tier")
+            Organization.objects.select_related(
+                "user",
+                "pricing",
+                "pricing__plan_tier",
+                "availability_settings",
+            )
+            .prefetch_related(
+                "availability_settings__weekly_schedule",
+                "availability_settings__exceptions",
+            )
             .with_rating()
             .filter(user=user)
             .first()

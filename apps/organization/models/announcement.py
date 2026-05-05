@@ -156,7 +156,10 @@ class AnnouncementFavorite(models.Model):
     class Meta:
         unique_together = ("user", "announcement")
         indexes = [
-            models.Index(fields=["user", "-created_at"]),
+            models.Index(
+                fields=["user", "-created_at"],
+                name="organization_user_created_idx",
+            ),
         ]
 
     def __str__(self):
