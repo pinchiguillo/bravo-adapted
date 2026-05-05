@@ -33,6 +33,8 @@ urlpatterns = [
     path("api/assets/", include("apps.assets.urls")),
     path("api/jobs/", include("apps.jobs.urls")),
     path("api/", include("apps.job_chat.urls")),
+    path("api/rgpd/", include("apps.rgpd.urls")),
+    path("api/management/rgpd/", include("apps.rgpd.management_urls")),
     path("api/management/statistics/", include("apps.statistics.management_urls")),
 ]
 
@@ -47,7 +49,3 @@ if not settings.HIDE_API_DOCS:
             ),
         ]
     )
-
-if settings.RGPD_MODULE_ENABLED:
-    urlpatterns.append(path("api/rgpd/", include("apps.rgpd.urls")))
-    urlpatterns.append(path("api/management/rgpd/", include("apps.rgpd.management_urls")))

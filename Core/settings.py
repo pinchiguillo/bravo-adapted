@@ -227,7 +227,7 @@ HIDE_API_DOCS = env_bool(
     "HIDE_API_DOCS",
     default=IS_PRODUCTION,
 )
-RGPD_MODULE_ENABLED = env_bool("RGPD_MODULE_ENABLED", default=False)
+RGPD_MODULE_ENABLED = True
 LEGAL_DOCUMENTS_ROOT = Path(
     os.getenv("LEGAL_DOCUMENTS_ROOT", str(BASE_DIR / "docs"))
 ).resolve()
@@ -272,10 +272,8 @@ INSTALLED_APPS = [
     'apps.job_chat.apps.JobChatConfig',
     'apps.assets.apps.AssetsConfig',
     'apps.statistics.apps.StatisticsConfig',
+    'apps.rgpd.apps.RgpdConfig',
 ]
-
-if RGPD_MODULE_ENABLED:
-    INSTALLED_APPS.append('apps.rgpd.apps.RgpdConfig')
 
 if USE_S3_STORAGE:
     INSTALLED_APPS.append("storages")
