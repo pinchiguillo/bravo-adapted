@@ -89,7 +89,6 @@ class NotificationApiTests(APITestCase):
         self.assertEqual(response.data["unread_count"], 1)
 
     def test_admin_can_send_notification_to_organization(self):
-        category = Category.objects.create(name="Plomeria", description="Servicios")
         organization = Organization.objects.create(
             user=self.user,
             name="Provider One",
@@ -230,4 +229,3 @@ class NotificationProducerTests(APITestCase):
                 notification__origin=Notification.Origin.JOB_CHAT,
             ).exists()
         )
-

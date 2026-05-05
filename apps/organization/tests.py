@@ -18,25 +18,26 @@ from rest_framework import status
 from rest_framework.test import APITestCase
 from rest_framework.throttling import SimpleRateThrottle
 
+from apps.statistics.models import DailyAnnouncementStats, DailyPlatformStats
+
 from .middleware import AnnouncementViewCountMiddleware
 from .models import (
     AllowedCity,
     Announcement,
     AnnouncementFavorite,
-    OrganizationAvailabilityException,
-    OrganizationAvailabilitySettings,
-    OrganizationWeeklyAvailability,
     AnnouncementImage,
     AnnouncementReview,
     Category,
     Organization,
+    OrganizationAvailabilityException,
+    OrganizationAvailabilitySettings,
     OrganizationPricing,
+    OrganizationWeeklyAvailability,
     PlanTierCatalog,
     ServiceCatalog,
     ServicePrice,
     Subservice,
 )
-from apps.statistics.models import DailyAnnouncementStats, DailyPlatformStats
 from .permissions import IsOrganizationResourceOwner
 from .views import OrganizationViewSet
 

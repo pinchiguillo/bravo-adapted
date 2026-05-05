@@ -1,14 +1,14 @@
-from .availability import (
-    OrganizationAvailabilityException,
-    OrganizationAvailabilitySettings,
-    OrganizationWeeklyAvailability,
-)
 from .announcement import (
     Announcement,
     AnnouncementFavorite,
     AnnouncementImage,
     AnnouncementReview,
     AnnouncementStatusChange,
+)
+from .availability import (
+    OrganizationAvailabilityException,
+    OrganizationAvailabilitySettings,
+    OrganizationWeeklyAvailability,
 )
 from .catalog import AllowedCity, Category, PlanTierCatalog, ServiceCatalog
 from .organization import Organization, OrganizationQuerySet

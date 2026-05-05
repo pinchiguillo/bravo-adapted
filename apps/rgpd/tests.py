@@ -24,7 +24,6 @@ if RGPD_INSTALLED:
         RgpdLegalDocument,
         RgpdPolicyAcceptance,
         RgpdPolicyDocument,
-        RgpdPolicyVersion,
     )
     from .services import get_current_policy_versions
     from .views import RgpdAnonymousConsentViewSet

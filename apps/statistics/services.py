@@ -5,17 +5,15 @@ from dataclasses import dataclass
 from datetime import timedelta
 
 from django.contrib.auth import get_user_model
-from django.db import models
-from django.db import IntegrityError
+from django.db import IntegrityError, models
 from django.db.models import Count, F, Sum
 from django.utils import timezone
 
 from apps.job_chat.models import JobChat, JobChatMessage
 from apps.jobs.models import Job
-from apps.organization.models import Announcement, AnnouncementFavorite, Category, Organization
+from apps.organization.models import Announcement, AnnouncementFavorite, Organization
 
 from .models import DailyAnnouncementStats, DailyPlatformStats
-
 
 User = get_user_model()
 
@@ -93,7 +91,12 @@ def refresh_daily_platform_stats(start_date, end_date) -> None:
         return
 
     new_users = _aggregate_daily_counts(User.objects, "date_joined", start_date, end_date)
-    active_users = _aggregate_daily_counts(User.objects.exclude(last_login__isnull=True), "last_login", start_date, end_date)
+    active_users = _aggregate_daily_counts(
+        User.objects.exclude(last_login__isnull=True),
+        "last_login",
+        start_date,
+        end_date,
+    )
     new_organizations = _aggregate_daily_counts(Organization.objects, "created_at", start_date, end_date)
     new_announcements = _aggregate_daily_counts(Announcement.objects, "created_at", start_date, end_date)
     announcement_favorites = _aggregate_daily_counts(AnnouncementFavorite.objects, "created_at", start_date, end_date)

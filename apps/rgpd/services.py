@@ -5,7 +5,6 @@ from django.db import transaction
 from django.utils import timezone
 
 from .models import (
-    RgpdAnonymousConsent,
     RgpdConsent,
     RgpdDataRequest,
     RgpdPolicyAcceptance,
@@ -161,7 +160,15 @@ def apply_current_policy_versions_to_snapshot(validated_data):
     return current_versions
 
 
-def record_policy_acceptances(*, validated_data, source="", ip_address=None, user_agent="", user=None, anonymous_consent=None):
+def record_policy_acceptances(
+    *,
+    validated_data,
+    source="",
+    ip_address=None,
+    user_agent="",
+    user=None,
+    anonymous_consent=None,
+):
     current_versions = apply_current_policy_versions_to_snapshot(validated_data)
     now = timezone.now()
 
