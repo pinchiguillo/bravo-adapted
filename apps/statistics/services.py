@@ -5,17 +5,15 @@ from dataclasses import dataclass
 from datetime import timedelta
 
 from django.contrib.auth import get_user_model
-from django.db import models
-from django.db import IntegrityError
+from django.db import IntegrityError, models
 from django.db.models import Count, F, Sum
 from django.utils import timezone
 
 from apps.job_chat.models import JobChat, JobChatMessage
 from apps.jobs.models import Job
-from apps.organization.models import Announcement, AnnouncementFavorite, Category, Organization
+from apps.organization.models import Announcement, AnnouncementFavorite, Organization
 
 from .models import DailyAnnouncementStats, DailyPlatformStats
-
 
 User = get_user_model()
 

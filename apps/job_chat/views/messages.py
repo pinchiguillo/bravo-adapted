@@ -7,8 +7,8 @@ from rest_framework.exceptions import NotFound, PermissionDenied, ValidationErro
 from rest_framework.response import Response
 
 from apps.jobs.models import Job
-from common.permissions import IsActiveAccount
 from apps.notifications.services import emit_job_chat_message_notification
+from common.permissions import IsActiveAccount
 
 from ..models import JobChat, JobChatMessage
 from ..serializers import (

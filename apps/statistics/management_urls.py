@@ -6,7 +6,6 @@ from .views import (
     ManagementStatisticsWebstatsView,
 )
 
-
 urlpatterns = [
     path("dashboard/", ManagementStatisticsDashboardView.as_view(), name="management-statistics-dashboard"),
     path(

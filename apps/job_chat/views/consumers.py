@@ -6,9 +6,9 @@ from django.contrib.auth import get_user_model
 from rest_framework import serializers
 
 from apps.jobs.models import Job
+from apps.notifications.services import emit_job_chat_message_notification
 
 from ..models import JobChat, JobChatMessage
-from apps.notifications.services import emit_job_chat_message_notification
 from ..serializers import JobChatMessageSerializer, ProposalStatusUpdateSerializer
 
 User = get_user_model()

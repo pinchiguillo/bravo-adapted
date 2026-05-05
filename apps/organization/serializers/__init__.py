@@ -17,10 +17,10 @@ from .catalog import (
 from .organization import (
     OrganizationAvailabilityExceptionSerializer,
     OrganizationAvailabilitySettingsSerializer,
-    OrganizationWeeklyAvailabilitySerializer,
     OrganizationPublicSerializer,
     OrganizationRatingMixin,
     OrganizationSerializer,
+    OrganizationWeeklyAvailabilitySerializer,
 )
 from .service import (
     PublicServicePriceSerializer,

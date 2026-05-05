@@ -16,7 +16,6 @@ from .models import (
     NotificationTemplate,
 )
 
-
 USER_MODEL = get_user_model()
 
 
