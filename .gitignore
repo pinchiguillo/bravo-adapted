@@ -49,3 +49,10 @@ dist/
 # OS files
 .DS_Store
 Thumbs.db
+
+# AI assistant / agent local files
+CLAUDE.md
+AGENTS.md
+.claude/
+.codex
+graphify-out/
