@@ -2,6 +2,7 @@ import json
 from unittest.mock import patch
 
 from django.contrib.auth import get_user_model
+from django.test import override_settings
 from django.urls import reverse
 from rest_framework import status
 from rest_framework.test import APITestCase
@@ -279,3 +280,44 @@ class JobChatAttachmentTests(JobChatTestCase):
 
         self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
         self.assertEqual(asset.job_chat_attachments.count(), 1)
+
+
+@override_settings(JOB_CHAT_HISTORY_PAGE_SIZE=2)
+class JobChatHistoryPaginationTests(JobChatTestCase):
+    def setUp(self):
+        super().setUp()
+        # first_message plus four more: five in total, oldest first.
+        for index in range(4):
+            JobChatMessage.objects.create(job_chat=self.chat, user=self.customer, content=f"message {index}")
+        self.client.force_authenticate(user=self.customer)
+
+    def _page(self, before=None):
+        params = {"before": before} if before else {}
+        response = self.client.get(reverse("job-chat-messages", kwargs={"job_uuid": self.job.uuid}), params)
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        return [message["content"] for message in response.data["messages"]], response.data
+
+    def test_first_page_is_the_newest_messages_oldest_first(self):
+        contents, data = self._page()
+
+        self.assertEqual(contents, ["message 2", "message 3"])
+        self.assertTrue(data["has_more"])
+
+    def test_pages_walk_back_to_the_start_without_gaps_or_duplicates(self):
+        seen = []
+        before = None
+        while True:
+            contents, data = self._page(before)
+            seen = contents + seen
+            if not data["has_more"]:
+                break
+            before = data["messages"][0]["uuid"]
+
+        self.assertEqual(seen, [self.first_message.content, "message 0", "message 1", "message 2", "message 3"])
+
+    def test_unknown_cursor_returns_404(self):
+        response = self.client.get(
+            reverse("job-chat-messages", kwargs={"job_uuid": self.job.uuid}), {"before": "not-a-uuid"}
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_404_NOT_FOUND)

@@ -10,7 +10,7 @@ from common.exceptions import DomainError
 from ..models import JobChat
 from ..rate_limit import allow_client_frame
 from ..serializers import JobChatMessageCreateSerializer, JobChatMessageSerializer, ProposalStatusUpdateSerializer
-from ..services import chat_group_name, post_message, set_proposal_status
+from ..services import chat_group_name, get_history_page, post_message, set_proposal_status
 
 logger = logging.getLogger(__name__)
 
@@ -98,7 +98,7 @@ class JobChatConsumer(AsyncWebsocketConsumer):
         message_type = data.get("type")
 
         if message_type == "history":
-            await self.handle_history()
+            await self.handle_history(data)
         elif message_type == "message":
             await self.handle_message(data)
         elif message_type == "proposal_status":
@@ -108,14 +108,19 @@ class JobChatConsumer(AsyncWebsocketConsumer):
         else:
             await self.send_error("Unknown message type")
 
-    async def handle_history(self):
-        """Send the full current chat history to the requesting socket."""
-        history = await self.get_serialized_history()
+    async def handle_history(self, data):
+        """Send one page of history (oldest first) to the requesting socket."""
+        try:
+            history, has_more = await self.get_serialized_history(data.get("before"))
+        except DomainError as exc:
+            await self.send_error(exc.message)
+            return
         await self.send(
             text_data=json.dumps(
                 {
                     "type": "history",
                     "data": history,
+                    "has_more": has_more,
                 }
             )
         )
@@ -241,12 +246,11 @@ class JobChatConsumer(AsyncWebsocketConsumer):
             return False
 
     @database_sync_to_async
-    def get_serialized_history(self):
-        """Load and serialize all persisted messages for this chat."""
+    def get_serialized_history(self, before_uuid=None):
         job = Job.objects.get(uuid=self.job_uuid)
         job_chat, _ = JobChat.objects.get_or_create(job=job)
-        messages = job_chat.messages.select_related("user").prefetch_related("attachments__asset")
-        return JobChatMessageSerializer(messages, many=True).data
+        messages, has_more = get_history_page(job_chat, before_uuid=before_uuid)
+        return JobChatMessageSerializer(messages, many=True).data, has_more
 
     @database_sync_to_async
     def save_message(self, message_type, content):

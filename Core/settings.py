@@ -201,6 +201,7 @@ ORGANIZATION_ANNOUNCEMENT_VIEW_TTL_SECONDS = env_int(
     60 * 60 * 24 * 30,
 )
 # Frames (other than typing indicators) a user may send per window, across all their sockets.
+JOB_CHAT_HISTORY_PAGE_SIZE = env_int("JOB_CHAT_HISTORY_PAGE_SIZE", 100)
 JOB_CHAT_WS_RATE_LIMIT = env_int("JOB_CHAT_WS_RATE_LIMIT", 20)
 JOB_CHAT_WS_RATE_WINDOW = env_int("JOB_CHAT_WS_RATE_WINDOW", 60)
 # Legacy web client sends the JWT as ?token=; turn off once every client uses the subprotocol.

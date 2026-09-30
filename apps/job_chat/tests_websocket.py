@@ -92,7 +92,7 @@ class JobChatWebSocketTests(SimpleTestCase):
             ),
             patch(
                 "apps.job_chat.views.consumers.JobChatConsumer.get_serialized_history",
-                new=AsyncMock(return_value=history_payload),
+                new=AsyncMock(return_value=(history_payload, False)),
             ),
         ):
             communicator = WebsocketCommunicator(
@@ -291,7 +291,7 @@ class JobChatWebSocketHardeningTests(SimpleTestCase):
         auth, user, permission = authenticated()
         history = patch(
             "apps.job_chat.views.consumers.JobChatConsumer.get_serialized_history",
-            new=AsyncMock(return_value=[]),
+            new=AsyncMock(return_value=([], False)),
         )
         with self.settings(JOB_CHAT_WS_RATE_LIMIT=2), auth, user, permission, history:
             communicator, _, _ = await self._connect()

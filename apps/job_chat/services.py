@@ -3,8 +3,10 @@ import logging
 
 from asgiref.sync import async_to_sync
 from channels.layers import get_channel_layer
+from django.conf import settings
 from django.core.exceptions import ValidationError as DjangoValidationError
 from django.db import transaction
+from django.db.models import Q
 
 from apps.notifications.services import emit_job_chat_message_notification
 from common.exceptions import ConflictError, DomainError, NotFoundError, PermissionDeniedError
@@ -81,3 +83,31 @@ def broadcast_message(job_uuid, message):
         chat_group_name(job_uuid),
         {"type": "chat_message", "message": JobChatMessageSerializer(message).data},
     )
+
+
+def get_history_page(job_chat, *, before_uuid=None, limit=None):
+    """Return (messages oldest-first, has_more) for the newest page before a message.
+
+    Keyset pagination on (created_at, id): stable while new messages arrive,
+    unlike offsets.
+    """
+    limit = limit or settings.JOB_CHAT_HISTORY_PAGE_SIZE
+    messages = (
+        job_chat.messages.select_related("user")
+        .prefetch_related("attachments__asset")
+        .order_by("-created_at", "-id")
+    )
+    if before_uuid:
+        try:
+            anchor = job_chat.messages.filter(uuid=before_uuid).values("created_at", "id").first()
+        except DjangoValidationError as exc:
+            raise NotFoundError("Message not found.") from exc
+        if anchor is None:
+            raise NotFoundError("Message not found.")
+        messages = messages.filter(
+            Q(created_at__lt=anchor["created_at"]) | Q(created_at=anchor["created_at"], id__lt=anchor["id"])
+        )
+
+    page = list(messages[: limit + 1])
+    has_more = len(page) > limit
+    return list(reversed(page[:limit])), has_more

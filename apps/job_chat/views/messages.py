@@ -1,4 +1,4 @@
-from drf_spectacular.utils import extend_schema
+from drf_spectacular.utils import OpenApiParameter, extend_schema
 from rest_framework import status
 from rest_framework.decorators import api_view, permission_classes
 from rest_framework.exceptions import NotFound, PermissionDenied
@@ -14,13 +14,17 @@ from ..serializers import (
     JobChatSerializer,
     ProposalStatusUpdateSerializer,
 )
-from ..services import broadcast_message, post_message, set_proposal_status
+from ..services import broadcast_message, get_history_page, post_message, set_proposal_status
 
 
 @extend_schema(
     tags=["Job Chat"],
     summary="Get job chat messages",
-    description="Retrieve all messages for a job chat. Requires being the job owner or staff.",
+    description=(
+        "Returns the newest page of messages (oldest first) for a job chat. Pass ?before=<message uuid> "
+        "to load the previous page; has_more tells whether older messages exist."
+    ),
+    parameters=[OpenApiParameter("before", str, OpenApiParameter.QUERY, required=False)],
     responses={
         status.HTTP_200_OK: JobChatSerializer,
         status.HTTP_403_FORBIDDEN: {"description": "You don't have permission to access this chat."},
@@ -40,7 +44,8 @@ def get_job_chat_messages(request, job_uuid):
         raise PermissionDenied("You don't have permission to access this chat.")
 
     job_chat, _ = JobChat.objects.get_or_create(job=job)
-    serializer = JobChatSerializer(job_chat)
+    messages, has_more = get_history_page(job_chat, before_uuid=request.query_params.get("before"))
+    serializer = JobChatSerializer(job_chat, context={"messages": messages, "has_more": has_more})
     return Response(serializer.data)
 
 

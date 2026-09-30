@@ -2,6 +2,7 @@ import json
 from decimal import Decimal
 
 from django.db import transaction
+from drf_spectacular.utils import extend_schema_field
 from rest_framework import serializers
 
 from apps.assets.models import Asset
@@ -93,12 +94,22 @@ class JobChatMessageCreateSerializer(serializers.ModelSerializer):
 
 
 class JobChatSerializer(serializers.ModelSerializer):
-    messages = JobChatMessageSerializer(many=True, read_only=True)
+    """A chat with one page of its history; see services.get_history_page."""
+
+    messages = serializers.SerializerMethodField()
+    has_more = serializers.SerializerMethodField()
 
     class Meta:
         model = JobChat
-        fields = ("uuid", "job", "messages", "created_at", "updated_at")
-        read_only_fields = ("uuid", "job", "messages", "created_at", "updated_at")
+        fields = ("uuid", "job", "messages", "has_more", "created_at", "updated_at")
+        read_only_fields = fields
+
+    @extend_schema_field(JobChatMessageSerializer(many=True))
+    def get_messages(self, obj):
+        return JobChatMessageSerializer(self.context["messages"], many=True).data
+
+    def get_has_more(self, obj) -> bool:
+        return self.context["has_more"]
 
 
 class ProposalStatusUpdateSerializer(serializers.Serializer):
