@@ -151,10 +151,12 @@ else:
 AWS_DEFAULT_REGION = os.getenv("AWS_DEFAULT_REGION", "us-east-1")
 AWS_ACCESS_KEY_ID = os.getenv("AWS_ACCESS_KEY_ID", "test")
 AWS_SECRET_ACCESS_KEY = os.getenv("AWS_SECRET_ACCESS_KEY", "test")
+# Outside production, S3 and SES default to the LocalStack container; in
+# production they default to AWS itself unless an endpoint is configured.
 AWS_S3_ENDPOINT_URL = (
     os.getenv("AWS_S3_ENDPOINT_URL")
     or os.getenv("LOCALSTACK_ENDPOINT")
-    or "http://localstack:4566"
+    or (None if IS_PRODUCTION else "http://localstack:4566")
 )
 AWS_SES_ENDPOINT_URL = os.getenv("AWS_SES_ENDPOINT_URL") or os.getenv("LOCALSTACK_ENDPOINT")
 AWS_STORAGE_BUCKET_NAME = os.getenv("AWS_STORAGE_BUCKET_NAME", "bravo-media")
@@ -164,7 +166,8 @@ AWS_LEGAL_DOCUMENTS_BUCKET_NAME = os.getenv(
 )
 AWS_S3_PUBLIC_URL = os.getenv("AWS_S3_PUBLIC_URL", "")
 AWS_S3_PRESIGNED_URL_ENDPOINT = os.getenv("AWS_S3_PRESIGNED_URL_ENDPOINT", "")
-MEDIA_PUBLIC_BASE_URL = os.getenv("MEDIA_PUBLIC_BASE_URL", "/s3")
+# "/s3" is the nginx proxy to LocalStack in development; production serves media from S3/CDN.
+MEDIA_PUBLIC_BASE_URL = os.getenv("MEDIA_PUBLIC_BASE_URL", "" if IS_PRODUCTION else "/s3")
 LEGAL_DOCUMENTS_UPLOAD_PREFIX = os.getenv(
     "LEGAL_DOCUMENTS_UPLOAD_PREFIX",
     "legal-documents",
@@ -295,6 +298,7 @@ if USE_S3_STORAGE:
 
 MIDDLEWARE = [
     'django.middleware.security.SecurityMiddleware',
+    'whitenoise.middleware.WhiteNoiseMiddleware',
     'corsheaders.middleware.CorsMiddleware',
     'django.contrib.sessions.middleware.SessionMiddleware',
     'django.middleware.common.CommonMiddleware',
@@ -398,6 +402,7 @@ USE_TZ = True
 # https://docs.djangoproject.com/en/5.2/howto/static-files/
 
 STATIC_URL = 'static/'
+STATIC_ROOT = BASE_DIR / 'staticfiles'
 
 if USE_S3_STORAGE:
     AWS_S3_REGION_NAME = AWS_DEFAULT_REGION
