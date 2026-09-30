@@ -1,3 +1,4 @@
+import logging
 from collections import Counter
 
 from django.contrib.auth import get_user_model
@@ -17,6 +18,8 @@ from .models import (
 )
 
 USER_MODEL = get_user_model()
+
+logger = logging.getLogger(__name__)
 
 
 def get_or_create_preferences(user):
@@ -108,6 +111,9 @@ def send_email_notification(recipient):
             NotificationDispatch.Status.DELIVERED,
         )
     except Exception as exc:
+        # Any backend failure (SMTP, SES, DNS...) is recorded on the recipient
+        # instead of failing the request that triggered the notification.
+        logger.exception("Email delivery failed for notification recipient %s", recipient.pk)
         recipient.email_status = NotificationRecipient.DeliveryStatus.FAILED
         recipient.save(update_fields=["email_status", "updated_at"])
         record_dispatch(

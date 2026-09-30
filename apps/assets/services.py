@@ -11,11 +11,13 @@ import uuid
 from datetime import timedelta
 from urllib.parse import urlsplit, urlunparse
 
+from botocore.exceptions import ClientError
 from django.conf import settings
 from django.core import signing
 from django.utils import timezone
 from django.utils.encoding import filepath_to_uri
-from rest_framework import serializers
+
+from common.exceptions import DomainError
 
 try:
     from PIL import Image, UnidentifiedImageError
@@ -31,6 +33,13 @@ _MAGIC_BYTES: dict[str, bytes] = {
     "image/jpeg": b"\xff\xd8\xff",
     "application/pdf": b"%PDF",
 }
+
+
+class UploadRejected(DomainError):
+    """The uploaded object does not match what the client declared."""
+
+    def __init__(self, message):
+        super().__init__(message, code="upload_rejected", field="file")
 
 
 # ---------------------------------------------------------------------------
@@ -148,22 +157,18 @@ def validate_file_magic_bytes(file_bytes: bytes, content_type: str) -> None:
     For image/* types with PIL available, also runs PIL.verify().
     For unknown types, no byte-level check is performed.
 
-    Raises serializers.ValidationError on failure.
+    Raises UploadRejected on failure.
     """
     magic = _MAGIC_BYTES.get(content_type)
     if magic and not file_bytes[: len(magic)].startswith(magic):
-        raise serializers.ValidationError(
-            {"file": f"Uploaded file is not a valid {content_type} file."}
-        )
+        raise UploadRejected(f"Uploaded file is not a valid {content_type} file.")
 
     if content_type.startswith("image/") and _PIL_AVAILABLE:
         try:
             with Image.open(io.BytesIO(file_bytes)) as img:
                 img.verify()
         except (UnidentifiedImageError, OSError, SyntaxError) as exc:
-            raise serializers.ValidationError(
-                {"file": "Uploaded file is not a valid image."}
-            ) from exc
+            raise UploadRejected("Uploaded file is not a valid image.") from exc
 
 
 def move_pending_to_confirmed(
@@ -183,43 +188,32 @@ def move_pending_to_confirmed(
       3. CopyObject pending → final.
       4. DeleteObject pending.
 
-    Raises serializers.ValidationError on any inconsistency; pending file is
-    deleted before raising.
+    Raises UploadRejected on any inconsistency; the pending file is deleted
+    before raising.
     """
     client = storage.connection.meta.client
 
     try:
         head = client.head_object(Bucket=storage.bucket_name, Key=pending_key)
-    except client.exceptions.NoSuchKey as exc:
-        raise serializers.ValidationError(
-            {"file": "Uploaded file was not found in storage."}
-        ) from exc
-    except Exception as exc:
-        error_code = getattr(exc, "response", {}).get("Error", {}).get("Code", "")
-        if error_code in {"404", "NoSuchKey", "NotFound"}:
-            raise serializers.ValidationError(
-                {"file": "Uploaded file was not found in storage."}
-            ) from exc
+    except ClientError as exc:
+        if exc.response.get("Error", {}).get("Code", "") in {"404", "NoSuchKey", "NotFound"}:
+            raise UploadRejected("Uploaded file was not found in storage.") from exc
         raise
 
     if int(head.get("ContentLength", 0)) != int(expected_size):
         client.delete_object(Bucket=storage.bucket_name, Key=pending_key)
-        raise serializers.ValidationError(
-            {"file": "Uploaded file size does not match the declared size."}
-        )
+        raise UploadRejected("Uploaded file size does not match the declared size.")
 
     if str(head.get("ContentType", "")).lower() != str(content_type).lower():
         client.delete_object(Bucket=storage.bucket_name, Key=pending_key)
-        raise serializers.ValidationError(
-            {"file": "Uploaded file content type does not match the declared content type."}
-        )
+        raise UploadRejected("Uploaded file content type does not match the declared content type.")
 
     obj = client.get_object(Bucket=storage.bucket_name, Key=pending_key)
     file_bytes = obj["Body"].read()
 
     try:
         validate_file_magic_bytes(file_bytes, content_type)
-    except serializers.ValidationError:
+    except UploadRejected:
         client.delete_object(Bucket=storage.bucket_name, Key=pending_key)
         raise
 

@@ -124,6 +124,7 @@ class AssetUploadTests(APITestCase):
         response = self._complete(asset)
 
         self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertEqual(response.data, {"file": "Uploaded file is not a valid image/png file."})
         self.assertFalse(self._exists(asset.pending_key))
         asset.refresh_from_db()
         self.assertEqual(asset.status, Asset.Status.INITIATED)

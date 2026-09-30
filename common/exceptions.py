@@ -10,10 +10,12 @@ class DomainError(Exception):
     status_code = 400
     default_code = "invalid"
 
-    def __init__(self, message, *, code=None):
+    def __init__(self, message, *, code=None, field=None):
         super().__init__(message)
         self.message = message
         self.code = code or self.default_code
+        # When set, the API reports the error against this input field.
+        self.field = field
 
 
 class NotFoundError(DomainError):

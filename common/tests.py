@@ -10,6 +10,8 @@ from django.test import RequestFactory, SimpleTestCase, TestCase, override_setti
 
 from common.client_ip import get_client_ip
 from common.email_backends import SesEmailBackend
+from common.exception_handler import exception_handler
+from common.exceptions import ConflictError, DomainError, NotFoundError
 
 
 class S3StorageTests(TestCase):
@@ -100,3 +102,23 @@ class ClientIpTests(SimpleTestCase):
 
     def test_missing_remote_addr_returns_none(self):
         self.assertIsNone(self._ip(""))
+
+
+class DomainExceptionHandlerTests(SimpleTestCase):
+    def test_domain_errors_map_to_their_status_and_code(self):
+        cases = ((DomainError("bad"), 400), (NotFoundError("gone"), 404), (ConflictError("taken"), 409))
+        for error, expected_status in cases:
+            with self.subTest(type(error).__name__):
+                response = exception_handler(error, {})
+
+                self.assertEqual(response.status_code, expected_status)
+                self.assertEqual(response.data, {"detail": error.message, "code": error.code})
+
+    def test_field_errors_keep_the_validation_error_shape(self):
+        response = exception_handler(DomainError("Not a PNG.", field="file"), {})
+
+        self.assertEqual(response.status_code, 400)
+        self.assertEqual(response.data, {"file": "Not a PNG."})
+
+    def test_other_exceptions_are_left_to_drf(self):
+        self.assertIsNone(exception_handler(ValueError("boom"), {}))

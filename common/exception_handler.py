@@ -7,5 +7,6 @@ from common.exceptions import DomainError
 def exception_handler(exc, context):
     """DRF exception handler that also understands service-layer DomainErrors."""
     if isinstance(exc, DomainError):
-        return Response({"detail": exc.message, "code": exc.code}, status=exc.status_code)
+        body = {exc.field: exc.message} if exc.field else {"detail": exc.message, "code": exc.code}
+        return Response(body, status=exc.status_code)
     return drf_exception_handler(exc, context)

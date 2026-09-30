@@ -519,6 +519,22 @@ SPECTACULAR_SETTINGS = {
     },
 }
 
+LOG_LEVEL = os.getenv("LOG_LEVEL", "INFO").upper()
+LOGGING = {
+    "version": 1,
+    "disable_existing_loggers": False,
+    "formatters": {
+        "standard": {"format": "%(asctime)s %(levelname)s %(name)s %(message)s"},
+    },
+    "handlers": {
+        "console": {"class": "logging.StreamHandler", "formatter": "standard"},
+    },
+    "root": {"handlers": ["console"], "level": LOG_LEVEL},
+    "loggers": {
+        "django": {"handlers": ["console"], "level": LOG_LEVEL, "propagate": False},
+    },
+}
+
 redis_url = os.getenv("REDIS_URL")
 if IS_PRODUCTION and not redis_url:
     require_env("REDIS_URL")

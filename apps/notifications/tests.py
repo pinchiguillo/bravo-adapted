@@ -1,3 +1,5 @@
+from unittest.mock import patch
+
 from django.contrib.auth import get_user_model
 from django.core import mail
 from django.urls import reverse
@@ -6,7 +8,7 @@ from rest_framework.test import APITestCase
 
 from apps.job_chat.models import JobChat, JobChatMessage
 from apps.notifications.models import Notification, NotificationPreference, NotificationRecipient
-from apps.notifications.services import emit_job_chat_message_notification
+from apps.notifications.services import emit_job_chat_message_notification, send_email_notification
 from apps.organization.models import Announcement, Category, Organization
 
 
@@ -152,6 +154,18 @@ class NotificationApiTests(APITestCase):
         self.assertTrue(recipient.in_app_enabled)
         self.assertFalse(recipient.email_enabled)
 
+
+    def test_email_failures_are_recorded_and_logged_not_raised(self):
+        with (
+            patch("apps.notifications.services.send_mail", side_effect=OSError("SMTP unreachable")),
+            self.assertLogs("apps.notifications.services", level="ERROR"),
+        ):
+            send_email_notification(self.recipient)
+
+        self.recipient.refresh_from_db()
+        self.assertEqual(self.recipient.email_status, NotificationRecipient.DeliveryStatus.FAILED)
+        dispatch = self.recipient.dispatches.get()
+        self.assertIn("SMTP unreachable", dispatch.error_message)
 
 class NotificationProducerTests(APITestCase):
     def setUp(self):
