@@ -334,3 +334,35 @@ class JobApiTests(APITestCase):
 
         with self.assertRaises(IntegrityError), transaction.atomic():
             Job.objects.filter(pk=self.user_job.pk).update(organization_rating="9.00")
+
+    def test_job_list_query_count_does_not_grow_with_the_number_of_jobs(self):
+        from django.db import connection
+        from django.test.utils import CaptureQueriesContext
+
+        self.client.force_authenticate(user=self.user)
+
+        def list_queries():
+            with CaptureQueriesContext(connection) as captured:
+                response = self.client.get(reverse("job-list"))
+            self.assertEqual(response.status_code, status.HTTP_200_OK)
+            return len(captured), len(response.data)
+
+        baseline_queries, baseline_jobs = list_queries()
+        for index in range(3):
+            job = Job.objects.create(user=self.user, announcement=self.other_announcement, status=Job.Status.ACTIVE)
+            chat = JobChat.objects.create(job=job)
+            JobChatMessage.objects.create(job_chat=chat, user=self.user, content=f"message {index}")
+        queries, jobs = list_queries()
+
+        self.assertEqual(jobs, baseline_jobs + 3)
+        self.assertEqual(queries, baseline_queries)
+
+    def test_job_list_shows_the_latest_message_preview(self):
+        JobChatMessage.objects.create(job_chat=self.user_chat, user=self.other_user, content="latest message")
+        self.client.force_authenticate(user=self.user)
+
+        response = self.client.get(reverse("job-list"))
+
+        job = next(item for item in response.data if item["uuid"] == str(self.user_job.uuid))
+        self.assertEqual(job["last_message_preview"], "latest message")
+        self.assertIsNotNone(job["last_message_time"])

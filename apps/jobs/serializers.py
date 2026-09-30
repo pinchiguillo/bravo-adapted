@@ -1,5 +1,6 @@
 from rest_framework import serializers
 
+from apps.job_chat.models import JobChatMessage
 from apps.organization.models import Announcement, ServicePrice
 from apps.organization.serializers import AnnouncementSerializer
 
@@ -121,18 +122,18 @@ class JobListSerializer(serializers.ModelSerializer):
     last_message_preview = serializers.SerializerMethodField()
     unread_count = serializers.SerializerMethodField()
 
-    def get_last_message_time(self, obj):
-        if hasattr(obj, "chat") and obj.chat:
-            msg = obj.chat.messages.order_by("-created_at").first()
-            return msg.created_at.isoformat() if msg else None
-        return None
+    # The last_message_* attributes are annotated by JobViewSet.get_queryset, so
+    # listing N jobs costs a constant number of queries.
+    def get_last_message_time(self, obj) -> str | None:
+        last_message_at = getattr(obj, "last_message_at", None)
+        return last_message_at.isoformat() if last_message_at else None
 
-    def get_last_message_preview(self, obj):
-        if hasattr(obj, "chat") and obj.chat:
-            msg = obj.chat.messages.order_by("-created_at").first()
-            if msg:
-                return msg.content[:60] if msg.type == "plain_text" else "📋 Propuesta"
-        return None
+    def get_last_message_preview(self, obj) -> str | None:
+        if getattr(obj, "last_message_at", None) is None:
+            return None
+        if obj.last_message_type == JobChatMessage.MessageType.PLAIN_TEXT:
+            return obj.last_message_content[:60]
+        return "📋 Propuesta"
 
     def get_unread_count(self, obj):
         return 0

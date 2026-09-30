@@ -1,8 +1,10 @@
+from django.db.models import OuterRef, Subquery
 from drf_spectacular.utils import OpenApiParameter, OpenApiResponse, extend_schema, extend_schema_view
 from rest_framework import mixins, status, viewsets
 from rest_framework.exceptions import NotFound, PermissionDenied, ValidationError
 from rest_framework.response import Response
 
+from apps.job_chat.models import JobChatMessage
 from common.permissions import IsActiveAccount
 
 from ..models import Job
@@ -101,17 +103,17 @@ class JobViewSet(
                 base_queryset = base_queryset.filter(announcement__organization__user=self.request.user)
             else:
                 base_queryset = base_queryset.filter(user=self.request.user)
-            return (
-                base_queryset
-                .select_related(
-                    "user",
-                    "announcement",
-                    "announcement__organization",
-                    "announcement__category",
-                    "plan_price",
-                    "chat",
-                )
-                .prefetch_related("chat__messages")
+            latest_message = JobChatMessage.objects.filter(job_chat__job=OuterRef("pk")).order_by("-created_at", "-id")
+            return base_queryset.select_related(
+                "user",
+                "announcement",
+                "announcement__organization",
+                "announcement__category",
+                "plan_price",
+            ).annotate(
+                last_message_at=Subquery(latest_message.values("created_at")[:1]),
+                last_message_type=Subquery(latest_message.values("type")[:1]),
+                last_message_content=Subquery(latest_message.values("content")[:1]),
             )
 
         return base_queryset
