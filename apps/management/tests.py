@@ -1,4 +1,5 @@
 import os
+import re
 from datetime import date
 from io import StringIO
 from pathlib import Path
@@ -10,6 +11,7 @@ from django.core.management import call_command
 from django.core.management.base import CommandError
 from django.test import override_settings
 from django.urls import reverse
+from drf_spectacular.generators import SchemaGenerator
 from rest_framework import status
 from rest_framework.test import APITestCase
 
@@ -470,14 +472,6 @@ class ManagementAnnouncementApiTests(APITestCase):
         )
         self.assertEqual(status_change.reason_text, "Suspension aplicada desde management.")
         self.assertEqual(status_change.changed_by, "admin")
-
-    @override_settings(BYPASS_ADMIN_LOGIN=True)
-    def test_bypass_admin_login_allows_unauthenticated_access_to_management_list(self):
-        response = self.client.get(reverse("management-users-list"))
-
-        self.assertEqual(response.status_code, status.HTTP_200_OK)
-        self.assertEqual(response.data["count"], 2)
-        self.assertNotIn("id", response.data["results"][0])
 
     def test_suspended_admin_cannot_access_management_endpoints(self):
         self.admin_user.status = self.admin_user.Status.SUSPENDED
@@ -1623,3 +1617,50 @@ class SeedCustomBulkCommandTests(APITestCase):
     def test_seed_custom_bulk_refuses_to_run_in_production(self):
         with self.assertRaisesMessage(CommandError, "production"):
             call_command("seed_custom_bulk", stdout=StringIO())
+
+
+class ManagementAccessControlTests(APITestCase):
+    """Every management endpoint must reject anonymous and non-staff callers."""
+
+    PLACEHOLDER_ID = "00000000-0000-0000-0000-000000000000"
+    SCHEMALESS_URL_NAMES = (
+        "management-stats",
+        "management-assets-stats",
+        "management-statistics-dashboard",
+        "management-statistics-analytics-overview",
+        "management-statistics-webstats",
+    )
+
+    def setUp(self):
+        self.regular_user = get_user_model().objects.create_user(
+            username="regular",
+            email="regular@example.com",
+            password="ChangeMe123!",
+            email_verified=True,
+        )
+
+    def _operations(self):
+        schema = SchemaGenerator().get_schema(request=None, public=True)
+        operations = set()
+        for path, methods in schema["paths"].items():
+            if not path.startswith("/api/management/"):
+                continue
+            concrete = re.sub(r"\{[^}]+\}", self.PLACEHOLDER_ID, path)
+            operations.update((method, concrete) for method in methods if method != "parameters")
+        # Plain APIViews without serializers are skipped by the schema generator.
+        operations.update(("get", reverse(name)) for name in self.SCHEMALESS_URL_NAMES)
+        self.assertGreater(len(operations), 50)
+        return sorted(operations)
+
+    def _assert_all(self, expected_status):
+        for method, path in self._operations():
+            with self.subTest(method=method, path=path):
+                response = getattr(self.client, method)(path, {}, format="json")
+                self.assertEqual(response.status_code, expected_status)
+
+    def test_anonymous_callers_are_rejected(self):
+        self._assert_all(status.HTTP_401_UNAUTHORIZED)
+
+    def test_non_staff_users_are_forbidden(self):
+        self.client.force_authenticate(user=self.regular_user)
+        self._assert_all(status.HTTP_403_FORBIDDEN)

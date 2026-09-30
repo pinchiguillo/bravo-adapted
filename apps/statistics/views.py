@@ -1,4 +1,3 @@
-from django.conf import settings
 from drf_spectacular.utils import extend_schema
 from rest_framework import permissions
 from rest_framework.response import Response
@@ -15,11 +14,6 @@ from .services import (
 
 class StatisticsManagementViewMixin:
     permission_classes = [IsActiveAccount, permissions.IsAdminUser]
-
-    def get_permissions(self):
-        if settings.BYPASS_ADMIN_LOGIN:
-            return [permissions.AllowAny()]
-        return super().get_permissions()
 
 
 @extend_schema(tags=["Management / Statistics"])

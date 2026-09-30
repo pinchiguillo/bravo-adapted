@@ -1,6 +1,5 @@
 import uuid
 
-from django.conf import settings
 from django.contrib.auth import get_user_model
 from django.db.models import Count, Q, Sum
 from drf_spectacular.utils import OpenApiParameter, extend_schema, extend_schema_view
@@ -115,13 +114,6 @@ class ManagementFeatureFlagActionsMixin:
         return self._set_active_state(False)
 
 
-class ManagementBypassAdminLoginMixin:
-    def get_permissions(self):
-        if settings.BYPASS_ADMIN_LOGIN:
-            return [permissions.AllowAny()]
-        return super().get_permissions()
-
-
 management_user_search_parameter = OpenApiParameter(
     name="search",
     type=str,
@@ -161,7 +153,6 @@ management_user_email_verified_parameter = OpenApiParameter(
     ),
 )
 class ManagementUserViewSet(
-    ManagementBypassAdminLoginMixin,
     ActionScopedRateThrottleMixin,
     ManagementStatusActionsMixin,
     mixins.ListModelMixin,
@@ -241,7 +232,6 @@ def parse_optional_uuid(raw_value):
 
 @extend_schema(tags=["Management / Feature Flags"])
 class ManagementFeatureFlagViewSet(
-    ManagementBypassAdminLoginMixin,
     ActionScopedRateThrottleMixin,
     ManagementFeatureFlagActionsMixin,
     mixins.ListModelMixin,
@@ -268,7 +258,6 @@ class ManagementFeatureFlagViewSet(
 
 @extend_schema(tags=["Management / Categories"])
 class ManagementCategoryViewSet(
-    ManagementBypassAdminLoginMixin,
     ActionScopedRateThrottleMixin,
     mixins.ListModelMixin,
     mixins.CreateModelMixin,
@@ -294,7 +283,6 @@ class ManagementCategoryViewSet(
 
 @extend_schema(tags=["Management / Allowed Cities"])
 class ManagementAllowedCityViewSet(
-    ManagementBypassAdminLoginMixin,
     ActionScopedRateThrottleMixin,
     mixins.ListModelMixin,
     mixins.CreateModelMixin,
@@ -320,7 +308,6 @@ class ManagementAllowedCityViewSet(
 
 @extend_schema(tags=["Management / Plan Tiers"])
 class ManagementPlanTierCatalogViewSet(
-    ManagementBypassAdminLoginMixin,
     ActionScopedRateThrottleMixin,
     mixins.ListModelMixin,
     mixins.CreateModelMixin,
@@ -397,7 +384,6 @@ management_chat_search_parameter = OpenApiParameter(
 )
 @extend_schema(tags=["Management / Announcements"])
 class ManagementAnnouncementViewSet(
-    ManagementBypassAdminLoginMixin,
     ManagementStatusActionsMixin,
     ActionScopedRateThrottleMixin,
     mixins.ListModelMixin,
@@ -461,7 +447,6 @@ class ManagementAnnouncementViewSet(
     ),
 )
 class ManagementJobViewSet(
-    ManagementBypassAdminLoginMixin,
     ManagementStatusActionsMixin,
     ActionScopedRateThrottleMixin,
     mixins.ListModelMixin,
@@ -533,7 +518,6 @@ class ManagementJobViewSet(
     ),
 )
 class ManagementChatViewSet(
-    ManagementBypassAdminLoginMixin,
     ActionScopedRateThrottleMixin,
     mixins.ListModelMixin,
     mixins.RetrieveModelMixin,
@@ -628,7 +612,6 @@ class ManagementChatViewSet(
 
 @extend_schema(tags=["Management / Services"])
 class ManagementServiceCatalogViewSet(
-    ManagementBypassAdminLoginMixin,
     ActionScopedRateThrottleMixin,
     mixins.ListModelMixin,
     mixins.CreateModelMixin,
@@ -654,7 +637,6 @@ class ManagementServiceCatalogViewSet(
 
 @extend_schema(tags=["Management / Organizations"])
 class ManagementOrganizationViewSet(
-    ManagementBypassAdminLoginMixin,
     ActionScopedRateThrottleMixin,
     ManagementStatusActionsMixin,
     mixins.ListModelMixin,
@@ -710,7 +692,7 @@ class ManagementAnnouncementStatusChangeViewSet(
 
 
 @extend_schema(tags=["Management / Stats"])
-class ManagementStatsView(ManagementBypassAdminLoginMixin, APIView):
+class ManagementStatsView(APIView):
     """Returns aggregate counts for all management entities in a single request."""
 
     permission_classes = [IsActiveAccount, permissions.IsAdminUser]
@@ -764,7 +746,6 @@ class ManagementStatsView(ManagementBypassAdminLoginMixin, APIView):
 
 @extend_schema(tags=["Management / Assets"])
 class ManagementAssetViewSet(
-    ManagementBypassAdminLoginMixin,
     ActionScopedRateThrottleMixin,
     mixins.ListModelMixin,
     mixins.RetrieveModelMixin,
@@ -803,7 +784,7 @@ class ManagementAssetViewSet(
 
 
 @extend_schema(tags=["Management / Assets"])
-class ManagementAssetStatsView(ManagementBypassAdminLoginMixin, APIView):
+class ManagementAssetStatsView(APIView):
     """Returns aggregate statistics for assets."""
 
     permission_classes = [IsActiveAccount, permissions.IsAdminUser]
