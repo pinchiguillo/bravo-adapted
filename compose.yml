@@ -18,7 +18,8 @@ services:
     image: bravo-backend:dev
     working_dir: /app
     env_file:
-      - .env
+      - path: .env
+        required: false
     volumes:
       - .:/app
     ports:
@@ -80,7 +81,8 @@ services:
     image: bravo-backend:dev
     working_dir: /app
     env_file:
-      - .env
+      - path: .env
+        required: false
     volumes:
       - .:/app
     environment: *app-environment
@@ -93,7 +95,8 @@ services:
   postgres:
     image: postgres:16-alpine
     env_file:
-      - .env
+      - path: .env
+        required: false
     ports:
       - "${POSTGRES_PORT:-5432}:5432"
     environment:
@@ -120,7 +123,8 @@ services:
   localstack:
     image: localstack/localstack:3.8.1
     env_file:
-      - .env
+      - path: .env
+        required: false
     environment:
       SERVICES: s3,sqs,sns,ses
       DEBUG: "1"
