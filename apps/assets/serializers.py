@@ -4,6 +4,7 @@ import uuid as uuid_module
 from datetime import timedelta
 
 from django.core.files.storage import default_storage
+from django.db import transaction
 from django.urls import reverse
 from django.utils import timezone
 from rest_framework import serializers
@@ -195,20 +196,24 @@ class AssetCompleteUploadSerializer(serializers.Serializer):
         return attrs
 
     def create(self, validated_data):
-        asset   = self.context["asset"]
-        storage = default_storage
+        with transaction.atomic():
+            # Re-read under a row lock: two concurrent confirmations must not both
+            # move the object.
+            asset = Asset.objects.select_for_update().get(pk=self.context["asset"].pk)
+            if asset.status not in (Asset.Status.INITIATED, Asset.Status.UPLOADED) or not asset.pending_key:
+                raise serializers.ValidationError("Asset cannot be confirmed in its current state.")
 
-        move_pending_to_confirmed(
-            storage,
-            pending_key=asset.pending_key,
-            final_key=asset.key,
-            content_type=asset.content_type_client,
-            expected_size=asset.size_client,
-        )
+            move_pending_to_confirmed(
+                default_storage,
+                pending_key=asset.pending_key,
+                final_key=asset.key,
+                content_type=asset.content_type_client,
+                expected_size=asset.size_client,
+            )
 
-        asset.pending_key  = ""
-        asset.status       = Asset.Status.CONFIRMED
-        asset.confirmed_at = timezone.now()
-        asset.save(update_fields=["pending_key", "status", "confirmed_at"])
+            asset.pending_key = ""
+            asset.status = Asset.Status.CONFIRMED
+            asset.confirmed_at = timezone.now()
+            asset.save(update_fields=["pending_key", "status", "confirmed_at"])
 
         return asset

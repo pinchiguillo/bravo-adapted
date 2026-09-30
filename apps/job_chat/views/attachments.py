@@ -7,27 +7,31 @@ from rest_framework.response import Response
 from apps.jobs.models import Job
 from common.permissions import IsActiveAccount
 
-from ..models import JobChat, JobChatMessage
+from ..models import JobChatMessage
 from ..serializers import JobChatAttachmentCreateSerializer, JobChatAttachmentSerializer
 
 
-def _get_job_and_message(request, job_uuid, message_uuid):
-    """Shared helper: resolve job + message, enforcing ownership."""
+def _get_own_message(request, job_uuid, message_uuid):
+    """Resolve the message a participant wants to attach a file to.
+
+    Both the requester and the provider can attach files, but only to their
+    own messages.
+    """
     try:
-        job = Job.objects.get(uuid=job_uuid)
+        job = Job.objects.select_related("announcement__organization").get(uuid=job_uuid)
     except Job.DoesNotExist:
         raise NotFound("Job not found.")
 
-    if job.user != request.user and not request.user.is_staff:
+    if not job.can_access_as_participant(request.user):
         raise PermissionDenied("You do not have permission to access this chat.")
 
-    job_chat, _ = JobChat.objects.get_or_create(job=job)
-
     try:
-        message = JobChatMessage.objects.get(uuid=message_uuid, job_chat=job_chat)
+        message = JobChatMessage.objects.get(uuid=message_uuid, job_chat__job=job)
     except JobChatMessage.DoesNotExist:
         raise NotFound("Message not found.")
 
+    if message.user_id != request.user.id:
+        raise PermissionDenied("You can only attach files to your own messages.")
     return message
 
 
@@ -36,8 +40,8 @@ def _get_job_and_message(request, job_uuid, message_uuid):
     summary="Attach asset to message",
     description=(
         "Attach a previously uploaded and confirmed Asset (kind=job_chat_attachment) "
-        "to a job chat message. The asset must be in CONFIRMED status and owned by "
-        "the authenticated user."
+        "to one of your own messages in a job chat. The asset must be in CONFIRMED "
+        "status and owned by the authenticated user."
     ),
     request=JobChatAttachmentCreateSerializer,
     responses={
@@ -50,7 +54,7 @@ def _get_job_and_message(request, job_uuid, message_uuid):
 @permission_classes([IsActiveAccount])
 def attach_to_message(request, job_uuid, message_uuid):
     """Attach a confirmed Asset to a chat message as an attachment."""
-    message = _get_job_and_message(request, job_uuid, message_uuid)
+    message = _get_own_message(request, job_uuid, message_uuid)
 
     serializer = JobChatAttachmentCreateSerializer(
         data=request.data,

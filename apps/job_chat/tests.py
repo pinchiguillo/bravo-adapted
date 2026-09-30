@@ -6,6 +6,7 @@ from django.urls import reverse
 from rest_framework import status
 from rest_framework.test import APITestCase
 
+from apps.assets.models import Asset
 from apps.jobs.models import Job
 from apps.organization.models import Announcement, Category, Organization
 
@@ -221,3 +222,60 @@ class ProposalWidgetTests(JobChatTestCase):
 
         self.assertEqual(response.status_code, status.HTTP_201_CREATED)
         self.assertTrue(JobChatMessage.objects.filter(content="still delivered").exists())
+
+
+class JobChatAttachmentTests(JobChatTestCase):
+    def _confirmed_asset(self, owner):
+        return Asset.objects.create(
+            owner=owner,
+            kind=Asset.Kind.JOB_CHAT_ATTACHMENT,
+            visibility="protected",
+            status=Asset.Status.CONFIRMED,
+            key=f"assets/job_chat_attachment/{owner.pk}/{Asset.objects.count()}.pdf",
+            original_filename="quote.pdf",
+            content_type_client="application/pdf",
+            size_client=10,
+        )
+
+    def _attach(self, user, message, asset):
+        self.client.force_authenticate(user=user)
+        return self.client.post(
+            reverse("job-chat-attach", kwargs={"job_uuid": self.job.uuid, "message_uuid": message.uuid}),
+            {"asset_id": str(asset.id)},
+            format="json",
+        )
+
+    def _message_from(self, user):
+        return JobChatMessage.objects.create(job_chat=self.chat, user=user, content="see attached")
+
+    def test_provider_can_attach_to_their_own_message(self):
+        asset = self._confirmed_asset(self.provider_user)
+
+        response = self._attach(self.provider_user, self._message_from(self.provider_user), asset)
+
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+        asset.refresh_from_db()
+        self.assertEqual(asset.status, Asset.Status.ATTACHED)
+
+    def test_participants_cannot_attach_to_the_other_partys_message(self):
+        asset = self._confirmed_asset(self.customer)
+
+        response = self._attach(self.customer, self._message_from(self.provider_user), asset)
+
+        self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
+
+    def test_outsiders_cannot_attach(self):
+        asset = self._confirmed_asset(self.outsider)
+
+        response = self._attach(self.outsider, self.first_message, asset)
+
+        self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
+
+    def test_an_asset_can_only_be_attached_once(self):
+        asset = self._confirmed_asset(self.customer)
+        self._attach(self.customer, self.first_message, asset)
+
+        response = self._attach(self.customer, self._message_from(self.customer), asset)
+
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertEqual(asset.job_chat_attachments.count(), 1)

@@ -1,6 +1,7 @@
 import json
 from decimal import Decimal
 
+from django.db import transaction
 from rest_framework import serializers
 
 from apps.assets.models import Asset
@@ -139,12 +140,16 @@ class JobChatAttachmentCreateSerializer(serializers.Serializer):
 
     def create(self, validated_data):
         message = self.context["message"]
-        asset   = self.context["asset"]
 
-        attachment = JobChatAttachment.objects.create(message=message, asset=asset)
+        with transaction.atomic():
+            # Lock the asset so two concurrent requests cannot attach it twice.
+            asset = Asset.objects.select_for_update().get(pk=self.context["asset"].pk)
+            if asset.status != Asset.Status.CONFIRMED:
+                raise serializers.ValidationError({"asset_id": "Asset is no longer available for attachment."})
 
-        asset.status       = Asset.Status.ATTACHED
-        asset.is_temporary = False
-        asset.save(update_fields=["status", "is_temporary"])
+            attachment = JobChatAttachment.objects.create(message=message, asset=asset)
+            asset.status = Asset.Status.ATTACHED
+            asset.is_temporary = False
+            asset.save(update_fields=["status", "is_temporary"])
 
         return attachment
