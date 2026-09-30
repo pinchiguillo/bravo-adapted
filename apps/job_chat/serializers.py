@@ -4,6 +4,7 @@ from decimal import Decimal
 from rest_framework import serializers
 
 from apps.assets.models import Asset
+from common.money import Currency
 
 from .models import JobChat, JobChatAttachment, JobChatMessage
 
@@ -35,7 +36,6 @@ PROPOSAL_WIDGET = "proposal"
 PROPOSAL_PENDING = "pending"
 PROPOSAL_ANSWERS = ("accepted", "rejected")
 PROPOSAL_PRICE_MODES = ("total", "hourly", "daily", "monthly", "per_sqm", "per_unit")
-PROPOSAL_CURRENCIES = ("EUR", "USD", "GBP")
 
 
 class ProposalDataSerializer(serializers.Serializer):
@@ -45,7 +45,7 @@ class ProposalDataSerializer(serializers.Serializer):
     subcategory = serializers.CharField(required=False, allow_blank=True, max_length=100)
     price = serializers.DecimalField(max_digits=10, decimal_places=2, min_value=Decimal("0"))
     price_mode = serializers.ChoiceField(choices=PROPOSAL_PRICE_MODES)
-    currency = serializers.ChoiceField(choices=PROPOSAL_CURRENCIES)
+    currency = serializers.ChoiceField(choices=Currency.values)
 
 
 def normalize_proposal_widget(raw_content):

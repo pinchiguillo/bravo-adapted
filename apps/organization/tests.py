@@ -983,6 +983,54 @@ class OrganizationApiTests(APITestCase):
         self.assertEqual(response.data["subservice"], str(self.owner_subservice.uuid))
         self.assertEqual(response.data["amount"], "79.99")
 
+    def _create_owner_price(self, **overrides):
+        self.client.force_authenticate(user=self.owner)
+        payload = {
+            "subservice": str(self.owner_subservice.uuid),
+            "amount": "79.99",
+            "currency": "EUR",
+            "charging_type": ServicePrice.ChargingType.PER_PROJECT,
+            "effective_from": "2026-04-01",
+        }
+        payload.update(overrides)
+        return self.client.post(
+            reverse(
+                "organization-service-price-list",
+                kwargs={
+                    "announcement_uuid": self.announcement.uuid,
+                    "subservice_uuid": self.owner_subservice.uuid,
+                },
+            ),
+            payload,
+            format="json",
+        )
+
+    def test_service_price_rejects_negative_amounts(self):
+        response = self._create_owner_price(amount="-5.00")
+
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn("amount", response.data)
+
+    def test_service_price_currency_is_normalised_and_restricted(self):
+        lower_case = self._create_owner_price(currency="gbp")
+        unknown = self._create_owner_price(currency="XXX", effective_from="2026-05-01")
+
+        self.assertEqual(lower_case.status_code, status.HTTP_201_CREATED)
+        self.assertEqual(lower_case.data["currency"], "GBP")
+        self.assertEqual(unknown.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn("currency", unknown.data)
+
+    def test_database_rejects_negative_service_prices(self):
+        from django.db import IntegrityError, transaction
+
+        with self.assertRaises(IntegrityError), transaction.atomic():
+            ServicePrice.objects.create(
+                subservice=self.owner_subservice,
+                amount="-1.00",
+                currency="EUR",
+                effective_from="2026-06-01",
+            )
+
     def test_public_announcement_list_allows_anonymous_requests_without_filters(self):
         response = self.client.get(reverse("public-announcement-list"))
 

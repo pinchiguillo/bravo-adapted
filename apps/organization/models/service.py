@@ -1,6 +1,10 @@
 import uuid
+from decimal import Decimal
 
+from django.core.validators import MinValueValidator
 from django.db import models
+
+from common.money import Currency
 
 
 class Subservice(models.Model):
@@ -46,8 +50,8 @@ class ServicePrice(models.Model):
         on_delete=models.CASCADE,
         related_name="price_table",
     )
-    amount = models.DecimalField(max_digits=10, decimal_places=2)
-    currency = models.CharField(max_length=3, default="EUR")
+    amount = models.DecimalField(max_digits=10, decimal_places=2, validators=[MinValueValidator(Decimal("0"))])
+    currency = models.CharField(max_length=3, choices=Currency.choices, default=Currency.EUR)
     charging_type = models.CharField(
         max_length=20,
         choices=ChargingType.choices,
@@ -68,6 +72,10 @@ class ServicePrice(models.Model):
                 condition=models.Q(effective_to__isnull=True)
                 | models.Q(effective_to__gte=models.F("effective_from")),
                 name="service_price_effective_to_after_start",
+            ),
+            models.CheckConstraint(
+                condition=models.Q(amount__gte=0),
+                name="service_price_amount_not_negative",
             ),
         ]
         ordering = ["subservice_id", "-effective_from", "-id"]
