@@ -24,7 +24,7 @@ class AuthApiTests(APITestCase):
         cache.clear()
         user_model = get_user_model()
         self.password = "ChangeMe123!"
-        self.email = "root@bravo.example.com"
+        self.email = "root@example.com"
         self.user = user_model.objects.create_user(
             username="root",
             email=self.email,
@@ -381,7 +381,7 @@ class AuthThrottleTests(APITestCase):
     def setUp(self):
         cache.clear()
         self.password = "ChangeMe123!"
-        self.email = "throttle@bravo.example.com"
+        self.email = "throttle@example.com"
         self.user = get_user_model().objects.create_user(
             username="throttle-user",
             email=self.email,

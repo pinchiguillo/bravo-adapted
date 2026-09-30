@@ -37,7 +37,7 @@ class JobChatApiTests(APITestCase):
             name="Acme",
             legal_name="Acme SL",
             tax_id="A123",
-            billing_email="billing@acme.com",
+            billing_email="billing@acme.example.com",
             billing_address="Main 1",
             billing_city="Madrid",
             billing_country="ES",

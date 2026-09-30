@@ -118,7 +118,7 @@ class ManagementApiTests(APITestCase):
             name="Managed Org",
             legal_name="Managed Org SL",
             tax_id="ORG123",
-            billing_email="billing@managed-org.com",
+            billing_email="billing@managed-org.example.com",
             billing_address="Main 1",
             billing_city="Madrid",
             billing_country="ES",
@@ -304,7 +304,7 @@ class ManagementApiTests(APITestCase):
             reverse("management-organizations-detail", kwargs={"uuid": self.organization.uuid}),
             {
                 "name": "Managed Org Updated",
-                "billing_email": "new-billing@managed-org.com",
+                "billing_email": "new-billing@managed-org.example.com",
                 "verification_level": 4,
                 "status": Organization.Status.SUSPENDED,
             },
@@ -314,7 +314,7 @@ class ManagementApiTests(APITestCase):
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.organization.refresh_from_db()
         self.assertEqual(self.organization.name, "Managed Org Updated")
-        self.assertEqual(self.organization.billing_email, "new-billing@managed-org.com")
+        self.assertEqual(self.organization.billing_email, "new-billing@managed-org.example.com")
         self.assertEqual(self.organization.verification_level, 4)
         self.assertEqual(self.organization.status, Organization.Status.SUSPENDED)
 
@@ -333,7 +333,7 @@ class ManagementApiTests(APITestCase):
                 "name": "Brand New Org",
                 "legal_name": "Brand New Org SL",
                 "tax_id": "NEW123",
-                "billing_email": "billing@brand-new-org.com",
+                "billing_email": "billing@brand-new-org.example.com",
                 "billing_address": "Fourth 4",
                 "billing_city": "Bilbao",
                 "billing_country": "ES",
@@ -360,7 +360,7 @@ class ManagementApiTests(APITestCase):
                 "name": "Duplicate Managed Org",
                 "legal_name": "Duplicate Managed Org SL",
                 "tax_id": "DUP123",
-                "billing_email": "billing@duplicate-managed-org.com",
+                "billing_email": "billing@duplicate-managed-org.example.com",
                 "billing_address": "Fifth 5",
                 "billing_city": "Sevilla",
                 "billing_country": "ES",
@@ -393,7 +393,7 @@ class ManagementAnnouncementApiTests(APITestCase):
             name="Announcements Org",
             legal_name="Announcements Org SL",
             tax_id="ANN123",
-            billing_email="billing@announcements-org.com",
+            billing_email="billing@announcements-org.example.com",
             billing_address="Gran Via 10",
             billing_city="Madrid",
             billing_country="ES",
@@ -511,7 +511,7 @@ class ManagementOrganizationListApiTests(APITestCase):
             name="Managed List Org",
             legal_name="Managed List Org SL",
             tax_id="LIST123",
-            billing_email="billing@managed-list-org.com",
+            billing_email="billing@managed-list-org.example.com",
             billing_address="Main 10",
             billing_city="Madrid",
             billing_country="ES",
@@ -578,7 +578,7 @@ class ManagementJobApiTests(APITestCase):
             name="Management Jobs Org",
             legal_name="Management Jobs Org SL",
             tax_id="MGMTJOB123",
-            billing_email="billing@management-jobs-org.com",
+            billing_email="billing@management-jobs-org.example.com",
             billing_address="Main 11",
             billing_city="Madrid",
             billing_country="ES",
@@ -723,7 +723,7 @@ class ManagementChatApiTests(APITestCase):
             name="Management Chats Org",
             legal_name="Management Chats Org SL",
             tax_id="MGMTCHAT123",
-            billing_email="billing@management-chats-org.com",
+            billing_email="billing@management-chats-org.example.com",
             billing_address="Second 22",
             billing_city="Valencia",
             billing_country="ES",
