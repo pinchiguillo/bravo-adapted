@@ -106,6 +106,8 @@ for _proxy in TRUSTED_PROXY_IPS:
     except ValueError as exc:
         raise ImproperlyConfigured(f"TRUSTED_PROXY_IPS contains an invalid address: {_proxy!r}") from exc
 CORS_ALLOW_ALL_ORIGINS = APP_MODE == "development"
+# Frontends allowed to call the API cross-origin outside development, e.g. https://app.example.com.
+CORS_ALLOWED_ORIGINS = env_list("CORS_ALLOWED_ORIGINS")
 
 SECURE_SSL_REDIRECT = env_bool("SECURE_SSL_REDIRECT", default=IS_PRODUCTION)
 SECURE_HSTS_SECONDS = env_int(

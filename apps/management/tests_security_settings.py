@@ -58,6 +58,7 @@ class SecuritySettingsTests(SimpleTestCase):
                     "APP_MODE": "production",
                     "DEBUG": "1",
                     "AUTH_ENFORCE_PASSWORD_RESTRICTIONS": "0",
+                    "CORS_ALLOWED_ORIGINS": "https://app.example.com",
                     "ALLOWED_HOSTS": "api.example.com",
                     "WS_ALLOWED_ORIGINS": "https://app.example.com",
                     "SECRET_KEY": "production-secret-key-with-enough-entropy-1234567890",
@@ -73,6 +74,8 @@ class SecuritySettingsTests(SimpleTestCase):
             settings_module = importlib.reload(settings_module)
 
             self.assertFalse(settings_module.DEBUG)
+            self.assertFalse(settings_module.CORS_ALLOW_ALL_ORIGINS)
+            self.assertEqual(settings_module.CORS_ALLOWED_ORIGINS, ["https://app.example.com"])
             self.assertTrue(settings_module.AUTH_ENFORCE_PASSWORD_RESTRICTIONS)
             validator_names = [validator["NAME"] for validator in settings_module.AUTH_PASSWORD_VALIDATORS]
             self.assertIn("django.contrib.auth.password_validation.MinimumLengthValidator", validator_names)
