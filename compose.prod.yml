@@ -31,6 +31,7 @@ services:
       DEBUG: "0"
       ALLOWED_HOSTS: ${ALLOWED_HOSTS}
       CSRF_TRUSTED_ORIGINS: ${CSRF_TRUSTED_ORIGINS:-}
+      WS_ALLOWED_ORIGINS: ${WS_ALLOWED_ORIGINS:?WS_ALLOWED_ORIGINS is required}
       # Only nginx reaches the app on the compose network; add CDN/load-balancer ranges if any.
       TRUSTED_PROXY_IPS: ${TRUSTED_PROXY_IPS:-172.16.0.0/12,192.168.0.0/16}
       SECURE_SSL_REDIRECT: "1"

@@ -8,6 +8,7 @@ from apps.jobs.models import Job
 from common.exceptions import DomainError
 
 from ..models import JobChat
+from ..rate_limit import allow_client_frame
 from ..serializers import JobChatMessageCreateSerializer, JobChatMessageSerializer, ProposalStatusUpdateSerializer
 from ..services import chat_group_name, post_message, set_proposal_status
 
@@ -28,23 +29,21 @@ class JobChatConsumer(AsyncWebsocketConsumer):
         self.job_uuid = self.scope["url_route"]["kwargs"]["job_uuid"]
         self.job_chat_group = chat_group_name(self.job_uuid)
         self.user = self.scope["user"]
+        self.joined = False
 
-        # Check if user is authenticated
         if not self.user.is_authenticated:
             await self.close()
             return
 
-        # Check permissions
-        has_permission = await self.check_job_permission()
-        if not has_permission:
+        if not await self.check_job_permission():
             await self.close()
             return
 
-        # Join room
         await self.channel_layer.group_add(self.job_chat_group, self.channel_name)
-        await self.accept()
+        self.joined = True
+        # Echo the auth subprotocol back, or browsers that offered one drop the connection.
+        await self.accept(subprotocol=self.scope.get("auth_subprotocol"))
 
-        # Notify others that user is online
         await self.channel_layer.group_send(
             self.job_chat_group,
             {
@@ -56,7 +55,11 @@ class JobChatConsumer(AsyncWebsocketConsumer):
         )
 
     async def disconnect(self, close_code):
-        # Notify others that user is offline
+        # Channels calls disconnect() for rejected sockets too; they never joined
+        # the room and must not broadcast presence into it.
+        if not getattr(self, "joined", False):
+            return
+
         await self.channel_layer.group_send(
             self.job_chat_group,
             {
@@ -66,14 +69,23 @@ class JobChatConsumer(AsyncWebsocketConsumer):
                 "username": self.user.username,
             },
         )
-
         await self.channel_layer.group_discard(self.job_chat_group, self.channel_name)
 
-    async def receive(self, text_data):
+    async def receive(self, text_data=None, bytes_data=None):
+        if text_data is None:
+            await self.send_error("Binary frames are not supported")
+            return
         try:
             data = json.loads(text_data)
         except json.JSONDecodeError:
             await self.send_error("Invalid JSON format")
+            return
+        if not isinstance(data, dict):
+            await self.send_error("Messages must be JSON objects")
+            return
+
+        if data.get("type") != "typing" and not await allow_client_frame(self.user.id):
+            await self.send_error("Rate limit exceeded, slow down")
             return
 
         try:
@@ -160,7 +172,7 @@ class JobChatConsumer(AsyncWebsocketConsumer):
 
     async def handle_typing(self, data):
         """Handle typing status."""
-        is_typing = data.get("is_typing", False)
+        is_typing = data.get("is_typing") is True
 
         await self.channel_layer.group_send(
             self.job_chat_group,

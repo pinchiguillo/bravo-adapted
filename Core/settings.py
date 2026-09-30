@@ -200,8 +200,15 @@ ORGANIZATION_ANNOUNCEMENT_VIEW_TTL_SECONDS = env_int(
     "ORGANIZATION_ANNOUNCEMENT_VIEW_TTL_SECONDS",
     60 * 60 * 24 * 30,
 )
+# Frames (other than typing indicators) a user may send per window, across all their sockets.
 JOB_CHAT_WS_RATE_LIMIT = env_int("JOB_CHAT_WS_RATE_LIMIT", 20)
 JOB_CHAT_WS_RATE_WINDOW = env_int("JOB_CHAT_WS_RATE_WINDOW", 60)
+# Legacy web client sends the JWT as ?token=; turn off once every client uses the subprotocol.
+JOB_CHAT_WS_ALLOW_QUERY_TOKEN = env_bool("JOB_CHAT_WS_ALLOW_QUERY_TOKEN", default=True)
+# Browser origins allowed to open WebSockets, e.g. https://app.example.com.
+WS_ALLOWED_ORIGINS = env_list("WS_ALLOWED_ORIGINS", default=[] if IS_PRODUCTION else ["*"])
+if IS_PRODUCTION and not WS_ALLOWED_ORIGINS:
+    raise ImproperlyConfigured("WS_ALLOWED_ORIGINS must be configured when APP_MODE=production.")
 AUTH_VERIFY_EMAIL_URL_TEMPLATE = os.getenv(
     "AUTH_VERIFY_EMAIL_URL_TEMPLATE",
     "http://localhost:3000/verify-email?token={token}",
