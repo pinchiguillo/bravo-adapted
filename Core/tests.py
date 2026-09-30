@@ -2,9 +2,10 @@ import importlib
 import os
 from unittest.mock import patch
 
+from django.conf import settings
 from django.core.exceptions import ImproperlyConfigured
 from django.test import SimpleTestCase, override_settings
-from django.urls import NoReverseMatch, clear_url_caches, resolve, reverse
+from django.urls import NoReverseMatch, URLPattern, URLResolver, clear_url_caches, get_resolver, resolve, reverse
 from drf_spectacular.generators import SchemaGenerator
 from drf_spectacular.views import SpectacularSwaggerView
 
@@ -245,3 +246,30 @@ class VersionEndpointTests(SimpleTestCase):
 
         self.assertIn("/api/version/", schema["paths"])
         self.assertIn("get", schema["paths"]["/api/version/"])
+
+
+def _iter_view_classes(patterns):
+    for pattern in patterns:
+        if isinstance(pattern, URLResolver):
+            yield from _iter_view_classes(pattern.url_patterns)
+        elif isinstance(pattern, URLPattern):
+            view_class = getattr(pattern.callback, "cls", None)
+            if view_class is not None:
+                yield view_class
+
+
+class ThrottleScopeConfigurationTests(SimpleTestCase):
+    def test_every_scope_used_by_an_action_scoped_view_has_a_rate(self):
+        rates = settings.REST_FRAMEWORK["DEFAULT_THROTTLE_RATES"]
+        missing = set()
+        checked = 0
+        for view_class in set(_iter_view_classes(get_resolver().url_patterns)):
+            prefix = getattr(view_class, "throttle_scope_prefix", None)
+            if prefix is None:
+                continue
+            checked += 1
+            scopes = set(view_class.throttle_scope_action_map.values()) | {f"{prefix}_default"}
+            missing |= {f"{view_class.__name__}: {scope}" for scope in scopes if scope not in rates}
+
+        self.assertGreater(checked, 10)
+        self.assertEqual(missing, set())
