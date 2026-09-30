@@ -2,8 +2,12 @@ from unittest.mock import AsyncMock, patch
 
 from asgiref.sync import async_to_sync
 from channels.testing import WebsocketCommunicator
-from django.test import SimpleTestCase, override_settings
+from django.contrib.auth import get_user_model
+from django.contrib.auth.models import AnonymousUser
+from django.test import SimpleTestCase, TestCase, override_settings
+from rest_framework_simplejwt.tokens import AccessToken
 
+from apps.job_chat.ws_auth import JWTAuthMiddleware
 from Core.asgi import build_websocket_application
 
 
@@ -11,6 +15,7 @@ class DummyUser:
     id = 1
     username = "ws-owner"
     is_authenticated = True
+    is_active = True
     is_staff = False
 
 
@@ -163,3 +168,41 @@ class JobChatWebSocketTests(SimpleTestCase):
             self.assertEqual(event["data"], updated_message)
 
             await communicator.disconnect()
+
+
+class WebSocketJWTMiddlewareTests(TestCase):
+    def setUp(self):
+        self.user = get_user_model().objects.create_user(
+            username="ws-user",
+            email="ws-user@example.com",
+            password="ChangeMe123!",
+            email_verified=True,
+        )
+        self.middleware = JWTAuthMiddleware(app=None)
+        # database_sync_to_async closes "obsolete" connections, which would drop
+        # the connection holding this test's transaction on PostgreSQL.
+        patcher = patch("channels.db.close_old_connections")
+        patcher.start()
+        self.addCleanup(patcher.stop)
+
+    def _resolve(self, token):
+        return async_to_sync(self.middleware._get_user)(token)
+
+    def test_valid_token_resolves_the_user(self):
+        self.assertEqual(self._resolve(str(AccessToken.for_user(self.user))), self.user)
+
+    def test_suspended_user_is_anonymous_even_with_a_valid_access_token(self):
+        token = str(AccessToken.for_user(self.user))
+        self.user.status = self.user.Status.SUSPENDED
+        self.user.save(update_fields=["status"])
+
+        self.assertIsInstance(self._resolve(token), AnonymousUser)
+
+    def test_token_for_deleted_user_is_anonymous_instead_of_crashing(self):
+        token = str(AccessToken.for_user(self.user))
+        self.user.delete()
+
+        self.assertIsInstance(self._resolve(token), AnonymousUser)
+
+    def test_garbage_token_is_anonymous(self):
+        self.assertIsInstance(self._resolve("not-a-jwt"), AnonymousUser)

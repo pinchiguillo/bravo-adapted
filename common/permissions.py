@@ -13,6 +13,11 @@ def user_has_active_account(user):
     return get_active_account_denial_message(user) is None
 
 
+def user_can_authenticate(user):
+    """SimpleJWT USER_AUTHENTICATION_RULE: only active, non-suspended accounts get tokens."""
+    return user is not None and user_has_active_account(user)
+
+
 def get_email_verification_denial_message(user):
     if hasattr(user, "is_email_verified"):
         if user.is_email_verified:

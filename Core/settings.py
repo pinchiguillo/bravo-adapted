@@ -261,6 +261,7 @@ INSTALLED_APPS = [
     'django.contrib.messages',
     'django.contrib.staticfiles',
     'rest_framework',
+    'rest_framework_simplejwt.token_blacklist',
     'drf_spectacular',
     'channels',
     'apps.auth.apps.AuthConfig',
@@ -437,6 +438,7 @@ REST_FRAMEWORK = {
         "auth_login": os.getenv("AUTH_LOGIN_THROTTLE_RATE", "5/minute"),
         "auth_register": os.getenv("AUTH_REGISTER_THROTTLE_RATE", "3/minute"),
         "auth_refresh": os.getenv("AUTH_REFRESH_THROTTLE_RATE", "10/minute"),
+        "auth_logout": os.getenv("AUTH_LOGOUT_THROTTLE_RATE", "10/minute"),
         "auth_verify_email": os.getenv("AUTH_VERIFY_EMAIL_THROTTLE_RATE", "10/minute"),
         "organization_default": os.getenv("ORGANIZATION_DEFAULT_THROTTLE_RATE", "60/minute"),
         "organization_public_read": os.getenv("ORGANIZATION_PUBLIC_READ_THROTTLE_RATE", "60/minute"),
@@ -461,9 +463,14 @@ REST_FRAMEWORK = {
 }
 
 SIMPLE_JWT = {
-    "ACCESS_TOKEN_LIFETIME": timedelta(days=7),
-    "REFRESH_TOKEN_LIFETIME": timedelta(days=7),
-    "ROTATE_REFRESH_TOKENS": env_bool("JWT_ROTATE_REFRESH_TOKENS", default=True),
+    "ACCESS_TOKEN_LIFETIME": timedelta(minutes=env_int("JWT_ACCESS_TOKEN_LIFETIME_MINUTES", 15)),
+    "REFRESH_TOKEN_LIFETIME": timedelta(days=env_int("JWT_REFRESH_TOKEN_LIFETIME_DAYS", 7)),
+    # Every refresh returns a new refresh token and revokes the old one, so a
+    # stolen refresh token stops working as soon as the legitimate client uses it.
+    "ROTATE_REFRESH_TOKENS": True,
+    "BLACKLIST_AFTER_ROTATION": True,
+    "UPDATE_LAST_LOGIN": True,
+    "USER_AUTHENTICATION_RULE": "common.permissions.user_can_authenticate",
 }
 
 spectacular_enum_name_overrides = {

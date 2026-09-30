@@ -1,4 +1,5 @@
 from django.contrib.auth import get_user_model
+from django.core.exceptions import ObjectDoesNotExist
 from drf_spectacular.utils import extend_schema
 from rest_framework import permissions, status, viewsets
 from rest_framework.decorators import action
@@ -6,7 +7,7 @@ from rest_framework.exceptions import PermissionDenied
 from rest_framework.response import Response
 from rest_framework.throttling import ScopedRateThrottle
 from rest_framework_simplejwt.exceptions import InvalidToken, TokenError
-from rest_framework_simplejwt.serializers import TokenRefreshSerializer
+from rest_framework_simplejwt.serializers import TokenBlacklistSerializer, TokenRefreshSerializer
 from rest_framework_simplejwt.tokens import RefreshToken
 
 from common.permissions import IsActiveAccount, get_email_verification_denial_message
@@ -32,17 +33,19 @@ class AuthViewSet(viewsets.GenericViewSet):
             return EmailTokenObtainPairSerializer
         if self.action == "refresh":
             return TokenRefreshSerializer
+        if self.action == "logout":
+            return TokenBlacklistSerializer
         if self.action == "verify_email":
             return VerifyEmailSerializer
         return UserSerializer
 
     def get_permissions(self):
-        if self.action in {"register", "login", "refresh", "verify_email"}:
+        if self.action in {"register", "login", "refresh", "logout", "verify_email"}:
             return [permissions.AllowAny()]
         return [IsActiveAccount()]
 
     def get_throttles(self):
-        if self.action in {"register", "login", "refresh", "verify_email"}:
+        if self.action in {"register", "login", "refresh", "logout", "verify_email"}:
             self.throttle_scope = f"auth_{self.action}"
             return super().get_throttles()
         return []
@@ -102,7 +105,26 @@ class AuthViewSet(viewsets.GenericViewSet):
             serializer.is_valid(raise_exception=True)
         except TokenError as exc:
             raise InvalidToken(exc.args[0]) from exc
+        except ObjectDoesNotExist as exc:
+            # The token is well-formed but its user has been deleted.
+            raise InvalidToken("User not found") from exc
         return Response(serializer.validated_data, status=status.HTTP_200_OK)
+
+    @extend_schema(
+        tags=["Auth"],
+        summary="Logout",
+        description="Revokes the given refresh token. Access tokens expire on their own shortly after.",
+        auth=[],
+        responses={204: None},
+    )
+    @action(detail=False, methods=["post"], url_path="logout")
+    def logout(self, request):
+        serializer = self.get_serializer(data=request.data)
+        try:
+            serializer.is_valid(raise_exception=True)
+        except TokenError as exc:
+            raise InvalidToken(exc.args[0]) from exc
+        return Response(status=status.HTTP_204_NO_CONTENT)
 
     @extend_schema(
         tags=["Auth"],

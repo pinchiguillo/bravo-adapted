@@ -2,8 +2,11 @@ from urllib.parse import parse_qs
 
 from channels.db import database_sync_to_async
 from django.contrib.auth.models import AnonymousUser
+from rest_framework.exceptions import AuthenticationFailed
 from rest_framework_simplejwt.authentication import JWTAuthentication
 from rest_framework_simplejwt.exceptions import InvalidToken, TokenError
+
+from common.permissions import user_can_authenticate
 
 
 class JWTAuthMiddleware:
@@ -39,9 +42,13 @@ class JWTAuthMiddleware:
     def _get_user(self, token: str):
         try:
             validated_token = self.jwt_authentication.get_validated_token(token)
-            return self.jwt_authentication.get_user(validated_token)
-        except (InvalidToken, TokenError):
+            user = self.jwt_authentication.get_user(validated_token)
+        except (InvalidToken, TokenError, AuthenticationFailed):
             return AnonymousUser()
+        # Access tokens outlive a suspension by up to their lifetime; re-check the account.
+        if not user_can_authenticate(user):
+            return AnonymousUser()
+        return user
 
 
 def JWTAuthMiddlewareStack(app):

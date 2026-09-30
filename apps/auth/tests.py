@@ -153,6 +153,68 @@ class AuthApiTests(APITestCase):
         self.assertEqual(response.data["detail"], "Token is invalid")
         self.assertEqual(response.data["code"], "token_not_valid")
 
+    def _login_tokens(self):
+        response = self.client.post(
+            "/api/auth/login/",
+            {"email": self.email, "password": self.password},
+            format="json",
+        )
+        self.assertEqual(response.status_code, 200)
+        return response.data
+
+    def test_rotated_refresh_token_cannot_be_reused(self):
+        old_refresh = self._login_tokens()["refresh"]
+
+        first = self.client.post("/api/auth/token/refresh/", {"refresh": old_refresh}, format="json")
+        replay = self.client.post("/api/auth/token/refresh/", {"refresh": old_refresh}, format="json")
+
+        self.assertEqual(first.status_code, 200)
+        self.assertEqual(replay.status_code, 401)
+        self.assertEqual(replay.data["code"], "token_not_valid")
+
+    def test_logout_revokes_the_refresh_token(self):
+        refresh = self._login_tokens()["refresh"]
+
+        logout = self.client.post("/api/auth/logout/", {"refresh": refresh}, format="json")
+        reuse = self.client.post("/api/auth/token/refresh/", {"refresh": refresh}, format="json")
+
+        self.assertEqual(logout.status_code, 204)
+        self.assertEqual(reuse.status_code, 401)
+
+    def test_logout_rejects_invalid_token_with_401(self):
+        response = self.client.post("/api/auth/logout/", {"refresh": "placeholder"}, format="json")
+
+        self.assertEqual(response.status_code, 401)
+        self.assertEqual(response.data["code"], "token_not_valid")
+
+    def test_suspended_user_cannot_refresh(self):
+        refresh = self._login_tokens()["refresh"]
+        self.user.status = self.user.Status.SUSPENDED
+        self.user.save(update_fields=["status"])
+
+        response = self.client.post("/api/auth/token/refresh/", {"refresh": refresh}, format="json")
+
+        self.assertEqual(response.status_code, 401)
+        self.assertEqual(response.data["detail"], "No active account found for the given token.")
+
+    def test_refresh_for_deleted_user_returns_401(self):
+        refresh = self._login_tokens()["refresh"]
+        self.user.delete()
+
+        response = self.client.post("/api/auth/token/refresh/", {"refresh": refresh}, format="json")
+
+        self.assertEqual(response.status_code, 401)
+        self.assertEqual(response.data["code"], "token_not_valid")
+
+    def test_access_tokens_are_short_lived(self):
+        from datetime import timedelta
+
+        from rest_framework_simplejwt.settings import api_settings
+
+        self.assertLessEqual(api_settings.ACCESS_TOKEN_LIFETIME, timedelta(minutes=15))
+        self.assertTrue(api_settings.ROTATE_REFRESH_TOKENS)
+        self.assertTrue(api_settings.BLACKLIST_AFTER_ROTATION)
+
     def test_me_returns_authenticated_user_profile(self):
         login_response = self.client.post(
             "/api/auth/login/",
