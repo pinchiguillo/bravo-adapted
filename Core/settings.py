@@ -229,7 +229,7 @@ HIDE_API_DOCS = env_bool(
 )
 RGPD_MODULE_ENABLED = True
 LEGAL_DOCUMENTS_ROOT = Path(
-    os.getenv("LEGAL_DOCUMENTS_ROOT", str(BASE_DIR / "docs"))
+    os.getenv("LEGAL_DOCUMENTS_ROOT", str(BASE_DIR / "legal_documents"))
 ).resolve()
 
 AUTH_BYPASS_EMAIL_VERIFICATION = disable_in_production_bool(AUTH_BYPASS_EMAIL_VERIFICATION)
