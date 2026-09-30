@@ -27,7 +27,7 @@ services:
     environment:
       APP_MODE: ${APP_MODE:-production}
       PORT: "8000"
-      SECRET_KEY: ${SECRET_KEY}
+      SECRET_KEY: ${SECRET_KEY:?SECRET_KEY is required}
       DEBUG: "0"
       ALLOWED_HOSTS: ${ALLOWED_HOSTS}
       CSRF_TRUSTED_ORIGINS: ${CSRF_TRUSTED_ORIGINS:-}
@@ -84,7 +84,7 @@ services:
     environment:
       POSTGRES_DB: ${POSTGRES_DB:-auth_db}
       POSTGRES_USER: ${POSTGRES_USER:-postgres}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required}
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U postgres -d auth_db"]
       interval: 5s
@@ -124,21 +124,6 @@ services:
       timeout: 5s
       retries: 12
       start_period: 20s
-
-  cloudflared:
-    image: cloudflare/cloudflared:latest
-    profiles: ["cloudflared"]
-    command: tunnel --no-autoupdate --metrics 0.0.0.0:2000 run --token ${CLOUDFLARED_TUNNEL_TOKEN:-}
-    depends_on:
-      nginx:
-        condition: service_healthy
-    restart: unless-stopped
-    healthcheck:
-      test: ["CMD-SHELL", "wget -q -O - http://127.0.0.1:2000/ready | grep -qi ok"]
-      interval: 10s
-      timeout: 5s
-      retries: 12
-      start_period: 15s
 
 volumes:
   postgres_data:
