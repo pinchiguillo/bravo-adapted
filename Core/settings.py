@@ -262,7 +262,6 @@ INSTALLED_APPS = [
     'django.contrib.staticfiles',
     'rest_framework',
     'drf_spectacular',
-    'django_extensions',
     'channels',
     'apps.auth.apps.AuthConfig',
     'apps.organization.apps.OrganizationConfig',

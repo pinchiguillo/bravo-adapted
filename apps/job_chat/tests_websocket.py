@@ -19,6 +19,10 @@ class DummyUser:
     CHANNEL_LAYERS={"default": {"BACKEND": "channels.layers.InMemoryChannelLayer"}},
 )
 class JobChatWebSocketTests(SimpleTestCase):
+    # The consumer runs through channels' database_sync_to_async, which calls
+    # close_old_connections() and therefore needs database access to be allowed.
+    databases = {"default"}
+
     @async_to_sync
     async def test_authenticated_job_owner_can_connect_to_job_chat_websocket(self):
         application = build_websocket_application()

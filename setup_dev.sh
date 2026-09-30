@@ -36,7 +36,7 @@ while [ "${attempt}" -le "${MAX_ATTEMPTS}" ]; do
 done
 
 echo "Running tests..."
-docker compose -f "${COMPOSE_FILE}" exec -T "${APP_SERVICE}" python manage.py test
+docker compose -f "${COMPOSE_FILE}" exec -T "${APP_SERVICE}" pytest -q
 
 read -r -p "Seed the database with demo data? [y/N]: " run_seeds
 case "${run_seeds}" in

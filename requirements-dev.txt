@@ -1,0 +1,11 @@
+-r requirements.txt
+django-stubs==6.1.1
+djangorestframework-stubs==3.18.1
+moto[s3,ses]==5.2.3
+mypy==2.3.1
+pip-audit==2.10.1
+pytest==9.1.1
+pytest-cov==7.1.0
+pytest-django==4.14.0
+pytest-randomly==5.0.0
+ruff==0.12.12

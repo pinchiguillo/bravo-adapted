@@ -1,0 +1,13 @@
+[tool.pytest.ini_options]
+DJANGO_SETTINGS_MODULE = "Core.settings_test"
+python_files = ["tests.py", "tests_*.py"]
+testpaths = ["apps", "common", "Core"]
+addopts = "-ra --strict-markers"
+
+[tool.coverage.run]
+source = ["apps", "common", "Core"]
+omit = ["*/migrations/*", "*/tests.py", "*/tests_*.py", "Core/settings_test.py", "Core/wsgi.py"]
+
+[tool.coverage.report]
+show_missing = true
+skip_covered = true
