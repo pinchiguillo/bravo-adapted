@@ -124,16 +124,6 @@ services:
       retries: 12
       start_period: 20s
 
-  db-diagram-exporter:
-    build:
-      context: .
-      dockerfile: docker/db-diagram-exporter/Dockerfile
-    environment:
-      OUTPUT_DIR: /output
-      BASENAME: database_schema
-    volumes:
-      - ./docs/db:/output
-
 volumes:
   postgres_data:
   localstack_data:
