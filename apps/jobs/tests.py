@@ -238,3 +238,99 @@ class JobApiTests(APITestCase):
         response = self.client.get(reverse("job-list"))
 
         self.assertEqual(response.status_code, status.HTTP_401_UNAUTHORIZED)
+
+    # --- writes -------------------------------------------------------------
+
+    def _create(self, user, announcement, payload=None):
+        self.client.force_authenticate(user=user)
+        return self.client.post(
+            reverse("announcement-job-create", kwargs={"announcement_uuid": announcement.uuid}),
+            payload or {},
+            format="json",
+        )
+
+    def _patch(self, user, job, payload):
+        self.client.force_authenticate(user=user)
+        return self.client.patch(reverse("job-detail", kwargs={"uuid": job.uuid}), payload, format="json")
+
+    def test_new_jobs_start_pending_whatever_the_client_sends(self):
+        response = self._create(
+            self.fourth_user,
+            self.announcement,
+            {"status": "completed", "organization_rating": "5.00", "plan_price": self.price.pk},
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+        job = Job.objects.get(uuid=response.data["uuid"])
+        self.assertEqual(job.status, Job.Status.PENDING)
+        self.assertIsNone(job.organization_rating)
+        self.assertEqual(job.plan_price, self.price)
+
+    def test_price_from_another_announcement_is_rejected(self):
+        response = self._create(self.fourth_user, self.other_announcement, {"plan_price": self.price.pk})
+
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn("plan_price", response.data)
+
+    def test_jobs_cannot_be_opened_on_inactive_announcements(self):
+        self.announcement.status = Announcement.Status.SUSPENDED
+        self.announcement.save(update_fields=["status"])
+
+        response = self._create(self.fourth_user, self.announcement)
+
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+
+    def test_providers_cannot_request_their_own_announcement(self):
+        response = self._create(self.other_user, self.announcement)
+
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+
+    def test_requester_cannot_activate_their_own_job(self):
+        response = self._patch(self.other_user, self.other_job, {"status": "active"})
+
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.other_job.refresh_from_db()
+        self.assertEqual(self.other_job.status, Job.Status.PENDING)
+
+    def test_requester_can_complete_and_rate_an_active_job(self):
+        response = self._patch(self.user, self.user_job, {"status": "completed", "organization_rating": "4.50"})
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.user_job.refresh_from_db()
+        self.assertEqual(self.user_job.status, Job.Status.COMPLETED)
+        self.assertEqual(str(self.user_job.organization_rating), "4.50")
+
+    def test_ratings_must_be_between_1_and_5_and_only_for_completed_jobs(self):
+        not_completed = self._patch(self.user, self.user_job, {"organization_rating": "4.00"})
+        out_of_range = self._patch(self.user, self.user_job, {"status": "completed", "organization_rating": "6.00"})
+
+        self.assertEqual(not_completed.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertEqual(out_of_range.status_code, status.HTTP_400_BAD_REQUEST)
+
+    def test_plan_price_cannot_be_swapped_after_creation(self):
+        other_price = ServicePrice.objects.create(
+            subservice=self.subservice,
+            amount="1.00",
+            currency="USD",
+            charging_type=ServicePrice.ChargingType.PER_PROJECT,
+            effective_from=date(2026, 1, 1),
+        )
+
+        self._patch(self.user, self.user_job, {"plan_price": other_price.pk})
+
+        self.user_job.refresh_from_db()
+        self.assertEqual(self.user_job.plan_price, self.price)
+
+    def test_active_jobs_cannot_be_deleted_by_the_requester(self):
+        self.client.force_authenticate(user=self.user)
+
+        response = self.client.delete(reverse("job-detail", kwargs={"uuid": self.user_job.uuid}))
+
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertTrue(Job.objects.filter(pk=self.user_job.pk).exists())
+
+    def test_database_rejects_out_of_range_ratings(self):
+        from django.db import IntegrityError, transaction
+
+        with self.assertRaises(IntegrityError), transaction.atomic():
+            Job.objects.filter(pk=self.user_job.pk).update(organization_rating="9.00")

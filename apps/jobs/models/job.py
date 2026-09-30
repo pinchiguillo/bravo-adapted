@@ -1,6 +1,8 @@
 import uuid
+from decimal import Decimal
 
 from django.conf import settings
+from django.core.validators import MaxValueValidator, MinValueValidator
 from django.db import models
 
 
@@ -12,6 +14,12 @@ class Job(models.Model):
         REJECTED = "rejected", "Rejected"
         SUSPENDED = "suspended", "Suspended"
         INACTIVE = "inactive", "Inactive"
+
+    # Status changes a requester may make; staff can set any status.
+    REQUESTER_TRANSITIONS = {
+        Status.PENDING: {Status.INACTIVE},
+        Status.ACTIVE: {Status.COMPLETED, Status.INACTIVE},
+    }
 
     id = models.AutoField(primary_key=True)
     uuid = models.UUIDField(default=uuid.uuid4, unique=True, editable=False)
@@ -42,6 +50,7 @@ class Job(models.Model):
         decimal_places=2,
         null=True,
         blank=True,
+        validators=[MinValueValidator(Decimal("1")), MaxValueValidator(Decimal("5"))],
     )
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
@@ -52,6 +61,13 @@ class Job(models.Model):
             models.Index(fields=["user", "-created_at"]),
             models.Index(fields=["announcement", "-created_at"]),
             models.Index(fields=["status"]),
+        ]
+        constraints = [
+            models.CheckConstraint(
+                condition=models.Q(organization_rating__isnull=True)
+                | models.Q(organization_rating__gte=1, organization_rating__lte=5),
+                name="job_rating_between_1_and_5",
+            ),
         ]
 
     def __str__(self):

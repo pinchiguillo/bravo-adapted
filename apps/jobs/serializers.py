@@ -1,5 +1,6 @@
 from rest_framework import serializers
 
+from apps.organization.models import Announcement, ServicePrice
 from apps.organization.serializers import AnnouncementSerializer
 
 from .models import Job
@@ -46,32 +47,66 @@ class JobSerializer(serializers.ModelSerializer):
 
 
 class JobCreateSerializer(serializers.ModelSerializer):
-    # announcement is resolved from the URL in the view; the body field is optional
-    # and only used as a cross-check when provided.
+    """Request a job on the announcement given in the URL (context["announcement"]).
+
+    Status and rating are not writable here: every job starts as pending.
+    """
+
+    # Optional cross-check against the URL announcement.
     announcement = serializers.PrimaryKeyRelatedField(
-        queryset=Job._meta.get_field("announcement").related_model.objects.all(),
+        queryset=Announcement.objects.all(),
+        required=False,
+        allow_null=True,
+    )
+    plan_price = serializers.PrimaryKeyRelatedField(
+        queryset=ServicePrice.objects.select_related("subservice"),
         required=False,
         allow_null=True,
     )
 
     class Meta:
         model = Job
-        fields = (
-            "announcement",
-            "plan_price",
-            "status",
-            "organization_rating",
-        )
+        fields = ("announcement", "plan_price")
+
+    def validate(self, attrs):
+        announcement = self.context["announcement"]
+        requester = self.context["request"].user
+
+        if attrs.get("announcement") not in (None, announcement):
+            raise serializers.ValidationError(
+                {"announcement": "Announcement in request body does not match the URL announcement."}
+            )
+        if announcement.status != Announcement.Status.ACTIVE:
+            raise serializers.ValidationError({"announcement": "This announcement is not accepting requests."})
+        if announcement.organization.user_id == requester.id:
+            raise serializers.ValidationError({"announcement": "You cannot request your own announcement."})
+
+        plan_price = attrs.get("plan_price")
+        if plan_price is not None and plan_price.subservice.announcement_id != announcement.id:
+            raise serializers.ValidationError({"plan_price": "This price does not belong to the announcement."})
+        return attrs
 
 
 class JobUpdateSerializer(serializers.ModelSerializer):
+    """Requesters move a job through Job.REQUESTER_TRANSITIONS and rate it once completed."""
+
     class Meta:
         model = Job
-        fields = (
-            "status",
-            "organization_rating",
-            "plan_price",
-        )
+        fields = ("status", "organization_rating")
+
+    def validate(self, attrs):
+        job = self.instance
+        actor = self.context["request"].user
+        new_status = attrs.get("status", job.status)
+
+        if new_status != job.status and not actor.is_staff:
+            if new_status not in Job.REQUESTER_TRANSITIONS.get(job.status, set()):
+                raise serializers.ValidationError(
+                    {"status": f"A job cannot move from '{job.status}' to '{new_status}'."}
+                )
+        if attrs.get("organization_rating") is not None and new_status != Job.Status.COMPLETED:
+            raise serializers.ValidationError({"organization_rating": "Only completed jobs can be rated."})
+        return attrs
 
 
 class JobListSerializer(serializers.ModelSerializer):

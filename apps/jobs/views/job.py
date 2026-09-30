@@ -138,6 +138,9 @@ class JobViewSet(
     def perform_destroy(self, instance):
         if instance.user != self.request.user and not self.request.user.is_staff:
             raise PermissionDenied("You don't have permission to delete this job.")
+        # Once a job is under way its chat holds the agreed proposal; keep it.
+        if instance.status != Job.Status.PENDING and not self.request.user.is_staff:
+            raise ValidationError({"status": "Only pending jobs can be deleted; move the job to inactive instead."})
         instance.delete()
 
     def get_object(self):
