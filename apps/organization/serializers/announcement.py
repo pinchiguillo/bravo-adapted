@@ -416,6 +416,14 @@ class AnnouncementSerializer(serializers.ModelSerializer):
             )
         return attrs
 
+    def validate_status(self, value):
+        # Suspension is a moderation decision (see the management API), not an owner choice.
+        request = self.context.get("request")
+        is_staff = bool(request and request.user.is_staff)
+        if value == Announcement.Status.SUSPENDED and not is_staff:
+            raise serializers.ValidationError("Only moderators can suspend announcements.")
+        return value
+
     def validate_subservices(self, subservices):
         seen_subservices = set()
         for subservice in subservices:

@@ -1922,6 +1922,22 @@ class OrganizationApiTests(APITestCase):
         self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
         self.assertEqual(response.data["detail"], "Suspended announcements cannot be modified.")
 
+    def test_owner_cannot_suspend_their_own_announcement(self):
+        self.client.force_authenticate(user=self.owner)
+
+        response = self.client.patch(
+            reverse(
+                "organization-announcement-detail",
+                kwargs={"organization_uuid": self.organization.uuid, "uuid": self.announcement.uuid},
+            ),
+            {"status": Announcement.Status.SUSPENDED},
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.announcement.refresh_from_db()
+        self.assertEqual(self.announcement.status, Announcement.Status.ACTIVE)
+
     def test_owner_can_patch_announcement_with_nested_subservices(self):
         self.client.force_authenticate(user=self.owner)
         effective_from = date.today() + timedelta(days=1)
