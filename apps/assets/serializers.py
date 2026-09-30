@@ -9,7 +9,7 @@ from django.utils import timezone
 from rest_framework import serializers
 
 from .models import Asset
-from .policies import get_kind_rules
+from .policies import CLIENT_KINDS, get_kind_rules
 from .services import (
     build_asset_key,
     build_pending_asset_key,
@@ -34,6 +34,13 @@ class AssetInitiateUploadSerializer(serializers.Serializer):
     content_type = serializers.CharField(max_length=120)
     size_bytes   = serializers.IntegerField(min_value=1)
     draft_token  = serializers.CharField(max_length=64, required=False, allow_blank=True, default="")
+
+    def validate_kind(self, value):
+        request = self.context.get("request")
+        is_staff = bool(request and request.user.is_staff)
+        if value not in CLIENT_KINDS and not is_staff:
+            raise serializers.ValidationError("This kind of asset cannot be uploaded here.")
+        return value
 
     def validate_filename(self, value):
         filename = os.path.basename(str(value).strip())

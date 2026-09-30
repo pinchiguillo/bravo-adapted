@@ -1,5 +1,10 @@
 from django.conf import settings
 
+# Kinds any authenticated user may request through /api/assets/initiate-upload/.
+# Announcement images have their own owner-checked endpoint, and legal documents
+# are managed by staff.
+CLIENT_KINDS = {"job_chat_attachment", "generic_upload"}
+
 
 def get_kind_rules(kind: str) -> dict:
     """Return upload policy rules for a given asset kind."""
@@ -28,7 +33,8 @@ def get_kind_rules(kind: str) -> dict:
         "generic_upload": {
             "visibility": "public",
             "max_size": 10 * 1024 * 1024,
-            "allowed_content_types": set(),  # empty = no restriction
+            # Public and served from the media origin: never allow HTML, SVG or scripts.
+            "allowed_content_types": {"image/jpeg", "image/png", "application/pdf"},
             "ttl_seconds": 300,
             "pending_max_age_seconds": 3600,
         },
