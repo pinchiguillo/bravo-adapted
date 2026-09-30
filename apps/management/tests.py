@@ -30,9 +30,6 @@ from apps.organization.models import (
     Subservice,
 )
 
-JOBS_INSTALLED = False
-JOB_CHAT_INSTALLED = False
-
 
 class AdminLegalDocumentsBrowserTests(APITestCase):
     def setUp(self):
