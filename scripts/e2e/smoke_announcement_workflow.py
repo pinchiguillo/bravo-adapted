@@ -1,40 +1,38 @@
 #!/usr/bin/env python3
 """
-Test externo: flujo completo de creación de anuncio con imágenes
+Smoke test: announcement creation with image uploads through the gateway.
 
-Cubre el ciclo completo del lado del propietario de una organización:
-  1. Registro de usuario
-  2. Creación de organización
-  3. Obtención de categorías
-  4. Creación de anuncio
-  5. Subida de imágenes mediante presigned S3 (kind=announcement_image):
+Flow (organization owner):
+  1. Register a user
+  2. Create an organization
+  3. Fetch categories
+  4. Create an announcement
+  5. Upload images with presigned S3 URLs (kind=announcement_image):
        POST /api/organizations/{org}/announcements/{ann}/images/
        PUT  <s3_presigned_url>
        POST <complete_url>  { upload_token }
-  6. Verificación de que las imágenes aparecen en el anuncio público
-  7. Validaciones negativas:
-       - PDF rechazado (no es imagen) → 400
-       - content_type no concuerda con extensión → 400
-       - archivo demasiado grande → 400
-       - petición sin autenticar → 401/403
+  6. Check the images appear on the public announcement
+  7. Negative cases:
+       - PDF rejected (not an image) -> 400
+       - content_type does not match the extension -> 400
+       - file too large -> 400
+       - unauthenticated request -> 401/403
 
-Restricciones de imágenes:
-  El endpoint sólo acepta image/jpeg e image/png (configurado en
-  ORGANIZATION_ANNOUNCEMENT_IMAGE_ALLOWED_CONTENT_TYPES). Cualquier otro
-  content_type, o un tamaño superior a ORGANIZATION_ANNOUNCEMENT_IMAGE_MAX_BYTES,
-  devuelve 400 antes de emitir la presigned URL.
+Only image/jpeg and image/png are accepted
+(ORGANIZATION_ANNOUNCEMENT_IMAGE_ALLOWED_CONTENT_TYPES). Any other content type,
+or a size above ORGANIZATION_ANNOUNCEMENT_IMAGE_MAX_BYTES, returns 400 before a
+presigned URL is issued.
 
-Uso:
-  # Local (Docker — requiere BYPASS_ORGANIZATION_VALIDATION=1 en .env)
-  python3 gateway_tests/test_announcement_workflow.py
+Usage:
+  # Local Docker stack (requires BYPASS_ORGANIZATION_VALIDATION=1 in .env)
+  python3 scripts/e2e/smoke_announcement_workflow.py
 
-  # Dev gateway — requiere org + anuncio ya aprobados
-  python3 gateway_tests/test_announcement_workflow.py \\
-    --url https://api.bravo.example.com \\
-    --announcement-uuid <uuid> --org-uuid <uuid>
+  # Remote gateway (requires an approved organization and announcement)
+  python3 scripts/e2e/smoke_announcement_workflow.py \
+    --url <base_url> --announcement-uuid <uuid> --org-uuid <uuid>
 
-  # Con token existente (salta el registro)
-  python3 gateway_tests/test_announcement_workflow.py --token <jwt>
+  # Reuse an existing token (skips registration)
+  python3 scripts/e2e/smoke_announcement_workflow.py --token <jwt>
 """
 
 import argparse

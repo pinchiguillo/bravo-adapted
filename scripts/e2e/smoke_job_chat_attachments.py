@@ -1,32 +1,31 @@
 #!/usr/bin/env python3
 """
-Test externo: flujo completo de adjuntos en Job Chat
+Smoke test: job chat attachments end to end.
 
-Prueba el ciclo end-to-end:
-  1. Registro de usuario
-  2. Creación de organización + aprobación
-  3. Obtención de categorías y creación de anuncio
-  4. Creación de job
-  5. Envío de mensaje en el chat del job
-  6. Upload de adjunto (presigned S3):
+Flow:
+  1. Register a user
+  2. Create and approve an organization
+  3. Fetch categories and create an announcement
+  4. Create a job
+  5. Send a message in the job chat
+  6. Upload an attachment with a presigned S3 URL:
        POST /api/assets/initiate-upload/  (kind=job_chat_attachment)
        PUT  <s3_presigned_url>
        POST /api/assets/<asset_id>/complete/
-  7. Adjuntar asset al mensaje:
+  7. Attach the asset to the message:
        POST /api/jobs/<job_uuid>/messages/<message_uuid>/attachments/
-  8. Verificar que el adjunto aparece en la lista de mensajes
+  8. Check the attachment appears in the message list
 
-Uso:
-  # Local (Docker) — aprueba la org automáticamente vía docker exec
-  python3 gateway_tests/test_job_chat_attachments.py
+Usage:
+  # Local Docker stack (approves the organization via docker exec)
+  python3 scripts/e2e/smoke_job_chat_attachments.py
 
-  # Dev gateway — requiere announcement UUID ya aprobado
-  python3 gateway_tests/test_job_chat_attachments.py \\
-    --url https://api.bravo.example.com \\
-    --announcement-uuid <uuid>
+  # Remote gateway (requires an approved announcement)
+  python3 scripts/e2e/smoke_job_chat_attachments.py \
+    --url <base_url> --announcement-uuid <uuid>
 
-  # Con token existente (salta el registro)
-  python3 gateway_tests/test_job_chat_attachments.py --token <jwt> [--url <base_url>]
+  # Reuse an existing token (skips registration)
+  python3 scripts/e2e/smoke_job_chat_attachments.py --token <jwt> [--url <base_url>]
 """
 
 import argparse

@@ -1,17 +1,14 @@
 #!/usr/bin/env python3
 """
-External gateway test: PATCH /api/organizations/{organization_uuid}/announcements/{uuid}/
+Smoke test: PATCH an organization announcement through the nginx gateway.
 
-AC: An organization owner can patch announcement fields and nested subservices
-through the gateway without triggering a 500.
-ROI: High (business value: high, frequency: medium)
-Behavior: authenticate -> resolve/create organization+announcement -> PATCH title
--> PATCH nested subservices -> verify owner listing reflects the changes
-Metadata: @category=e2e @dependency=remote-gateway @complexity=medium
+Flow: authenticate -> resolve or create an organization and announcement ->
+PATCH the title -> PATCH nested subservices -> check the owner listing
+reflects both changes (and that nothing returns a 500).
 
 Usage:
-  python3 gateway_tests/test_announcement_patch.py
-  python3 gateway_tests/test_announcement_patch.py --url https://api.bravo.example.com \
+  python3 scripts/e2e/smoke_announcement_patch.py [--url http://localhost:24356]
+  python3 scripts/e2e/smoke_announcement_patch.py --url <base_url> \
     --token <jwt> --org-uuid <uuid> --announcement-uuid <uuid>
 """
 
@@ -22,7 +19,7 @@ from datetime import date, datetime, timedelta
 
 import requests
 
-from test_announcement_workflow import (
+from smoke_announcement_workflow import (
     create_announcement,
     create_organization,
     get_category,

@@ -1,19 +1,14 @@
 #!/usr/bin/env python3
 """
-External E2E test: full Job Chat flow including WebSocket streaming.
+Smoke test: full job chat flow, including WebSocket streaming.
 
-AC: A user can create a job from an announcement, send chat messages, fetch
-message history, upload/attach files, and receive new chat messages over the
-job WebSocket.
-ROI: High (business value: high, frequency: high)
-Behavior: create announcement/job -> send REST message -> upload/attach asset
--> fetch history -> connect WebSocket -> send message -> observe streamed event
-Metadata: @category=e2e @dependency=remote-gateway @complexity=medium
+Flow: create announcement and job -> send a REST message -> upload and attach
+an asset -> fetch history -> connect to the job WebSocket -> send a message ->
+observe the streamed event.
 
 Usage:
-  python3 gateway_tests/test_job_chat_full_flow.py
-  python3 gateway_tests/test_job_chat_full_flow.py --url https://api.bravo.example.com
-  python3 gateway_tests/test_job_chat_full_flow.py --url https://api.bravo.example.com --announcement-uuid <uuid>
+  python3 scripts/e2e/smoke_job_chat_full_flow.py
+  python3 scripts/e2e/smoke_job_chat_full_flow.py --url <base_url> [--announcement-uuid <uuid>]
 """
 
 import argparse
@@ -27,7 +22,7 @@ import struct
 from datetime import datetime
 from urllib.parse import quote, urlparse
 
-from test_job_chat_attachments import (
+from smoke_job_chat_attachments import (
     SAMPLE_PDF,
     create_job,
     register_user,

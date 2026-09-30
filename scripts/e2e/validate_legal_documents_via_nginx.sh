@@ -102,7 +102,7 @@ def send_multipart(
     token: str,
     expected_status: int,
 ) -> dict:
-    boundary = f"codex-{uuid.uuid4().hex}"
+    boundary = f"bravo-{uuid.uuid4().hex}"
     parts: list[bytes] = []
     for name, value in fields.items():
         parts.extend(

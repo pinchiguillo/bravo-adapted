@@ -1,18 +1,13 @@
 #!/usr/bin/env python3
 """
-External E2E test: create an announcement with nested subservices and prices.
+Smoke test: create an announcement with nested subservices and prices.
 
-AC: The develop API accepts a single POST to create an announcement together
-with its subservices and their prices.
-ROI: High (business value: high, frequency: medium)
-Behavior: register user -> create organization -> fetch service catalog ->
-POST nested announcement payload -> verify nested services/prices in response
-and public detail.
-Metadata: @category=e2e @dependency=remote-gateway @complexity=medium
+Flow: register a user -> create an organization -> fetch the service catalog ->
+POST a nested announcement payload -> check nested services and prices in the
+response and in the public detail endpoint.
 
 Usage:
-  python3 gateway_tests/test_new_announcement_creation_workflow.py
-  python3 gateway_tests/test_new_announcement_creation_workflow.py --url https://api.bravo.example.com
+  python3 scripts/e2e/smoke_new_announcement_creation_workflow.py [--url <base_url>]
 """
 
 import argparse

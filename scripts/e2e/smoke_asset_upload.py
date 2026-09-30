@@ -1,21 +1,21 @@
 #!/usr/bin/env python3
 """
-Test externo: flujo completo de Asset Upload (presigned S3)
+Smoke test: generic asset upload with presigned S3 URLs.
 
-Prueba los endpoints genéricos de Assets:
+Endpoints:
   POST /api/assets/initiate-upload/
   PUT  <s3_presigned_url>
   POST /api/assets/<asset_id>/complete/
 
-Uso:
-  # Local (Docker)
-  python3 gateway_tests/test_asset_upload.py
+Usage:
+  # Local Docker stack
+  python3 scripts/e2e/smoke_asset_upload.py
 
-  # Dev gateway
-  python3 gateway_tests/test_asset_upload.py --url https://api.bravo.example.com
+  # Remote gateway
+  python3 scripts/e2e/smoke_asset_upload.py --url <base_url>
 
-  # Con credenciales existentes
-  python3 gateway_tests/test_asset_upload.py --token <jwt> [--url <base_url>]
+  # Reuse an existing token
+  python3 scripts/e2e/smoke_asset_upload.py --token <jwt> [--url <base_url>]
 """
 
 import argparse
