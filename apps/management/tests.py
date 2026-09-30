@@ -1,10 +1,13 @@
+import os
 from datetime import date
 from io import StringIO
 from pathlib import Path
 from tempfile import TemporaryDirectory
+from unittest import mock
 
 from django.contrib.auth import get_user_model
 from django.core.management import call_command
+from django.core.management.base import CommandError
 from django.test import override_settings
 from django.urls import reverse
 from rest_framework import status
@@ -1551,26 +1554,34 @@ class SeedFixedTablesCommandTests(APITestCase):
         self.assertIn("feature_flags_updated=0", second_out.getvalue())
 
 
+ADMIN_ENV = {
+    "DJANGO_SUPERUSER_EMAIL": "admin@example.com",
+    "DJANGO_SUPERUSER_PASSWORD": "test-admin-password",
+}
+
+
 class CreateAdminUserCommandTests(APITestCase):
+    @mock.patch.dict(os.environ, ADMIN_ENV)
     def test_create_admin_user_creates_expected_superuser(self):
         out = StringIO()
 
         call_command("create_admin_user", stdout=out)
 
         user_model = get_user_model()
-        admin_user = user_model.objects.get(email="admin@bravo.example.com")
+        admin_user = user_model.objects.get(email="admin@example.com")
 
         self.assertEqual(admin_user.username, "admin")
         self.assertTrue(admin_user.is_staff)
         self.assertTrue(admin_user.is_superuser)
-        self.assertTrue(admin_user.check_password("change-me-admin-password"))
+        self.assertTrue(admin_user.check_password("test-admin-password"))
         self.assertIn("created", out.getvalue())
 
+    @mock.patch.dict(os.environ, ADMIN_ENV)
     def test_create_admin_user_is_idempotent_and_repairs_admin_flags(self):
         user_model = get_user_model()
         admin_user = user_model.objects.create_user(
             username="custom-admin",
-            email="admin@bravo.example.com",
+            email="admin@example.com",
             password="different-pass",
             is_staff=False,
             is_superuser=False,
@@ -1583,5 +1594,35 @@ class CreateAdminUserCommandTests(APITestCase):
         self.assertEqual(admin_user.username, "custom-admin")
         self.assertTrue(admin_user.is_staff)
         self.assertTrue(admin_user.is_superuser)
-        self.assertTrue(admin_user.check_password("change-me-admin-password"))
+        self.assertTrue(admin_user.check_password("test-admin-password"))
         self.assertIn("updated", out.getvalue())
+
+    def test_create_admin_user_requires_credentials_from_environment(self):
+        with mock.patch.dict(os.environ, {}, clear=True):
+            with self.assertRaisesMessage(CommandError, "DJANGO_SUPERUSER_PASSWORD"):
+                call_command("create_admin_user", stdout=StringIO())
+
+        self.assertFalse(get_user_model().objects.filter(is_superuser=True).exists())
+
+    @override_settings(IS_PRODUCTION=True)
+    @mock.patch.dict(os.environ, ADMIN_ENV)
+    def test_create_admin_user_refuses_to_run_in_production(self):
+        with self.assertRaisesMessage(CommandError, "createsuperuser"):
+            call_command("create_admin_user", stdout=StringIO())
+
+        self.assertFalse(get_user_model().objects.filter(email="admin@example.com").exists())
+
+
+class SeedCustomBulkCommandTests(APITestCase):
+    def test_seed_custom_bulk_requires_seed_password(self):
+        with mock.patch.dict(os.environ, {}, clear=True):
+            with self.assertRaisesMessage(CommandError, "SEED_USER_PASSWORD"):
+                call_command("seed_custom_bulk", stdout=StringIO())
+
+        self.assertFalse(get_user_model().objects.exists())
+
+    @override_settings(IS_PRODUCTION=True)
+    @mock.patch.dict(os.environ, {"SEED_USER_PASSWORD": "seed-password"})
+    def test_seed_custom_bulk_refuses_to_run_in_production(self):
+        with self.assertRaisesMessage(CommandError, "production"):
+            call_command("seed_custom_bulk", stdout=StringIO())

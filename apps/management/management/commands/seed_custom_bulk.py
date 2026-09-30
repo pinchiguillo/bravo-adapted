@@ -1,8 +1,10 @@
+import os
 from datetime import date
 from random import choice, randint
 
+from django.conf import settings
 from django.contrib.auth import get_user_model
-from django.core.management.base import BaseCommand
+from django.core.management.base import BaseCommand, CommandError
 from django.db import transaction
 
 from apps.organization.models import (
@@ -14,7 +16,6 @@ from apps.organization.models import (
     Subservice,
 )
 
-DEFAULT_PASSWORD = "change-me-admin-password"
 DEFAULT_PRICE_DATE = date(2026, 1, 1)
 
 CATEGORIES = [
@@ -44,6 +45,12 @@ class Command(BaseCommand):
 
     @transaction.atomic
     def handle(self, *args, **options):
+        if settings.IS_PRODUCTION:
+            raise CommandError("seed_custom_bulk must not run in production.")
+        password = os.getenv("SEED_USER_PASSWORD", "")
+        if not password:
+            raise CommandError("Set SEED_USER_PASSWORD to the password for the seeded users.")
+
         counters = {
             "users": 0,
             "organizations": 0,
@@ -55,7 +62,7 @@ class Command(BaseCommand):
         categories_by_name = self._seed_categories(counters)
 
         self.stdout.write("Creating users...")
-        users_by_email = self._seed_users(30, counters)
+        users_by_email = self._seed_users(30, password, counters)
 
         self.stdout.write("Creating organizations...")
         organizations = self._seed_organizations(20, users_by_email, categories_by_name, counters)
@@ -68,7 +75,7 @@ class Command(BaseCommand):
                 f"Seed completed: {counters['users']} users, "
                 f"{counters['organizations']} organizations, "
                 f"{counters['announcements']} announcements. "
-                f"All user passwords: '{DEFAULT_PASSWORD}'"
+                "Seeded users log in with SEED_USER_PASSWORD."
             )
         )
 
@@ -84,7 +91,7 @@ class Command(BaseCommand):
                 counters["categories"] += 1
         return categories_by_name
 
-    def _seed_users(self, count, counters):
+    def _seed_users(self, count, password, counters):
         user_model = get_user_model()
         users_by_email = {}
 
@@ -102,7 +109,7 @@ class Command(BaseCommand):
                 email=email,
                 defaults=defaults,
             )
-            user.set_password(DEFAULT_PASSWORD)
+            user.set_password(password)
             user.save(update_fields=["password"])
             users_by_email[email] = user
             if created:
