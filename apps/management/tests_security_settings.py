@@ -47,6 +47,38 @@ class SecuritySettingsTests(SimpleTestCase):
             os.environ.update(original_env)
             importlib.reload(settings_module)
 
+    def test_production_forces_debug_off_and_password_rules_on(self):
+        original_env = os.environ.copy()
+        settings_module = importlib.import_module("Core.settings")
+
+        try:
+            os.environ.update(
+                {
+                    "APP_MODE": "production",
+                    "DEBUG": "1",
+                    "AUTH_ENFORCE_PASSWORD_RESTRICTIONS": "0",
+                    "ALLOWED_HOSTS": "api.example.com",
+                    "SECRET_KEY": "production-secret-key-with-enough-entropy-1234567890",
+                    "DATABASE_URL": "postgresql://postgres:postgres@postgres:5432/auth_db",
+                    "REDIS_URL": "redis://redis:6379/0",
+                    "AWS_DEFAULT_REGION": "us-east-1",
+                    "AWS_ACCESS_KEY_ID": "test",
+                    "AWS_SECRET_ACCESS_KEY": "test",
+                    "AWS_STORAGE_BUCKET_NAME": "bravo-media",
+                    "AWS_LEGAL_DOCUMENTS_BUCKET_NAME": "bravo-legal-documents",
+                }
+            )
+            settings_module = importlib.reload(settings_module)
+
+            self.assertFalse(settings_module.DEBUG)
+            self.assertTrue(settings_module.AUTH_ENFORCE_PASSWORD_RESTRICTIONS)
+            validator_names = [validator["NAME"] for validator in settings_module.AUTH_PASSWORD_VALIDATORS]
+            self.assertIn("django.contrib.auth.password_validation.MinimumLengthValidator", validator_names)
+        finally:
+            os.environ.clear()
+            os.environ.update(original_env)
+            importlib.reload(settings_module)
+
     @override_settings(
         DEBUG=False,
         ALLOWED_HOSTS=["api.example.com"],

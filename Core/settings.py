@@ -89,7 +89,7 @@ if IS_PRODUCTION and SECRET_KEY == "dev-only-unsafe-secret-key-change-me":
     )
 
 # SECURITY WARNING: don't run with debug turned on in production!
-DEBUG = env_bool("DEBUG", default=not IS_PRODUCTION)
+DEBUG = disable_in_production_bool(env_bool("DEBUG", default=not IS_PRODUCTION))
 
 ALLOWED_HOSTS = env_list("ALLOWED_HOSTS")
 if DEBUG and not ALLOWED_HOSTS:
@@ -230,6 +230,7 @@ HIDE_API_DOCS = env_bool(
     "HIDE_API_DOCS",
     default=IS_PRODUCTION,
 )
+# GDPR consent capture is a legal requirement for this product, so it is not configurable.
 RGPD_MODULE_ENABLED = True
 LEGAL_DOCUMENTS_ROOT = Path(
     os.getenv("LEGAL_DOCUMENTS_ROOT", str(BASE_DIR / "legal_documents"))
@@ -237,6 +238,8 @@ LEGAL_DOCUMENTS_ROOT = Path(
 
 AUTH_BYPASS_EMAIL_VERIFICATION = disable_in_production_bool(AUTH_BYPASS_EMAIL_VERIFICATION)
 BYPASS_ORGANIZATION_VALIDATION = disable_in_production_bool(BYPASS_ORGANIZATION_VALIDATION)
+AUTH_ENFORCE_PASSWORD_RESTRICTIONS = enforce_production_bool(AUTH_ENFORCE_PASSWORD_RESTRICTIONS)
+AUTH_PASSWORD_MIN_LENGTH = env_int("AUTH_PASSWORD_MIN_LENGTH", 12)
 
 if IS_PRODUCTION and USE_S3_STORAGE:
     require_env("AWS_DEFAULT_REGION")
@@ -355,6 +358,7 @@ AUTH_PASSWORD_VALIDATORS = (
         },
         {
             'NAME': 'django.contrib.auth.password_validation.MinimumLengthValidator',
+            'OPTIONS': {'min_length': AUTH_PASSWORD_MIN_LENGTH},
         },
         {
             'NAME': 'django.contrib.auth.password_validation.CommonPasswordValidator',

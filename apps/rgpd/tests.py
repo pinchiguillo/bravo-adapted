@@ -247,6 +247,13 @@ class RgpdAnonymousConsentApiTests(APITestCase):
         self.assertEqual(event.action, "create")
         self.assertEqual(event.ip_address, "203.0.113.20")
 
+    def test_anonymous_consent_is_not_persisted_when_recording_acceptances_fails(self):
+        with patch("apps.rgpd.views.record_policy_acceptances", side_effect=ValueError("no published policy")):
+            response = self.client.post(self.url, {"cookies_accepted": True}, format="json")
+
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertFalse(RgpdAnonymousConsent.objects.exists())
+
     def test_public_anonymous_endpoint_requires_write_token_for_updates(self):
         create_response = self.client.post(
             self.url,

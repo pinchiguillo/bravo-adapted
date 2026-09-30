@@ -1,4 +1,5 @@
 from django.conf import settings
+from django.db import transaction
 from drf_spectacular.utils import extend_schema, extend_schema_view
 from rest_framework import mixins, permissions, status, viewsets
 from rest_framework.decorators import action
@@ -66,6 +67,7 @@ class RgpdConsentViewSet(ActionScopedRateThrottleMixin, viewsets.GenericViewSet)
             return consent
         return RgpdConsent(user=self.request.user)
 
+    @transaction.atomic
     def _save_consent(self, request, partial):
         consent = self._get_or_initialize_consent()
         action = RgpdConsentEvent.Action.UPSERT if consent.pk is None else RgpdConsentEvent.Action.UPDATE
@@ -156,7 +158,9 @@ class RgpdAnonymousConsentViewSet(ActionScopedRateThrottleMixin, viewsets.Generi
         "create": "rgpd_anonymous_write",
     }
 
+    @transaction.atomic
     def create(self, request):
+        # Atomic: a consent row must never exist without its acceptances and event.
         serializer = self.get_serializer(data=request.data)
         serializer.is_valid(raise_exception=True)
         consent, write_token, action, status_code = self._resolve_anonymous_consent(serializer.validated_data)

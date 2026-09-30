@@ -123,6 +123,16 @@ class AuthApiTests(APITestCase):
             get_user_model().objects.filter(email="new-user@example.com").exists()
         )
 
+    def test_register_requires_twelve_character_passwords(self):
+        response = self.client.post(
+            "/api/auth/register/",
+            self.build_register_payload(password="Sh0rt-Pass!"),
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, 400)
+        self.assertIn("password", response.data)
+
     def test_refresh_returns_new_access_token(self):
         login_response = self.client.post(
             "/api/auth/login/",
