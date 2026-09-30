@@ -13,7 +13,7 @@ class CustomUser(AbstractUser):
 
     uuid = models.UUIDField(default=uuid.uuid4, unique=True, editable=False)
     email = models.EmailField(unique=True)
-    phone = models.CharField(max_length=20, blank=True, null=True)
+    phone = models.CharField(max_length=20, blank=True, null=True)  # noqa: DJ001 - null means "never provided" in the API
     birthdate = models.DateField(blank=True, null=True)
     avatar = models.ImageField(upload_to="avatars/", blank=True, null=True)
     email_verified = models.BooleanField(default=False)

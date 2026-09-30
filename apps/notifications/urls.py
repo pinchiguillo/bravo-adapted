@@ -8,4 +8,5 @@ router.register("", NotificationViewSet, basename="notifications")
 
 urlpatterns = [
     path("preferences/", NotificationPreferenceView.as_view(), name="notification-preferences"),
-] + router.urls
+    *router.urls,
+]

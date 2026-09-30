@@ -1649,9 +1649,11 @@ class CreateAdminUserCommandTests(APITestCase):
         self.assertIn("updated", out.getvalue())
 
     def test_create_admin_user_requires_credentials_from_environment(self):
-        with mock.patch.dict(os.environ, {}, clear=True):
-            with self.assertRaisesMessage(CommandError, "DJANGO_SUPERUSER_PASSWORD"):
-                call_command("create_admin_user", stdout=StringIO())
+        with (
+            mock.patch.dict(os.environ, {}, clear=True),
+            self.assertRaisesMessage(CommandError, "DJANGO_SUPERUSER_PASSWORD"),
+        ):
+            call_command("create_admin_user", stdout=StringIO())
 
         self.assertFalse(get_user_model().objects.filter(is_superuser=True).exists())
 
@@ -1666,9 +1668,11 @@ class CreateAdminUserCommandTests(APITestCase):
 
 class SeedCustomBulkCommandTests(APITestCase):
     def test_seed_custom_bulk_requires_seed_password(self):
-        with mock.patch.dict(os.environ, {}, clear=True):
-            with self.assertRaisesMessage(CommandError, "SEED_USER_PASSWORD"):
-                call_command("seed_custom_bulk", stdout=StringIO())
+        with (
+            mock.patch.dict(os.environ, {}, clear=True),
+            self.assertRaisesMessage(CommandError, "SEED_USER_PASSWORD"),
+        ):
+            call_command("seed_custom_bulk", stdout=StringIO())
 
         self.assertFalse(get_user_model().objects.exists())
 

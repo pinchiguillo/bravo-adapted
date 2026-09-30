@@ -101,7 +101,7 @@ class ManagementUserSerializer(serializers.ModelSerializer):
         errors = {}
 
         if self.instance is None and not attrs.get("password"):
-            errors["password"] = "This field is required."
+            errors["password"] = "This field is required."  # noqa: S105 - error message, not a password
 
         if self.instance is None and (
             "is_staff" in self.initial_data or "is_superuser" in self.initial_data
@@ -261,7 +261,8 @@ class ManagementAnnouncementSerializer(AnnouncementSerializer):
 
 class ManagementAnnouncementStatusChangeSerializer(AnnouncementStatusChangeSerializer):
     class Meta(AnnouncementStatusChangeSerializer.Meta):
-        read_only_fields = list(AnnouncementStatusChangeSerializer.Meta.read_only_fields) + [
+        read_only_fields = [
+            *AnnouncementStatusChangeSerializer.Meta.read_only_fields,
             'from_status',
             'to_status',
             'changed_by',

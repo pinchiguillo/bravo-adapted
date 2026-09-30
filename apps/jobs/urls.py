@@ -8,4 +8,5 @@ router.register("", JobViewSet, basename="job")
 
 urlpatterns = [
     path("me/", JobViewSet.as_view({"get": "list"}), name="job-list-me"),
-] + router.urls
+    *router.urls,
+]

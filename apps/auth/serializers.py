@@ -91,9 +91,9 @@ class RegisterSerializer(serializers.ModelSerializer):
         )
 
     def validate(self, attrs):
-        if django_apps.is_installed("apps.rgpd") and settings.RGPD_MODULE_ENABLED:
-            if "rgpd" not in attrs:
-                raise serializers.ValidationError({"rgpd": ["This field is required."]})
+        rgpd_required = django_apps.is_installed("apps.rgpd") and settings.RGPD_MODULE_ENABLED
+        if rgpd_required and "rgpd" not in attrs:
+            raise serializers.ValidationError({"rgpd": ["This field is required."]})
 
         user = get_user_model()(
             username=attrs.get("username", ""),
@@ -105,7 +105,7 @@ class RegisterSerializer(serializers.ModelSerializer):
             try:
                 validate_password(attrs["password"], user=user)
             except DjangoValidationError as exc:
-                raise serializers.ValidationError({"password": exc.messages})
+                raise serializers.ValidationError({"password": exc.messages}) from exc
         return attrs
 
     def create(self, validated_data):
@@ -160,7 +160,7 @@ class VerifyEmailSerializer(serializers.Serializer):
             if user.is_email_verified:
                 raise serializers.ValidationError(self.error_messages["invalid_token"])
         except (KeyError, signing.BadSignature, signing.SignatureExpired, user_model.DoesNotExist):
-            raise serializers.ValidationError(self.error_messages["invalid_token"])
+            raise serializers.ValidationError(self.error_messages["invalid_token"]) from None
 
         self.context["user"] = user
         return value

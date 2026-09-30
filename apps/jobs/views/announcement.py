@@ -29,7 +29,7 @@ def create_announcement_job(request, announcement_uuid):
     try:
         announcement = Announcement.objects.select_related("organization").get(uuid=announcement_uuid)
     except Announcement.DoesNotExist:
-        raise NotFound("Announcement not found.")
+        raise NotFound("Announcement not found.") from None
 
     serializer = JobCreateSerializer(
         data=request.data,

@@ -18,7 +18,6 @@ import uuid as uuid_lib
 from datetime import date, datetime, timedelta
 
 import requests
-
 from smoke_announcement_workflow import (
     create_announcement,
     create_organization,

@@ -29,8 +29,8 @@ Usage:
 """
 
 import argparse
-import subprocess
 import base64
+import subprocess
 import sys
 import uuid as uuid_lib
 from datetime import datetime
@@ -38,7 +38,7 @@ from datetime import datetime
 import requests
 
 # ---------------------------------------------------------------------------
-# Minimal 1×1 red pixel PNG (valid magic bytes + PIL-verifiable)
+# Minimal 1x1 red pixel PNG (valid magic bytes + PIL-verifiable)
 # ---------------------------------------------------------------------------
 _PNG_1X1_B64 = (
     "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAIAAACQd1PeAAAADElEQVR4nGP4z8AAAA"
@@ -451,7 +451,9 @@ def main():
     token = args.token or register_user(base_url)
     announcement_uuid = setup_announcement(base_url, token, args.announcement_uuid)
 
-    run_full_scenario(base_url, token, "PDF attachment", SAMPLE_PDF, "document.pdf", "application/pdf", announcement_uuid)
+    run_full_scenario(
+        base_url, token, "PDF attachment", SAMPLE_PDF, "document.pdf", "application/pdf", announcement_uuid
+    )
     run_full_scenario(base_url, token, "PNG attachment", SAMPLE_PNG, "photo.png", "image/png", announcement_uuid)
 
     print("\n" + "=" * 60)

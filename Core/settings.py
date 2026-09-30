@@ -82,8 +82,9 @@ APP_MODE = os.getenv("APP_MODE", "development").strip().lower()
 IS_PRODUCTION = APP_MODE == "production"
 
 # SECURITY WARNING: keep the secret key used in production secret!
-SECRET_KEY = os.getenv("SECRET_KEY", "dev-only-unsafe-secret-key-change-me")
-if IS_PRODUCTION and SECRET_KEY == "dev-only-unsafe-secret-key-change-me":
+DEV_SECRET_KEY = "dev-only-unsafe-secret-key-change-me"  # noqa: S105 - placeholder, rejected below in production
+SECRET_KEY = os.getenv("SECRET_KEY", DEV_SECRET_KEY)
+if IS_PRODUCTION and SECRET_KEY == DEV_SECRET_KEY:
     raise ImproperlyConfigured(
         "SECRET_KEY must be configured via environment when APP_MODE=production."
     )
@@ -93,7 +94,7 @@ DEBUG = disable_in_production_bool(env_bool("DEBUG", default=not IS_PRODUCTION))
 
 ALLOWED_HOSTS = env_list("ALLOWED_HOSTS")
 if DEBUG and not ALLOWED_HOSTS:
-    ALLOWED_HOSTS = ["localhost", "127.0.0.1", "0.0.0.0"]
+    ALLOWED_HOSTS = ["localhost", "127.0.0.1", "0.0.0.0"]  # noqa: S104 - Host header values, not a bind address
 if IS_PRODUCTION and not ALLOWED_HOSTS:
     raise ImproperlyConfigured("ALLOWED_HOSTS must be configured when APP_MODE=production.")
 

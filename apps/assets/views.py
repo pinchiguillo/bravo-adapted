@@ -62,7 +62,7 @@ def complete_upload(request, asset_id):
     try:
         asset = Asset.objects.get(id=asset_id)
     except Asset.DoesNotExist:
-        raise NotFound("Asset not found.")
+        raise NotFound("Asset not found.") from None
 
     serializer = AssetCompleteUploadSerializer(
         data={},

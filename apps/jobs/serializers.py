@@ -100,11 +100,9 @@ class JobUpdateSerializer(serializers.ModelSerializer):
         actor = self.context["request"].user
         new_status = attrs.get("status", job.status)
 
-        if new_status != job.status and not actor.is_staff:
-            if new_status not in Job.REQUESTER_TRANSITIONS.get(job.status, set()):
-                raise serializers.ValidationError(
-                    {"status": f"A job cannot move from '{job.status}' to '{new_status}'."}
-                )
+        allowed = Job.REQUESTER_TRANSITIONS.get(job.status, set())
+        if new_status != job.status and not actor.is_staff and new_status not in allowed:
+            raise serializers.ValidationError({"status": f"A job cannot move from '{job.status}' to '{new_status}'."})
         if attrs.get("organization_rating") is not None and new_status != Job.Status.COMPLETED:
             raise serializers.ValidationError({"organization_rating": "Only completed jobs can be rated."})
         return attrs

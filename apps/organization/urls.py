@@ -135,4 +135,5 @@ urlpatterns = [
         announcement_image_base64,
         name="organization-announcement-image-base64",
     ),
-] + router.urls
+    *router.urls,
+]

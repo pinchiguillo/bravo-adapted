@@ -27,7 +27,7 @@ from datetime import datetime
 import requests
 
 # ---------------------------------------------------------------------------
-# Minimal 1×1 red pixel PNG (valid magic bytes + PIL-verifiable)
+# Minimal 1x1 red pixel PNG (valid magic bytes + PIL-verifiable)
 # ---------------------------------------------------------------------------
 _PNG_1X1_B64 = (
     "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAIAAACQd1PeAAAADElEQVR4nGP4z8AAAA"

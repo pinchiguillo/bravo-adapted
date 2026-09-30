@@ -161,6 +161,9 @@ class RgpdConsentEvent(BaseRgpdConsentEvent):
         verbose_name = "RGPD consent event"
         verbose_name_plural = "RGPD consent events"
 
+    def __str__(self):
+        return f"{self.action} consent event for {self.consent_id}"
+
 
 class RgpdAnonymousConsentEvent(BaseRgpdConsentEvent):
     consent = models.ForeignKey(
@@ -173,6 +176,9 @@ class RgpdAnonymousConsentEvent(BaseRgpdConsentEvent):
         ordering = ["-created_at", "-id"]
         verbose_name = "RGPD anonymous consent event"
         verbose_name_plural = "RGPD anonymous consent events"
+
+    def __str__(self):
+        return f"{self.action} consent event for {self.consent_id}"
 
 
 class RgpdLegalDocument(models.Model):

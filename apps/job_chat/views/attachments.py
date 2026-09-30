@@ -20,7 +20,7 @@ def _get_own_message(request, job_uuid, message_uuid):
     try:
         job = Job.objects.select_related("announcement__organization").get(uuid=job_uuid)
     except Job.DoesNotExist:
-        raise NotFound("Job not found.")
+        raise NotFound("Job not found.") from None
 
     if not job.can_access_as_participant(request.user):
         raise PermissionDenied("You do not have permission to access this chat.")
@@ -28,7 +28,7 @@ def _get_own_message(request, job_uuid, message_uuid):
     try:
         message = JobChatMessage.objects.get(uuid=message_uuid, job_chat__job=job)
     except JobChatMessage.DoesNotExist:
-        raise NotFound("Message not found.")
+        raise NotFound("Message not found.") from None
 
     if message.user_id != request.user.id:
         raise PermissionDenied("You can only attach files to your own messages.")

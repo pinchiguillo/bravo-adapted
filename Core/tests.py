@@ -20,18 +20,16 @@ class SettingsEnvHelpersTests(SimpleTestCase):
             self.assertTrue(core_settings.env_bool("BOOL_FLAG"))
 
     def test_env_int_raises_for_invalid_values(self):
-        with patch.dict("os.environ", {"INT_FLAG": "invalid"}, clear=False):
-            with self.assertRaises(ImproperlyConfigured):
-                core_settings.env_int("INT_FLAG", 0)
+        with patch.dict("os.environ", {"INT_FLAG": "invalid"}, clear=False), self.assertRaises(ImproperlyConfigured):
+            core_settings.env_int("INT_FLAG", 0)
 
     def test_env_list_splits_and_strips_values(self):
         with patch.dict("os.environ", {"LIST_FLAG": " a, b ,,c "}, clear=False):
             self.assertEqual(core_settings.env_list("LIST_FLAG"), ["a", "b", "c"])
 
     def test_require_env_raises_when_missing(self):
-        with patch.dict("os.environ", {}, clear=True):
-            with self.assertRaises(ImproperlyConfigured):
-                core_settings.require_env("MISSING_VAR")
+        with patch.dict("os.environ", {}, clear=True), self.assertRaises(ImproperlyConfigured):
+            core_settings.require_env("MISSING_VAR")
 
     def test_auth_bypass_email_verification_defaults_to_true_in_development(self):
         with patch.dict("os.environ", {"APP_MODE": "development"}, clear=True):

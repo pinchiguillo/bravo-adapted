@@ -96,7 +96,7 @@ class ServiceCatalogViewSet(
             category = Category.objects.get(uuid=category_uuid)
         except Category.DoesNotExist:
             from rest_framework.exceptions import NotFound
-            raise NotFound(f"Category with UUID {category_uuid} not found")
+            raise NotFound(f"Category with UUID {category_uuid} not found") from None
 
         services = self.get_queryset().filter(category=category)
         serializer = self.get_serializer(services, many=True)

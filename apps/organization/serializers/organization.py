@@ -1,3 +1,4 @@
+from itertools import pairwise
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from django.db import transaction
@@ -104,7 +105,7 @@ class OrganizationAvailabilitySettingsSerializer(serializers.ModelSerializer):
 
         for ranges in grouped_ranges.values():
             ranges.sort(key=lambda current: current[0])
-            for previous, current in zip(ranges, ranges[1:]):
+            for previous, current in pairwise(ranges):
                 if current[0] < previous[1]:
                     raise serializers.ValidationError(error_message)
 

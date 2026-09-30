@@ -44,7 +44,7 @@ from datetime import datetime
 import requests
 
 # ---------------------------------------------------------------------------
-# Minimal valid 1×1 PNG (PIL-verifiable, correct CRC)
+# Minimal valid 1x1 PNG (PIL-verifiable, correct CRC)
 # ---------------------------------------------------------------------------
 _PNG_B64 = (
     "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAIAAACQd1PeAAAADElEQVR4nGP4z8AAAA"
@@ -53,7 +53,7 @@ _PNG_B64 = (
 SAMPLE_PNG = base64.b64decode(_PNG_B64)
 
 # ---------------------------------------------------------------------------
-# Minimal valid 1×1 JPEG (PIL-verifiable)
+# Minimal valid 1x1 JPEG (PIL-verifiable)
 # ---------------------------------------------------------------------------
 _JPEG_B64 = (
     "/9j/4AAQSkZJRgABAQAAAQABAAD/2wBDAAgGBgcGBQgHBwcJCQgKDBQNDAsLDBkSEw"

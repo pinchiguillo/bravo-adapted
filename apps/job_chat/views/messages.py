@@ -38,7 +38,7 @@ def get_job_chat_messages(request, job_uuid):
     try:
         job = Job.objects.get(uuid=job_uuid)
     except Job.DoesNotExist:
-        raise NotFound("Job not found.")
+        raise NotFound("Job not found.") from None
 
     if not job.can_access_as_participant(request.user):
         raise PermissionDenied("You don't have permission to access this chat.")
@@ -67,7 +67,7 @@ def send_job_chat_message(request, job_uuid):
     try:
         job = Job.objects.get(uuid=job_uuid)
     except Job.DoesNotExist:
-        raise NotFound("Job not found.")
+        raise NotFound("Job not found.") from None
 
     if not job.can_access_as_participant(request.user):
         raise PermissionDenied("You don't have permission to send messages in this chat.")
@@ -104,7 +104,7 @@ def update_proposal_status(request, job_uuid, message_uuid):
     try:
         job = Job.objects.get(uuid=job_uuid)
     except Job.DoesNotExist:
-        raise NotFound("Job not found.")
+        raise NotFound("Job not found.") from None
 
     if not job.can_access_as_participant(request.user):
         raise PermissionDenied("You don't have permission to update messages in this chat.")

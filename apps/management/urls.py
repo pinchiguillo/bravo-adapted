@@ -38,6 +38,6 @@ router.register("assets", ManagementAssetViewSet, basename="management-assets")
 
 urlpatterns = [
     path("assets/stats/", ManagementAssetStatsView.as_view(), name="management-assets-stats"),
-] + router.urls + [
+    *router.urls,
     path("stats/", ManagementStatsView.as_view(), name="management-stats"),
 ]
