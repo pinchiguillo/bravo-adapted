@@ -6,7 +6,6 @@ from unittest.mock import patch
 
 from django.contrib.auth import get_user_model
 from django.contrib.auth.models import AnonymousUser
-from django.contrib.sessions.middleware import SessionMiddleware
 from django.core.cache import cache
 from django.core.exceptions import ValidationError
 from django.core.files.uploadedfile import SimpleUploadedFile
@@ -2371,13 +2370,11 @@ class AnnouncementViewCountMiddlewareTests(APITestCase):
         self.factory = RequestFactory()
         cache.clear()
 
-    def test_anonymous_visitor_is_counted_only_once_per_session(self):
-        request = self._build_anonymous_request()
-        duplicate_request = self._build_anonymous_request(session_key="anon-visitor")
+    def test_anonymous_visitor_is_counted_only_once(self):
         middleware = AnnouncementViewCountMiddleware(lambda incoming_request: None)
 
-        middleware._track_announcement_view(request)
-        middleware._track_announcement_view(duplicate_request)
+        middleware._track_announcement_view(self._build_anonymous_request())
+        middleware._track_announcement_view(self._build_anonymous_request())
 
         self.announcement.refresh_from_db()
         self.assertEqual(self.announcement.view_count, 1)
@@ -2393,20 +2390,35 @@ class AnnouncementViewCountMiddlewareTests(APITestCase):
             1,
         )
 
-    def _build_anonymous_request(self, session_key="anon-visitor"):
+    def _build_anonymous_request(self, remote_addr="203.0.113.7", user_agent="Browser/1.0"):
         request = self.factory.get(
             reverse(
                 "public-announcement-detail",
                 kwargs={"uuid": self.announcement.uuid},
-            )
+            ),
+            REMOTE_ADDR=remote_addr,
+            HTTP_USER_AGENT=user_agent,
         )
-        session_middleware = SessionMiddleware(lambda incoming_request: None)
-        session_middleware.process_request(request)
-        request.session.save()
-        request.session._session_key = session_key
         request.user = AnonymousUser()
         request.resolver_match = self._resolver_match()
         return request
+
+    def test_different_anonymous_clients_are_counted_separately(self):
+        middleware = AnnouncementViewCountMiddleware(lambda incoming_request: None)
+
+        middleware._track_announcement_view(self._build_anonymous_request(remote_addr="203.0.113.7"))
+        middleware._track_announcement_view(self._build_anonymous_request(remote_addr="203.0.113.8"))
+
+        self.announcement.refresh_from_db()
+        self.assertEqual(self.announcement.view_count, 2)
+
+    def test_anonymous_views_do_not_create_sessions(self):
+        from django.contrib.sessions.models import Session
+
+        for _ in range(3):
+            self.client.get(reverse("public-announcement-detail", kwargs={"uuid": self.announcement.uuid}))
+
+        self.assertEqual(Session.objects.count(), 0)
 
     def _resolver_match(self):
         class ResolverMatch:

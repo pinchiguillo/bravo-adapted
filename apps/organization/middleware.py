@@ -1,6 +1,9 @@
 from django.conf import settings
 from django.core.cache import cache
 from django.db.models import F
+from django.utils.crypto import salted_hmac
+
+from common.client_ip import get_client_ip
 
 from .models import Announcement
 
@@ -40,32 +43,29 @@ class AnnouncementViewCountMiddleware:
             1,
             int(getattr(settings, "ORGANIZATION_ANNOUNCEMENT_VIEW_TTL_SECONDS", 60 * 60 * 24 * 30)),
         )
-        if cache.add(cache_key, True, timeout=ttl):
-            updated = Announcement.objects.filter(uuid=announcement_uuid).update(view_count=F("view_count") + 1)
-            if updated:
-                from apps.statistics.services import increment_announcement_view_stats
+        if not cache.add(cache_key, True, timeout=ttl):
+            return
 
-                announcement_id = (
-                    Announcement.objects.filter(uuid=announcement_uuid)
-                    .values_list("id", flat=True)
-                    .first()
-                )
-                if announcement_id is not None:
-                    increment_announcement_view_stats(announcement_id)
+        announcement_id = Announcement.objects.filter(uuid=announcement_uuid).values_list("id", flat=True).first()
+        if announcement_id is None:
+            return
+        Announcement.objects.filter(pk=announcement_id).update(view_count=F("view_count") + 1)
+
+        from apps.statistics.services import increment_announcement_view_stats
+
+        increment_announcement_view_stats(announcement_id)
 
     def _get_visitor_identifier(self, request):
         user = getattr(request, "user", None)
         if user is not None and getattr(user, "is_authenticated", False):
             return f"user:{user.id}"
 
-        session = getattr(request, "session", None)
-        if session is None:
+        # Anonymous API clients do not keep session cookies, and creating a
+        # session row per request only bloated the table. De-duplicate on a
+        # keyed hash of IP and user agent instead; it only lives in the cache.
+        client_ip = get_client_ip(request)
+        if client_ip is None:
             return None
-
-        session_key = session.session_key
-        if not session_key:
-            session.save()
-            session_key = session.session_key
-        if not session_key:
-            return None
-        return f"anon:{session_key}"
+        user_agent = request.META.get("HTTP_USER_AGENT", "")
+        digest = salted_hmac("announcement-view", f"{client_ip}|{user_agent}").hexdigest()
+        return f"anon:{digest}"
