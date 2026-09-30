@@ -170,6 +170,40 @@ class JobChatWebSocketTests(SimpleTestCase):
             await communicator.disconnect()
 
 
+    @async_to_sync
+    async def test_invalid_messages_are_rejected_without_saving(self):
+        application = build_websocket_application()
+        save_message = AsyncMock()
+
+        with (
+            patch("apps.job_chat.ws_auth.JWTAuthentication.get_validated_token", return_value=object()),
+            patch("apps.job_chat.ws_auth.JWTAuthentication.get_user", return_value=DummyUser()),
+            patch(
+                "apps.job_chat.views.consumers.JobChatConsumer.check_job_permission",
+                new=AsyncMock(return_value=True),
+            ),
+            patch("apps.job_chat.views.consumers.JobChatConsumer.save_message", new=save_message),
+        ):
+            communicator = WebsocketCommunicator(
+                application,
+                "/ws/jobs/11111111-1111-1111-1111-111111111111/chat/?token=test-token",
+            )
+            connected, _ = await communicator.connect()
+            self.assertTrue(connected)
+            await communicator.receive_json_from()
+
+            for payload in (
+                {"type": "message", "content": "hi", "msg_type": "system"},
+                {"type": "message", "content": "{\"widget_type\": \"proposal\", \"data\": {}}", "msg_type": "widget"},
+                {"type": "message", "content": "   "},
+            ):
+                await communicator.send_json_to(payload)
+                event = await communicator.receive_json_from()
+                self.assertEqual(event["type"], "error")
+
+            save_message.assert_not_awaited()
+            await communicator.disconnect()
+
 class WebSocketJWTMiddlewareTests(TestCase):
     def setUp(self):
         self.user = get_user_model().objects.create_user(

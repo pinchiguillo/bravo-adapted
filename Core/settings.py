@@ -429,6 +429,7 @@ REST_FRAMEWORK = {
     "DEFAULT_SCHEMA_CLASS": "drf_spectacular.openapi.AutoSchema",
     # Deny by default: a view is public only if it opts in with AllowAny.
     "DEFAULT_PERMISSION_CLASSES": ("common.permissions.IsActiveAccount",),
+    "EXCEPTION_HANDLER": "common.exception_handler.exception_handler",
     "DEFAULT_AUTHENTICATION_CLASSES": (
         "rest_framework_simplejwt.authentication.JWTAuthentication",
     ),

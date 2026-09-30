@@ -1,17 +1,24 @@
 import json
+import logging
 
 from channels.db import database_sync_to_async
 from channels.generic.websocket import AsyncWebsocketConsumer
-from django.contrib.auth import get_user_model
-from rest_framework import serializers
 
 from apps.jobs.models import Job
-from apps.notifications.services import emit_job_chat_message_notification
+from common.exceptions import DomainError
 
-from ..models import JobChat, JobChatMessage
-from ..serializers import JobChatMessageSerializer, ProposalStatusUpdateSerializer
+from ..models import JobChat
+from ..serializers import JobChatMessageCreateSerializer, JobChatMessageSerializer, ProposalStatusUpdateSerializer
+from ..services import chat_group_name, post_message, set_proposal_status
 
-User = get_user_model()
+logger = logging.getLogger(__name__)
+
+
+def first_error(errors):
+    """Return the first human-readable message from DRF serializer errors."""
+    while isinstance(errors, dict | list) and errors:
+        errors = next(iter(errors.values())) if isinstance(errors, dict) else errors[0]
+    return str(errors)
 
 
 class JobChatConsumer(AsyncWebsocketConsumer):
@@ -19,7 +26,7 @@ class JobChatConsumer(AsyncWebsocketConsumer):
 
     async def connect(self):
         self.job_uuid = self.scope["url_route"]["kwargs"]["job_uuid"]
-        self.job_chat_group = f"job_chat_{self.job_uuid}"
+        self.job_chat_group = chat_group_name(self.job_uuid)
         self.user = self.scope["user"]
 
         # Check if user is authenticated
@@ -69,6 +76,13 @@ class JobChatConsumer(AsyncWebsocketConsumer):
             await self.send_error("Invalid JSON format")
             return
 
+        try:
+            await self.dispatch_client_message(data)
+        except Exception:
+            logger.exception("Unhandled error in job chat %s", self.job_uuid)
+            await self.send_error("Internal error")
+
+    async def dispatch_client_message(self, data):
         message_type = data.get("type")
 
         if message_type == "history":
@@ -95,26 +109,25 @@ class JobChatConsumer(AsyncWebsocketConsumer):
         )
 
     async def handle_message(self, data):
-        """Handle incoming chat message."""
-        content = data.get("content", "").strip()
-        msg_type = data.get("msg_type", "plain_text")
-
-        if not content:
-            await self.send_error("Message content cannot be empty")
+        """Validate and persist a chat message, then broadcast it to the room."""
+        serializer = JobChatMessageCreateSerializer(
+            data={"type": data.get("msg_type", "plain_text"), "content": data.get("content")}
+        )
+        if not serializer.is_valid():
+            await self.send_error(first_error(serializer.errors))
             return
 
-        message = await self.save_message(content, msg_type)
-        if message:
-            await self.channel_layer.group_send(
-                self.job_chat_group,
-                {
-                    "type": "chat_message",
-                    "message": message,
-                },
-            )
-            return
-
-        await self.send_error("Message could not be saved")
+        message = await self.save_message(
+            serializer.validated_data["type"],
+            serializer.validated_data["content"],
+        )
+        await self.channel_layer.group_send(
+            self.job_chat_group,
+            {
+                "type": "chat_message",
+                "message": message,
+            },
+        )
 
     async def handle_proposal_status(self, data):
         """Handle proposal widget status changes over WebSocket."""
@@ -224,66 +237,27 @@ class JobChatConsumer(AsyncWebsocketConsumer):
         return JobChatMessageSerializer(messages, many=True).data
 
     @database_sync_to_async
-    def save_message(self, content, msg_type="plain_text"):
-        """Save message to database."""
-        try:
-            job = Job.objects.get(uuid=self.job_uuid)
-            job_chat, _ = JobChat.objects.get_or_create(job=job)
-
-            message = JobChatMessage.objects.create(
-                job_chat=job_chat,
-                user=self.user,
-                type=msg_type,
-                content=content,
-            )
-            emit_job_chat_message_notification(message)
-
-            serializer = JobChatMessageSerializer(message)
-            return serializer.data
-        except Exception:
-            return None
+    def save_message(self, message_type, content):
+        job = Job.objects.get(uuid=self.job_uuid)
+        message = post_message(job=job, user=self.user, message_type=message_type, content=content)
+        return JobChatMessageSerializer(message).data
 
     @database_sync_to_async
     def update_proposal_status_message(self, message_uuid, status_value):
-        """Update a proposal widget and return the serialized message."""
+        """Answer a proposal; returns (serialized message, None) or (None, error message)."""
+        serializer = ProposalStatusUpdateSerializer(data={"status": status_value})
+        if not serializer.is_valid():
+            return None, first_error(serializer.errors)
         try:
-            serializer = ProposalStatusUpdateSerializer(data={"status": status_value})
-            serializer.is_valid(raise_exception=True)
-
             job = Job.objects.get(uuid=self.job_uuid)
-            job_chat, _ = JobChat.objects.get_or_create(job=job)
-            message = job_chat.messages.get(uuid=message_uuid)
-
-            if message.type != JobChatMessage.MessageType.WIDGET:
-                raise serializers.ValidationError("This message is not a widget type.")
-
-            try:
-                widget_data = json.loads(message.content)
-            except (json.JSONDecodeError, TypeError) as exc:
-                raise serializers.ValidationError("Invalid widget content format.") from exc
-
-            if widget_data.get("widget_type") != "proposal":
-                raise serializers.ValidationError("This widget is not a proposal.")
-
-            widget_data.setdefault("data", {})
-            widget_data["data"]["status"] = serializer.validated_data["status"]
-            message.content = json.dumps(widget_data)
-            message.save(update_fields=["content", "updated_at"])
-
-            return JobChatMessageSerializer(message).data, None
+            message = set_proposal_status(
+                job=job,
+                message_uuid=message_uuid,
+                actor=self.user,
+                new_status=serializer.validated_data["status"],
+            )
         except Job.DoesNotExist:
             return None, "Job not found."
-        except JobChatMessage.DoesNotExist:
-            return None, "Message not found."
-        except serializers.ValidationError as exc:
-            detail = exc.detail
-            if isinstance(detail, list):
-                return None, str(detail[0])
-            if isinstance(detail, dict):
-                first_value = next(iter(detail.values()))
-                if isinstance(first_value, list):
-                    return None, str(first_value[0])
-                return None, str(first_value)
-            return None, str(detail)
-        except Exception:
-            return None, "Message could not be updated"
+        except DomainError as exc:
+            return None, exc.message
+        return JobChatMessageSerializer(message).data, None

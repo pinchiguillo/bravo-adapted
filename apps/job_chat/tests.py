@@ -1,3 +1,6 @@
+import json
+from unittest.mock import patch
+
 from django.contrib.auth import get_user_model
 from django.urls import reverse
 from rest_framework import status
@@ -9,7 +12,7 @@ from apps.organization.models import Announcement, Category, Organization
 from .models import JobChat, JobChatMessage
 
 
-class JobChatApiTests(APITestCase):
+class JobChatTestCase(APITestCase):
     def setUp(self):
         user_model = get_user_model()
         self.customer = user_model.objects.create_user(
@@ -67,6 +70,9 @@ class JobChatApiTests(APITestCase):
             content="Hola, sigo interesado en el servicio.",
         )
 
+
+
+class JobChatApiTests(JobChatTestCase):
     def test_provider_can_get_job_chat_messages(self):
         self.client.force_authenticate(user=self.provider_user)
 
@@ -107,3 +113,111 @@ class JobChatApiTests(APITestCase):
         )
 
         self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
+
+
+class ProposalWidgetTests(JobChatTestCase):
+    """Price proposals: server-validated content and server-owned status."""
+
+    def _proposal(self, **overrides):
+        data = {
+            "title": "Deep clean",
+            "description": "Full flat",
+            "price": 120.5,
+            "price_mode": "total",
+            "currency": "EUR",
+        }
+        data.update(overrides)
+        return json.dumps({"widget_type": "proposal", "data": data})
+
+    def _send(self, user, content, message_type="widget"):
+        self.client.force_authenticate(user=user)
+        return self.client.post(
+            reverse("job-chat-send", kwargs={"job_uuid": self.job.uuid}),
+            {"type": message_type, "content": content},
+            format="json",
+        )
+
+    def _answer(self, user, message_uuid, answer):
+        self.client.force_authenticate(user=user)
+        return self.client.patch(
+            reverse("update-proposal-status", kwargs={"job_uuid": self.job.uuid, "message_uuid": message_uuid}),
+            {"status": answer},
+            format="json",
+        )
+
+    def test_new_proposal_is_always_pending_and_keeps_price_as_number(self):
+        response = self._send(self.provider_user, self._proposal(status="accepted", injected="x"))
+
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+        widget = json.loads(response.data["content"])
+        self.assertEqual(widget["data"]["status"], "pending")
+        self.assertEqual(widget["data"]["price"], 120.5)
+        self.assertNotIn("injected", widget["data"])
+
+    def test_invalid_proposals_are_rejected(self):
+        cases = {
+            "negative price": self._proposal(price=-1),
+            "three decimals": self._proposal(price="10.123"),
+            "unknown currency": self._proposal(currency="XXX"),
+            "missing title": self._proposal(title=""),
+            "no data": json.dumps({"widget_type": "proposal"}),
+            "unknown widget": json.dumps({"widget_type": "invoice", "data": {}}),
+            "not json": "{not json",
+            "json array": json.dumps([1, 2]),
+        }
+        for label, content in cases.items():
+            with self.subTest(label):
+                self.assertEqual(self._send(self.provider_user, content).status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertFalse(JobChatMessage.objects.filter(type=JobChatMessage.MessageType.WIDGET).exists())
+
+    def test_unknown_message_type_is_rejected(self):
+        response = self._send(self.provider_user, "hello", message_type="system")
+
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+
+    def test_other_participant_can_accept_a_pending_proposal(self):
+        proposal = self._send(self.provider_user, self._proposal()).data
+
+        response = self._answer(self.customer, proposal["uuid"], "accepted")
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(json.loads(response.data["content"])["data"]["status"], "accepted")
+
+    def test_author_cannot_answer_their_own_proposal(self):
+        proposal = self._send(self.provider_user, self._proposal()).data
+
+        response = self._answer(self.provider_user, proposal["uuid"], "accepted")
+
+        self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
+
+    def test_answered_proposal_cannot_change(self):
+        proposal = self._send(self.provider_user, self._proposal()).data
+        self._answer(self.customer, proposal["uuid"], "rejected")
+
+        response = self._answer(self.customer, proposal["uuid"], "accepted")
+
+        self.assertEqual(response.status_code, status.HTTP_409_CONFLICT)
+        message = JobChatMessage.objects.get(uuid=proposal["uuid"])
+        self.assertEqual(json.loads(message.content)["data"]["status"], "rejected")
+
+    def test_answering_a_plain_text_message_is_rejected(self):
+        response = self._answer(self.provider_user, self.first_message.uuid, "accepted")
+
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+
+    def test_outsider_cannot_answer_a_proposal(self):
+        proposal = self._send(self.provider_user, self._proposal()).data
+
+        response = self._answer(self.outsider, proposal["uuid"], "accepted")
+
+        self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
+
+    def test_a_failing_notification_does_not_lose_the_message(self):
+        with (
+            patch("apps.job_chat.services.emit_job_chat_message_notification", side_effect=RuntimeError("smtp down")),
+            self.assertLogs("apps.job_chat.services", level="ERROR"),
+        ):
+            response = self._send(self.provider_user, "still delivered", message_type="plain_text")
+
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+        self.assertTrue(JobChatMessage.objects.filter(content="still delivered").exists())

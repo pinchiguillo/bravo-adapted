@@ -1,3 +1,6 @@
+import json
+from decimal import Decimal
+
 from rest_framework import serializers
 
 from apps.assets.models import Asset
@@ -28,16 +31,64 @@ class JobChatMessageSerializer(serializers.ModelSerializer):
         read_only_fields = ("uuid", "user_id", "username", "type", "created_at", "updated_at", "attachments")
 
 
+PROPOSAL_WIDGET = "proposal"
+PROPOSAL_PENDING = "pending"
+PROPOSAL_ANSWERS = ("accepted", "rejected")
+PROPOSAL_PRICE_MODES = ("total", "hourly", "daily", "monthly", "per_sqm", "per_unit")
+PROPOSAL_CURRENCIES = ("EUR", "USD", "GBP")
+
+
+class ProposalDataSerializer(serializers.Serializer):
+    title = serializers.CharField(max_length=200)
+    description = serializers.CharField(required=False, allow_blank=True, max_length=2000)
+    category = serializers.CharField(required=False, allow_blank=True, max_length=100)
+    subcategory = serializers.CharField(required=False, allow_blank=True, max_length=100)
+    price = serializers.DecimalField(max_digits=10, decimal_places=2, min_value=Decimal("0"))
+    price_mode = serializers.ChoiceField(choices=PROPOSAL_PRICE_MODES)
+    currency = serializers.ChoiceField(choices=PROPOSAL_CURRENCIES)
+
+
+def normalize_proposal_widget(raw_content):
+    """Validate a proposal widget and return its canonical JSON content.
+
+    Unknown keys are dropped and the status is owned by the server: a new
+    proposal always starts as pending, whatever the client sent.
+    """
+    try:
+        widget = json.loads(raw_content)
+    except (TypeError, ValueError) as exc:
+        raise serializers.ValidationError({"content": "Widget content must be valid JSON."}) from exc
+    if not isinstance(widget, dict) or widget.get("widget_type") != PROPOSAL_WIDGET:
+        raise serializers.ValidationError({"content": "Unsupported widget type."})
+
+    proposal = ProposalDataSerializer(data=widget.get("data"))
+    if not proposal.is_valid():
+        raise serializers.ValidationError({"content": proposal.errors})
+
+    data = dict(proposal.validated_data)
+    # JSON has no decimal type and the clients read price as a number; it has
+    # already been validated as a non-negative amount with two decimals.
+    data["price"] = float(data["price"])
+    data["status"] = PROPOSAL_PENDING
+    return json.dumps({"widget_type": PROPOSAL_WIDGET, "data": data})
+
+
 class JobChatMessageCreateSerializer(serializers.ModelSerializer):
     type = serializers.ChoiceField(
         choices=JobChatMessage.MessageType.choices,
         default=JobChatMessage.MessageType.PLAIN_TEXT,
         required=False,
     )
+    content = serializers.CharField(max_length=5000)
 
     class Meta:
         model = JobChatMessage
         fields = ("type", "content")
+
+    def validate(self, attrs):
+        if attrs.get("type") == JobChatMessage.MessageType.WIDGET:
+            attrs["content"] = normalize_proposal_widget(attrs["content"])
+        return attrs
 
 
 class JobChatSerializer(serializers.ModelSerializer):
@@ -52,7 +103,7 @@ class JobChatSerializer(serializers.ModelSerializer):
 class ProposalStatusUpdateSerializer(serializers.Serializer):
     """Update the status of a proposal widget message."""
 
-    status = serializers.ChoiceField(choices=["accepted", "rejected"])
+    status = serializers.ChoiceField(choices=PROPOSAL_ANSWERS)
 
 
 class JobChatAttachmentCreateSerializer(serializers.Serializer):
