@@ -9,6 +9,7 @@ from apps.job_chat.models import JobChat
 from apps.job_chat.serializers import JobChatMessageSerializer
 from apps.jobs.models import Job
 from apps.management.models import FeatureFlag
+from apps.management.permissions import ensure_can_change_roles
 from apps.organization.models import (
     AllowedCity,
     Category,
@@ -111,6 +112,9 @@ class ManagementUserSerializer(serializers.ModelSerializer):
 
         if errors:
             raise serializers.ValidationError(errors)
+
+        if self.instance is not None:
+            ensure_can_change_roles(self.context["request"].user, self.instance, self.initial_data)
 
         return attrs
 

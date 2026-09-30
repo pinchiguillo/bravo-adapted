@@ -107,6 +107,13 @@ class ManagementApiTests(APITestCase):
             email="staff-candidate@example.com",
             password="testpass123",
         )
+        self.superuser = user_model.objects.create_user(
+            username="platform-superuser",
+            email="platform-superuser@example.com",
+            password="testpass123",
+            is_staff=True,
+            is_superuser=True,
+        )
         self.organization_owner = user_model.objects.create_user(
             username="managed-owner",
             email="managed-owner@example.com",
@@ -233,8 +240,8 @@ class ManagementApiTests(APITestCase):
         self.staff_candidate.refresh_from_db()
         self.assertEqual(self.staff_candidate.status, self.staff_candidate.Status.SUSPENDED)
 
-    def test_admin_can_patch_managed_user_flags(self):
-        self.client.force_authenticate(user=self.admin_user)
+    def test_superuser_can_patch_managed_user_flags(self):
+        self.client.force_authenticate(user=self.superuser)
 
         response = self.client.patch(
             reverse("management-users-detail", kwargs={"uuid": self.staff_candidate.uuid}),
@@ -254,8 +261,8 @@ class ManagementApiTests(APITestCase):
         self.assertFalse(self.staff_candidate.is_active)
         self.assertTrue(self.staff_candidate.is_staff)
 
-    def test_admin_can_promote_managed_user_to_admin_role(self):
-        self.client.force_authenticate(user=self.admin_user)
+    def test_superuser_can_promote_managed_user_to_admin_role(self):
+        self.client.force_authenticate(user=self.superuser)
 
         response = self.client.patch(
             reverse("management-users-detail", kwargs={"uuid": self.staff_candidate.uuid}),
@@ -270,6 +277,59 @@ class ManagementApiTests(APITestCase):
         self.staff_candidate.refresh_from_db()
         self.assertTrue(self.staff_candidate.is_staff)
         self.assertTrue(self.staff_candidate.is_superuser)
+
+    def _patch_user(self, actor, target, payload):
+        self.client.force_authenticate(user=actor)
+        return self.client.patch(
+            reverse("management-users-detail", kwargs={"uuid": target.uuid}),
+            payload,
+            format="json",
+        )
+
+    def test_staff_can_update_regular_user_fields(self):
+        response = self._patch_user(self.admin_user, self.staff_candidate, {"email_verified": True})
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+
+    def test_staff_cannot_grant_roles(self):
+        for payload in ({"is_superuser": True}, {"is_staff": True}):
+            with self.subTest(payload=payload):
+                response = self._patch_user(self.admin_user, self.staff_candidate, payload)
+
+                self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
+                self.staff_candidate.refresh_from_db()
+                self.assertFalse(self.staff_candidate.is_staff)
+                self.assertFalse(self.staff_candidate.is_superuser)
+
+    def test_staff_cannot_take_over_a_superuser_account(self):
+        response = self._patch_user(
+            self.admin_user, self.superuser, {"password": "Hijacked-Passw0rd!", "email": "attacker@example.com"}
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
+        self.superuser.refresh_from_db()
+        self.assertTrue(self.superuser.check_password("testpass123"))
+        self.assertEqual(self.superuser.email, "platform-superuser@example.com")
+
+    def test_staff_cannot_suspend_a_privileged_account(self):
+        self.client.force_authenticate(user=self.admin_user)
+
+        response = self.client.post(reverse("management-users-suspend", kwargs={"uuid": self.superuser.uuid}))
+
+        self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
+        self.superuser.refresh_from_db()
+        self.assertEqual(self.superuser.status, self.superuser.Status.ACTIVE)
+
+    def test_admins_cannot_change_their_own_role_or_status(self):
+        demote = self._patch_user(self.superuser, self.superuser, {"is_superuser": False})
+        self.client.force_authenticate(user=self.superuser)
+        suspend = self.client.post(reverse("management-users-suspend", kwargs={"uuid": self.superuser.uuid}))
+
+        self.assertEqual(demote.status_code, status.HTTP_403_FORBIDDEN)
+        self.assertEqual(suspend.status_code, status.HTTP_403_FORBIDDEN)
+        self.superuser.refresh_from_db()
+        self.assertTrue(self.superuser.is_superuser)
+        self.assertEqual(self.superuser.status, self.superuser.Status.ACTIVE)
 
     def test_non_staff_cannot_patch_managed_user(self):
         self.client.force_authenticate(user=self.staff_candidate)

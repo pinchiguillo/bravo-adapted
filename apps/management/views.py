@@ -14,6 +14,7 @@ from apps.job_chat.models import JobChat
 from apps.job_chat.serializers import JobChatMessageSerializer
 from apps.jobs.models import Job
 from apps.management.models import FeatureFlag
+from apps.management.permissions import ensure_can_manage_user
 from apps.notifications.services import emit_status_change_notification
 from apps.organization.models import (
     AllowedCity,
@@ -177,6 +178,14 @@ class ManagementUserViewSet(
         "deactivate": "management_status",
         "suspend": "management_status",
     }
+
+    write_actions = {"update", "partial_update", "activate", "deactivate", "suspend"}
+
+    def get_object(self):
+        user = super().get_object()
+        if self.action in self.write_actions:
+            ensure_can_manage_user(self.request.user, user, self.action)
+        return user
 
     def get_queryset(self):
         queryset = self.queryset
