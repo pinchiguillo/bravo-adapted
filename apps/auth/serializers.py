@@ -11,6 +11,7 @@ from rest_framework import serializers
 from rest_framework.exceptions import AuthenticationFailed
 from rest_framework_simplejwt.serializers import TokenObtainPairSerializer
 
+from common.client_ip import get_client_ip
 from common.permissions import get_email_verification_denial_message
 
 from .services import load_verify_email_user_id, send_verification_email
@@ -113,13 +114,11 @@ class RegisterSerializer(serializers.ModelSerializer):
         with transaction.atomic():
             user = user_model.objects.create_user(**validated_data)
             if rgpd_data is not None and django_apps.is_installed("apps.rgpd") and settings.RGPD_MODULE_ENABLED:
-                from apps.rgpd.utils import extract_client_ip
-
                 request = self.context.get("request")
                 create_user_rgpd_consent(
                     user=user,
                     consent_data=rgpd_data,
-                    ip_address=extract_client_ip(request) if request is not None else None,
+                    ip_address=get_client_ip(request) if request is not None else None,
                     user_agent=request.META.get("HTTP_USER_AGENT", "") if request is not None else "",
                 )
             if user.is_email_verified:

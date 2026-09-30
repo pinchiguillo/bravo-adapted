@@ -5,6 +5,7 @@ from rest_framework.decorators import action
 from rest_framework.exceptions import NotFound, ValidationError
 from rest_framework.response import Response
 
+from common.client_ip import get_client_ip
 from common.permissions import IsActiveAccount
 from common.throttling import ActionScopedRateThrottleMixin
 
@@ -35,7 +36,6 @@ from .serializers import (
 )
 from .services import publish_policy_version, record_policy_acceptances, set_data_request_status
 from .utils import (
-    extract_client_ip,
     generate_anonymous_identifier,
     generate_write_token,
     hash_write_token,
@@ -72,7 +72,7 @@ class RgpdConsentViewSet(ActionScopedRateThrottleMixin, viewsets.GenericViewSet)
         serializer = self.get_serializer(consent, data=request.data, partial=partial)
         serializer.is_valid(raise_exception=True)
         validated_data = dict(serializer.validated_data)
-        validated_data["ip_address"] = extract_client_ip(request)
+        validated_data["ip_address"] = get_client_ip(request)
         validated_data["user_agent"] = request.META.get("HTTP_USER_AGENT", "")
         try:
             record_policy_acceptances(
@@ -164,7 +164,7 @@ class RgpdAnonymousConsentViewSet(ActionScopedRateThrottleMixin, viewsets.Generi
         validated_data = dict(serializer.validated_data)
         validated_data.pop("identifier", None)
         validated_data.pop("write_token", None)
-        validated_data["ip_address"] = extract_client_ip(request)
+        validated_data["ip_address"] = get_client_ip(request)
         validated_data["user_agent"] = request.META.get("HTTP_USER_AGENT", "")
         try:
             record_policy_acceptances(

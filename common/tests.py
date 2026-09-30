@@ -6,8 +6,9 @@ from django.conf import settings
 from django.contrib.auth import get_user_model
 from django.core.files.uploadedfile import SimpleUploadedFile
 from django.core.mail import EmailMultiAlternatives
-from django.test import TestCase
+from django.test import RequestFactory, SimpleTestCase, TestCase, override_settings
 
+from common.client_ip import get_client_ip
 from common.email_backends import SesEmailBackend
 
 
@@ -72,3 +73,30 @@ class SesEmailBackendTests(TestCase):
         with self.assertRaises(ClientError):
             SesEmailBackend().send_messages([message])
         self.assertEqual(SesEmailBackend(fail_silently=True).send_messages([message]), 0)
+
+
+@override_settings(TRUSTED_PROXY_IPS=["10.0.0.0/8"])
+class ClientIpTests(SimpleTestCase):
+    def _ip(self, remote_addr, forwarded_for=None):
+        extra = {"REMOTE_ADDR": remote_addr}
+        if forwarded_for is not None:
+            extra["HTTP_X_FORWARDED_FOR"] = forwarded_for
+        return get_client_ip(RequestFactory().get("/", **extra))
+
+    def test_forwarded_for_is_ignored_when_the_peer_is_not_a_trusted_proxy(self):
+        self.assertEqual(self._ip("203.0.113.5", "198.51.100.1"), "203.0.113.5")
+
+    def test_client_is_the_address_the_trusted_proxy_saw(self):
+        self.assertEqual(self._ip("10.0.0.2", "203.0.113.9"), "203.0.113.9")
+
+    def test_spoofed_left_most_entries_are_ignored(self):
+        self.assertEqual(self._ip("10.0.0.2", "1.2.3.4, 203.0.113.9"), "203.0.113.9")
+
+    def test_chained_trusted_proxies_are_skipped(self):
+        self.assertEqual(self._ip("10.0.0.2", "1.2.3.4, 203.0.113.9, 10.1.1.1"), "203.0.113.9")
+
+    def test_malformed_hop_falls_back_to_the_peer(self):
+        self.assertEqual(self._ip("10.0.0.2", "203.0.113.9, not-an-ip"), "10.0.0.2")
+
+    def test_missing_remote_addr_returns_none(self):
+        self.assertIsNone(self._ip(""))

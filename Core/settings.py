@@ -10,6 +10,7 @@ For the full list of settings and their values, see
 https://docs.djangoproject.com/en/5.2/ref/settings/
 """
 
+import ipaddress
 import os
 from datetime import timedelta
 from pathlib import Path
@@ -97,7 +98,13 @@ if IS_PRODUCTION and not ALLOWED_HOSTS:
     raise ImproperlyConfigured("ALLOWED_HOSTS must be configured when APP_MODE=production.")
 
 CSRF_TRUSTED_ORIGINS = env_list("CSRF_TRUSTED_ORIGINS")
+# Reverse proxies (IPs or CIDR ranges) allowed to set X-Forwarded-For; see common/client_ip.py.
 TRUSTED_PROXY_IPS = env_list("TRUSTED_PROXY_IPS")
+for _proxy in TRUSTED_PROXY_IPS:
+    try:
+        ipaddress.ip_network(_proxy, strict=False)
+    except ValueError as exc:
+        raise ImproperlyConfigured(f"TRUSTED_PROXY_IPS contains an invalid address: {_proxy!r}") from exc
 CORS_ALLOW_ALL_ORIGINS = APP_MODE == "development"
 
 SECURE_SSL_REDIRECT = env_bool("SECURE_SSL_REDIRECT", default=IS_PRODUCTION)
@@ -428,7 +435,7 @@ REST_FRAMEWORK = {
     "DEFAULT_PAGINATION_CLASS": "common.pagination.DefaultPageNumberPagination",
     "PAGE_SIZE": 20,
     "DEFAULT_THROTTLE_CLASSES": (
-        "rest_framework.throttling.ScopedRateThrottle",
+        "common.throttling.ClientIPScopedRateThrottle",
     ),
     "DEFAULT_THROTTLE_RATES": {
         "auth_default": os.getenv("AUTH_DEFAULT_THROTTLE_RATE", "60/minute"),
@@ -505,6 +512,14 @@ if IS_PRODUCTION and not redis_url:
     require_env("REDIS_URL")
 
 if redis_url:
+    # Shared cache so throttle counters are global across workers and hosts.
+    CACHES = {
+        "default": {
+            "BACKEND": "django.core.cache.backends.redis.RedisCache",
+            "LOCATION": redis_url,
+            "KEY_PREFIX": "bravo",
+        }
+    }
     CHANNEL_LAYERS = {
         "default": {
             "BACKEND": "channels_redis.core.RedisChannelLayer",

@@ -5,12 +5,12 @@ from rest_framework import permissions, status, viewsets
 from rest_framework.decorators import action
 from rest_framework.exceptions import PermissionDenied
 from rest_framework.response import Response
-from rest_framework.throttling import ScopedRateThrottle
 from rest_framework_simplejwt.exceptions import InvalidToken, TokenError
 from rest_framework_simplejwt.serializers import TokenBlacklistSerializer, TokenRefreshSerializer
 from rest_framework_simplejwt.tokens import RefreshToken
 
 from common.permissions import IsActiveAccount, get_email_verification_denial_message
+from common.throttling import ClientIPScopedRateThrottle
 
 from .serializers import (
     EmailTokenObtainPairSerializer,
@@ -24,7 +24,7 @@ from .serializers import (
 class AuthViewSet(viewsets.GenericViewSet):
     queryset = get_user_model().objects.none()
     serializer_class = UserSerializer
-    throttle_classes = [ScopedRateThrottle]
+    throttle_classes = [ClientIPScopedRateThrottle]
 
     def get_serializer_class(self):
         if self.action == "register":

@@ -488,6 +488,23 @@ class AuthThrottleTests(APITestCase):
         self.assertEqual(first_response.status_code, 200)
         self.assertEqual(second_response.status_code, 429)
 
+    @override_settings(TRUSTED_PROXY_IPS=["127.0.0.1"])
+    def test_login_throttle_cannot_be_bypassed_by_rotating_forwarded_for(self):
+        # The real auth_login rate is 5/minute; the spoofed left-most entry changes on every request.
+        payload = {"email": self.email, "password": "wrong-password"}
+        statuses = [
+            self.client.post(
+                "/api/auth/login/",
+                payload,
+                format="json",
+                HTTP_X_FORWARDED_FOR=f"192.0.2.{attempt}, 203.0.113.9",
+            ).status_code
+            for attempt in range(6)
+        ]
+
+        self.assertEqual(statuses[:5], [401] * 5)
+        self.assertEqual(statuses[5], 429)
+
     def test_register_is_throttled_after_rate_limit(self):
         class RegisterTestThrottle(SimpleRateThrottle):
             scope = "auth_register_test"

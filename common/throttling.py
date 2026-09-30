@@ -1,8 +1,21 @@
 from rest_framework.throttling import ScopedRateThrottle
 
+from common.client_ip import get_client_ip
+
+
+class ClientIPScopedRateThrottle(ScopedRateThrottle):
+    """ScopedRateThrottle keyed on the resolved client IP.
+
+    DRF's default get_ident() uses the raw X-Forwarded-For header, so an
+    anonymous client could get a fresh bucket per request by varying it.
+    """
+
+    def get_ident(self, request):
+        return get_client_ip(request) or ""
+
 
 class ActionScopedRateThrottleMixin:
-    throttle_classes = [ScopedRateThrottle]
+    throttle_classes = [ClientIPScopedRateThrottle]
     throttle_scope_prefix = None
     throttle_scope_action_map = {}
 
