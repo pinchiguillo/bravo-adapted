@@ -1,13 +1,15 @@
 import importlib
 import os
+import re
 from unittest.mock import patch
 
 from django.conf import settings
 from django.core.exceptions import ImproperlyConfigured
-from django.test import SimpleTestCase, override_settings
+from django.test import SimpleTestCase, TestCase, override_settings
 from django.urls import NoReverseMatch, URLPattern, URLResolver, clear_url_caches, get_resolver, resolve, reverse
 from drf_spectacular.generators import SchemaGenerator
 from drf_spectacular.views import SpectacularSwaggerView
+from rest_framework.test import APIClient
 
 from Core import settings as core_settings
 
@@ -264,3 +266,59 @@ class ThrottleScopeConfigurationTests(SimpleTestCase):
 
         self.assertGreater(checked, 10)
         self.assertEqual(missing, set())
+
+
+class AnonymousAccessSurfaceTests(TestCase):
+    """Pins the set of API operations that answer anonymous requests.
+
+    Every other operation in the OpenAPI schema must return 401 to an anonymous
+    caller. Adding a public endpoint means adding it here on purpose.
+    """
+
+    PUBLIC_OPERATIONS = {
+        ("get", "/api/allowed-cities/"),
+        ("get", "/api/announcements/"),
+        ("get", "/api/announcements/{uuid}/"),
+        ("get", "/api/announcements/{uuid}/images/{image_uuid}/base64/"),
+        ("get", "/api/announcements/{announcement_uuid}/subservices/"),
+        ("get", "/api/announcements/{announcement_uuid}/subservices/{subservice_uuid}/"),
+        ("get", "/api/announcements/{announcement_uuid}/subservices/{subservice_uuid}/prices/"),
+        ("get", "/api/announcements/{announcement_uuid}/subservices/{subservice_uuid}/prices/{price_uuid}/"),
+        ("get", "/api/categories/"),
+        ("get", "/api/organizations/{uuid}/"),
+        ("get", "/api/plan-tiers/"),
+        ("get", "/api/rgpd/documents/"),
+        ("get", "/api/rgpd/documents/active/"),
+        ("get", "/api/schema/"),
+        ("get", "/api/services/"),
+        ("get", "/api/services/{category_uuid}/"),
+        ("get", "/api/version/"),
+        ("post", "/api/auth/login/"),
+        ("post", "/api/auth/logout/"),
+        ("post", "/api/auth/register/"),
+        ("post", "/api/auth/token/refresh/"),
+        ("post", "/api/auth/verify-email/"),
+        ("post", "/api/rgpd/anonymous/"),
+    }
+
+    def test_only_allowlisted_operations_are_reachable_anonymously(self):
+        client = APIClient()
+        schema = SchemaGenerator().get_schema(request=None, public=True)
+        reachable = set()
+        for path, methods in schema["paths"].items():
+            concrete = re.sub(r"\{[^}]+\}", "00000000-0000-0000-0000-000000000000", path)
+            for method in methods:
+                if method == "parameters":
+                    continue
+                response = getattr(client, method)(concrete, {}, format="json")
+                if response.status_code != 401:
+                    reachable.add((method, path))
+
+        self.assertEqual(reachable, self.PUBLIC_OPERATIONS)
+
+    def test_views_are_private_unless_they_opt_out(self):
+        from rest_framework.settings import api_settings
+
+        from common.permissions import IsActiveAccount
+
+        self.assertEqual(api_settings.DEFAULT_PERMISSION_CLASSES, [IsActiveAccount])

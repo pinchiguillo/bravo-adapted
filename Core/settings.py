@@ -420,6 +420,8 @@ AUTH_USER_MODEL = 'custom_auth.CustomUser'
 
 REST_FRAMEWORK = {
     "DEFAULT_SCHEMA_CLASS": "drf_spectacular.openapi.AutoSchema",
+    # Deny by default: a view is public only if it opts in with AllowAny.
+    "DEFAULT_PERMISSION_CLASSES": ("common.permissions.IsActiveAccount",),
     "DEFAULT_AUTHENTICATION_CLASSES": (
         "rest_framework_simplejwt.authentication.JWTAuthentication",
     ),
