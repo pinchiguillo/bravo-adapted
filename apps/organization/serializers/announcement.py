@@ -6,7 +6,7 @@ from collections import OrderedDict
 from django.conf import settings
 from django.core import signing
 from django.db import transaction
-from django.db.models import Min
+from django.db.models import Min, Q
 from django.urls import reverse
 from django.utils import timezone
 from drf_spectacular.utils import extend_schema_field
@@ -18,6 +18,7 @@ from apps.assets.services import (
     generate_presigned_upload_url,
     move_pending_to_confirmed,
 )
+from common.money import Currency
 
 from ..models import (
     Announcement,
@@ -366,6 +367,7 @@ class AnnouncementSerializer(serializers.ModelSerializer):
     )
     images = AnnouncementImageSerializer(many=True, read_only=True)
     lowest_price = serializers.SerializerMethodField()
+    lowest_price_currency = serializers.SerializerMethodField()
     services = serializers.SerializerMethodField()
 
     class Meta:
@@ -380,6 +382,7 @@ class AnnouncementSerializer(serializers.ModelSerializer):
             "image_uuids",
             "images",
             "lowest_price",
+            "lowest_price_currency",
             "services",
             "name",
             "location",
@@ -482,12 +485,34 @@ class AnnouncementSerializer(serializers.ModelSerializer):
             announcement.images.exclude(uuid__in=[image.uuid for image in images]).delete()
         return announcement
 
+    def _lowest_current_price(self, obj):
+        """Cheapest price in effect today, compared within one currency.
+
+        Amounts in different currencies are not comparable, so EUR wins when
+        the announcement has EUR prices; otherwise the first currency in
+        alphabetical order is used.
+        """
+        cache_attr = "_lowest_current_price_cache"
+        if not hasattr(obj, cache_attr):
+            today = timezone.localdate()
+            current = ServicePrice.objects.filter(
+                subservice__announcement=obj,
+                effective_from__lte=today,
+            ).filter(Q(effective_to__isnull=True) | Q(effective_to__gte=today))
+            minimums = current.order_by().values("currency").annotate(amount=Min("amount"))
+            per_currency = {row["currency"]: row["amount"] for row in minimums}
+            currency = Currency.EUR if Currency.EUR in per_currency else min(per_currency, default=None)
+            setattr(obj, cache_attr, (per_currency.get(currency), currency))
+        return getattr(obj, cache_attr)
+
     @extend_schema_field(serializers.CharField(allow_null=True))
     def get_lowest_price(self, obj) -> str | None:
-        lowest_price = obj.subservices.aggregate(min_amount=Min("price_table__amount"))["min_amount"]
-        if lowest_price is None:
-            return None
-        return f"{lowest_price:.2f}"
+        amount, _currency = self._lowest_current_price(obj)
+        return None if amount is None else f"{amount:.2f}"
+
+    def get_lowest_price_currency(self, obj) -> str | None:
+        amount, currency = self._lowest_current_price(obj)
+        return None if amount is None else currency
 
     @extend_schema_field(ServiceSerializer(many=True))
     def get_services(self, obj):

@@ -38,7 +38,9 @@ class ServicePriceSerializer(serializers.ModelSerializer):
         slug_field="uuid",
         required=False,
     )
-    currency = CurrencyField(required=False, default=Currency.EUR)
+    # No default: on create the model default (EUR) applies, and a PUT that
+    # omits the currency must keep the stored one.
+    currency = CurrencyField(required=False)
 
     class Meta:
         model = ServicePrice

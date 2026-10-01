@@ -1004,6 +1004,50 @@ class OrganizationApiTests(APITestCase):
             format="json",
         )
 
+    def test_put_without_currency_keeps_the_stored_currency(self):
+        created = self._create_owner_price(currency="GBP", effective_from="2026-07-01")
+        self.client.force_authenticate(user=self.owner)
+
+        response = self.client.put(
+            reverse(
+                "organization-service-price-detail",
+                kwargs={
+                    "announcement_uuid": self.announcement.uuid,
+                    "subservice_uuid": self.owner_subservice.uuid,
+                    "price_uuid": created.data["uuid"],
+                },
+            ),
+            {
+                "subservice": str(self.owner_subservice.uuid),
+                "amount": "90.00",
+                "charging_type": ServicePrice.ChargingType.PER_PROJECT,
+                "effective_from": "2026-07-01",
+            },
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.data["currency"], "GBP")
+
+    def test_lowest_price_ignores_expired_rows_and_reports_its_currency(self):
+        ServicePrice.objects.filter(subservice__announcement=self.announcement).delete()
+        today = date.today()
+        ServicePrice.objects.create(
+            subservice=self.owner_subservice, amount="1.00", currency="EUR",
+            effective_from=today - timedelta(days=30), effective_to=today - timedelta(days=1),
+        )
+        ServicePrice.objects.create(
+            subservice=self.owner_subservice, amount="40.00", currency="EUR", effective_from=today,
+        )
+        ServicePrice.objects.create(
+            subservice=self.owner_subservice, amount="5.00", currency="USD", effective_from=today,
+        )
+
+        response = self.client.get(reverse("public-announcement-detail", kwargs={"uuid": self.announcement.uuid}))
+
+        self.assertEqual(response.data["lowest_price"], "40.00")
+        self.assertEqual(response.data["lowest_price_currency"], "EUR")
+
     def test_service_price_rejects_negative_amounts(self):
         response = self._create_owner_price(amount="-5.00")
 
