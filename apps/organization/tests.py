@@ -869,7 +869,6 @@ class OrganizationApiTests(APITestCase):
         )
 
     def test_organization_public_retrieve_is_throttled(self):
-
         class OrganizationPublicReadTestThrottle(SimpleRateThrottle):
             scope = "organization_public_read_test"
             rate = "1/minute"
