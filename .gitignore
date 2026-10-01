@@ -50,7 +50,7 @@ dist/
 .DS_Store
 Thumbs.db
 
-# AI assistant / agent local files
+# Local tooling output
 CLAUDE.md
 AGENTS.md
 .claude/
