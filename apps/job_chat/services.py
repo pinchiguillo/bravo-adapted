@@ -76,13 +76,18 @@ def set_proposal_status(*, job, message_uuid, actor, new_status):
 
 def broadcast_message(job_uuid, message):
     """Push a message to every socket connected to the job chat."""
-    channel_layer = get_channel_layer()
-    if channel_layer is None:
-        return
-    async_to_sync(channel_layer.group_send)(
-        chat_group_name(job_uuid),
-        {"type": "chat_message", "message": JobChatMessageSerializer(message).data},
-    )
+    # Best effort: the message is already stored and clients can reload the
+    # history, so a channel-layer outage must not turn the request into a 500.
+    try:
+        channel_layer = get_channel_layer()
+        if channel_layer is None:
+            return
+        async_to_sync(channel_layer.group_send)(
+            chat_group_name(job_uuid),
+            {"type": "chat_message", "message": JobChatMessageSerializer(message).data},
+        )
+    except Exception:
+        logger.exception("Could not broadcast chat message %s", message.uuid)
 
 
 def get_history_page(job_chat, *, before_uuid=None, limit=None):

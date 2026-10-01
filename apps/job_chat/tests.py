@@ -214,6 +214,16 @@ class ProposalWidgetTests(JobChatTestCase):
 
         self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
 
+    def test_a_failing_broadcast_does_not_fail_a_stored_message(self):
+        with (
+            patch("apps.job_chat.services.get_channel_layer", side_effect=RuntimeError("redis down")),
+            self.assertLogs("apps.job_chat.services", level="ERROR"),
+        ):
+            response = self._send(self.provider_user, "stored anyway", message_type="plain_text")
+
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+        self.assertTrue(JobChatMessage.objects.filter(content="stored anyway").exists())
+
     def test_a_failing_notification_does_not_lose_the_message(self):
         with (
             patch("apps.job_chat.services.emit_job_chat_message_notification", side_effect=RuntimeError("smtp down")),
@@ -281,6 +291,28 @@ class JobChatAttachmentTests(JobChatTestCase):
         self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
         self.assertEqual(asset.job_chat_attachments.count(), 1)
 
+
+    def test_attaching_an_asset_that_was_attached_meanwhile_is_rejected(self):
+        from rest_framework.exceptions import ValidationError
+        from rest_framework.test import APIRequestFactory
+
+        from .serializers import JobChatAttachmentCreateSerializer
+
+        asset = self._confirmed_asset(self.customer)
+        stale_copy = Asset.objects.get(pk=asset.pk)
+        Asset.objects.filter(pk=asset.pk).update(status=Asset.Status.ATTACHED)
+        request = APIRequestFactory().post("/")
+        request.user = self.customer
+        serializer = JobChatAttachmentCreateSerializer(
+            data={"asset_id": str(asset.id)},
+            context={"request": request, "message": self.first_message, "asset": stale_copy},
+        )
+        serializer._validated_data = {"asset_id": asset.id}
+        serializer._errors = {}
+
+        with self.assertRaises(ValidationError):
+            serializer.save()
+        self.assertEqual(asset.job_chat_attachments.count(), 0)
 
 @override_settings(JOB_CHAT_HISTORY_PAGE_SIZE=2)
 class JobChatHistoryPaginationTests(JobChatTestCase):

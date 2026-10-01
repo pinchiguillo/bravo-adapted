@@ -28,6 +28,15 @@ class JobChatWebSocketTests(SimpleTestCase):
     # close_old_connections() and therefore needs database access to be allowed.
     databases = {"default"}
 
+    def setUp(self):
+        # DummyUser is not in the database; per-frame re-validation is tested separately.
+        patcher = patch(
+            "apps.job_chat.views.consumers.JobChatConsumer.still_allowed",
+            new=AsyncMock(return_value=True),
+        )
+        self.still_allowed = patcher.start()
+        self.addCleanup(patcher.stop)
+
     @async_to_sync
     async def test_authenticated_job_owner_can_connect_to_job_chat_websocket(self):
         application = build_websocket_application()
@@ -35,7 +44,7 @@ class JobChatWebSocketTests(SimpleTestCase):
         with (
             patch(
                 "apps.job_chat.ws_auth.JWTAuthentication.get_validated_token",
-                return_value=object(),
+                return_value={"exp": 4102444800},
             ),
             patch(
                 "apps.job_chat.ws_auth.JWTAuthentication.get_user",
@@ -80,7 +89,7 @@ class JobChatWebSocketTests(SimpleTestCase):
         with (
             patch(
                 "apps.job_chat.ws_auth.JWTAuthentication.get_validated_token",
-                return_value=object(),
+                return_value={"exp": 4102444800},
             ),
             patch(
                 "apps.job_chat.ws_auth.JWTAuthentication.get_user",
@@ -130,7 +139,7 @@ class JobChatWebSocketTests(SimpleTestCase):
         with (
             patch(
                 "apps.job_chat.ws_auth.JWTAuthentication.get_validated_token",
-                return_value=object(),
+                return_value={"exp": 4102444800},
             ),
             patch(
                 "apps.job_chat.ws_auth.JWTAuthentication.get_user",
@@ -176,7 +185,7 @@ class JobChatWebSocketTests(SimpleTestCase):
         save_message = AsyncMock()
 
         with (
-            patch("apps.job_chat.ws_auth.JWTAuthentication.get_validated_token", return_value=object()),
+            patch("apps.job_chat.ws_auth.JWTAuthentication.get_validated_token", return_value={"exp": 4102444800}),
             patch("apps.job_chat.ws_auth.JWTAuthentication.get_user", return_value=DummyUser()),
             patch(
                 "apps.job_chat.views.consumers.JobChatConsumer.check_job_permission",
@@ -211,7 +220,7 @@ CHAT_PATH = "/ws/jobs/11111111-1111-1111-1111-111111111111/chat/"
 def authenticated(permission=True):
     """Patch JWT validation and the participant check for consumer-level tests."""
     return (
-        patch("apps.job_chat.ws_auth.JWTAuthentication.get_validated_token", return_value=object()),
+        patch("apps.job_chat.ws_auth.JWTAuthentication.get_validated_token", return_value={"exp": 4102444800}),
         patch("apps.job_chat.ws_auth.JWTAuthentication.get_user", return_value=DummyUser()),
         patch(
             "apps.job_chat.views.consumers.JobChatConsumer.check_job_permission",
@@ -227,6 +236,15 @@ def authenticated(permission=True):
 )
 class JobChatWebSocketHardeningTests(SimpleTestCase):
     databases = {"default"}
+
+    def setUp(self):
+        # DummyUser is not in the database; per-frame re-validation is tested separately.
+        patcher = patch(
+            "apps.job_chat.views.consumers.JobChatConsumer.still_allowed",
+            new=AsyncMock(return_value=True),
+        )
+        self.still_allowed = patcher.start()
+        self.addCleanup(patcher.stop)
 
     async def _connect(self, path=CHAT_PATH + "?token=t", headers=None, subprotocols=None):
         communicator = WebsocketCommunicator(
@@ -325,6 +343,53 @@ class JobChatWebSocketHardeningTests(SimpleTestCase):
             self.assertTrue(await member.receive_nothing(timeout=0.2))
             await member.disconnect()
 
+    @async_to_sync
+    async def test_sockets_are_closed_once_their_token_expires(self):
+        expired = patch(
+            "apps.job_chat.ws_auth.JWTAuthentication.get_validated_token", return_value={"exp": 1}
+        )
+        _, user, permission = authenticated()
+        with expired, user, permission:
+            communicator, connected, _ = await self._connect()
+            await communicator.receive_json_from()
+
+            await communicator.send_json_to({"type": "history"})
+            error = await communicator.receive_json_from()
+            closed = await communicator.receive_output()
+
+            self.assertTrue(connected)
+            self.assertEqual(error["type"], "error")
+            self.assertEqual(closed, {"type": "websocket.close", "code": 4401})
+
+    @async_to_sync
+    async def test_sockets_are_closed_when_access_is_revoked_mid_session(self):
+        self.still_allowed.return_value = False
+        auth, user, permission = authenticated()
+        with auth, user, permission:
+            communicator, _, _ = await self._connect()
+            await communicator.receive_json_from()
+
+            await communicator.send_json_to({"type": "message", "content": "still here?"})
+            await communicator.receive_json_from()
+            closed = await communicator.receive_output()
+
+            self.assertEqual(closed, {"type": "websocket.close", "code": 4401})
+
+    @async_to_sync
+    async def test_repeated_typing_indicators_are_coalesced(self):
+        auth, user, permission = authenticated()
+        with auth, user, permission:
+            communicator, _, _ = await self._connect()
+            await communicator.receive_json_from()
+
+            for _ in range(3):
+                await communicator.send_json_to({"type": "typing", "is_typing": True})
+            first = await communicator.receive_json_from()
+
+            self.assertEqual(first["type"], "typing")
+            self.assertTrue(await communicator.receive_nothing(timeout=0.2))
+            await communicator.disconnect()
+
 class WebSocketJWTMiddlewareTests(TestCase):
     def setUp(self):
         self.user = get_user_model().objects.create_user(
@@ -341,7 +406,8 @@ class WebSocketJWTMiddlewareTests(TestCase):
         self.addCleanup(patcher.stop)
 
     def _resolve(self, token):
-        return async_to_sync(self.middleware._get_user)(token)
+        user, _expires_at = async_to_sync(self.middleware._get_user)(token)
+        return user
 
     def test_valid_token_resolves_the_user(self):
         self.assertEqual(self._resolve(str(AccessToken.for_user(self.user))), self.user)
@@ -361,3 +427,77 @@ class WebSocketJWTMiddlewareTests(TestCase):
 
     def test_garbage_token_is_anonymous(self):
         self.assertIsInstance(self._resolve("not-a-jwt"), AnonymousUser)
+
+
+class WebSocketRevalidationTests(TestCase):
+    """still_allowed() against the database (the consumer tests patch it)."""
+
+    def setUp(self):
+        from apps.jobs.models import Job
+        from apps.organization.models import Announcement, Category, Organization
+
+        user_model = get_user_model()
+        self.customer = user_model.objects.create_user(username="c", email="c@example.com", password="x")
+        provider = user_model.objects.create_user(username="p", email="p@example.com", password="x")
+        self.outsider = user_model.objects.create_user(username="o", email="o@example.com", password="x")
+        organization = Organization.objects.create(
+            user=provider,
+            name="Org",
+            legal_name="Org SL",
+            tax_id="T1",
+            billing_email="billing@org.example.com",
+            billing_address="Main 1",
+            billing_city="Madrid",
+            billing_country="ES",
+            billing_postal_code="28001",
+            is_approved=True,
+        )
+        announcement = Announcement.objects.create(
+            organization=organization,
+            category=Category.objects.create(name="Cat"),
+            name="Ann",
+            location="Madrid",
+            announcement="Ann",
+            status=Announcement.Status.ACTIVE,
+            description="d",
+            free_text="f",
+        )
+        self.job = Job.objects.create(user=self.customer, announcement=announcement)
+        patcher = patch("channels.db.close_old_connections")
+        patcher.start()
+        self.addCleanup(patcher.stop)
+
+    def _still_allowed(self, user):
+        from apps.job_chat.views.consumers import JobChatConsumer
+
+        consumer = JobChatConsumer()
+        consumer.user = user
+        consumer.job_uuid = str(self.job.uuid)
+        return async_to_sync(consumer.still_allowed)()
+
+    def test_participants_stay_allowed(self):
+        self.assertTrue(self._still_allowed(self.customer))
+
+    def test_suspended_users_lose_access(self):
+        self.customer.status = self.customer.Status.SUSPENDED
+        self.customer.save(update_fields=["status"])
+
+        self.assertFalse(self._still_allowed(self.customer))
+
+    def test_non_participants_lose_access(self):
+        self.assertFalse(self._still_allowed(self.outsider))
+
+
+class WebSocketRateLimitConcurrencyTests(SimpleTestCase):
+    @override_settings(JOB_CHAT_WS_RATE_LIMIT=10, JOB_CHAT_WS_RATE_WINDOW=60)
+    def test_concurrent_frames_never_exceed_the_limit(self):
+        import asyncio
+
+        from apps.job_chat.rate_limit import allow_client_frame
+
+        async def burst():
+            return await asyncio.gather(*(allow_client_frame(user_id=99) for _ in range(30)))
+
+        allowed = async_to_sync(burst)()
+
+        self.assertEqual(sum(allowed), 10)

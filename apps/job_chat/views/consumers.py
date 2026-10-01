@@ -1,11 +1,14 @@
 import json
 import logging
+import time
 
 from channels.db import database_sync_to_async
 from channels.generic.websocket import AsyncWebsocketConsumer
+from django.contrib.auth import get_user_model
 
 from apps.jobs.models import Job
 from common.exceptions import DomainError
+from common.permissions import user_can_authenticate
 
 from ..models import JobChat
 from ..rate_limit import allow_client_frame
@@ -13,6 +16,11 @@ from ..serializers import JobChatMessageCreateSerializer, JobChatMessageSerializ
 from ..services import chat_group_name, get_history_page, post_message, set_proposal_status
 
 logger = logging.getLogger(__name__)
+
+# Close code for sockets whose token expired or whose access was revoked.
+CLOSE_SESSION_INVALID = 4401
+# Identical typing indicators within this many seconds are not re-broadcast.
+TYPING_REPEAT_SECONDS = 2
 
 
 def first_error(errors):
@@ -84,9 +92,16 @@ class JobChatConsumer(AsyncWebsocketConsumer):
             await self.send_error("Messages must be JSON objects")
             return
 
-        if data.get("type") != "typing" and not await allow_client_frame(self.user.id):
-            await self.send_error("Rate limit exceeded, slow down")
-            return
+        if data.get("type") != "typing":
+            if not await allow_client_frame(self.user.id):
+                await self.send_error("Rate limit exceeded, slow down")
+                return
+            # A socket outlives the checks made at connect time: re-validate the
+            # token expiry, the account and the participation before acting.
+            if self.token_expired() or not await self.still_allowed():
+                await self.send_error("Session is no longer valid")
+                await self.close(code=CLOSE_SESSION_INVALID)
+                return
 
         try:
             await self.dispatch_client_message(data)
@@ -178,6 +193,11 @@ class JobChatConsumer(AsyncWebsocketConsumer):
     async def handle_typing(self, data):
         """Handle typing status."""
         is_typing = data.get("is_typing") is True
+        now = time.monotonic()
+        last_state, last_sent = getattr(self, "last_typing", (None, 0.0))
+        if is_typing == last_state and now - last_sent < TYPING_REPEAT_SECONDS:
+            return
+        self.last_typing = (is_typing, now)
 
         await self.channel_layer.group_send(
             self.job_chat_group,
@@ -235,6 +255,19 @@ class JobChatConsumer(AsyncWebsocketConsumer):
                 }
             )
         )
+
+    def token_expired(self):
+        expires_at = self.scope.get("auth_expires_at")
+        return expires_at is not None and time.time() >= expires_at
+
+    @database_sync_to_async
+    def still_allowed(self):
+        """Re-check that the account is active and still a participant of the job."""
+        user = get_user_model().objects.filter(pk=self.user.pk).first()
+        if user is None or not user_can_authenticate(user):
+            return False
+        job = Job.objects.select_related("announcement__organization").filter(uuid=self.job_uuid).first()
+        return job is not None and job.can_access_as_participant(user)
 
     @database_sync_to_async
     def check_job_permission(self):

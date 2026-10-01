@@ -32,7 +32,7 @@ class JWTAuthMiddleware:
         token, subprotocol = self._extract_token(scope)
         scope = dict(scope)
         scope["auth_subprotocol"] = subprotocol
-        scope["user"] = await self._get_user(token) if token else AnonymousUser()
+        scope["user"], scope["auth_expires_at"] = await self._get_user(token) if token else (AnonymousUser(), None)
         return await self.app(scope, receive, send)
 
     def _extract_token(self, scope):
@@ -54,15 +54,16 @@ class JWTAuthMiddleware:
 
     @database_sync_to_async
     def _get_user(self, token: str):
+        """Return (user, token expiry timestamp); AnonymousUser when the token is not usable."""
         try:
             validated_token = self.jwt_authentication.get_validated_token(token)
             user = self.jwt_authentication.get_user(validated_token)
         except (InvalidToken, TokenError, AuthenticationFailed):
-            return AnonymousUser()
+            return AnonymousUser(), None
         # Access tokens outlive a suspension by up to their lifetime; re-check the account.
         if not user_can_authenticate(user):
-            return AnonymousUser()
-        return user
+            return AnonymousUser(), None
+        return user, validated_token.get("exp")
 
 
 class BrowserOriginValidator(OriginValidator):
