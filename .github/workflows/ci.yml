@@ -1,147 +1,99 @@
 name: CI
 
 on:
-  pull_request:
-    branches: ["master", "develop"]
   push:
-    branches: ["master", "develop"]
+    branches: [main]
+  pull_request:
 
 permissions:
-  contents: write
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  PYTHON_VERSION: "3.12"
 
 jobs:
   lint:
+    name: Lint, format and types
     runs-on: ubuntu-latest
-
+    timeout-minutes: 10
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
         with:
-          ref: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}
-          fetch-depth: 0
-
-      - name: Prepare environment
-        run: cp example.env .env
-
-      - name: Build app image
-        run: docker compose build app
-
-      - name: Run lint with autofix
-        id: lint_autofix
-        shell: bash
-        run: |
-          set +e
-          docker compose run --rm --no-deps app ruff check --fix --config .github/ruff.toml Core common apps manage.py
-          set -e
-
-          if git diff --quiet -- Core common apps manage.py; then
-            echo "changed=false" >> "$GITHUB_OUTPUT"
-          else
-            echo "changed=true" >> "$GITHUB_OUTPUT"
-          fi
-
-      - name: Commit ruff fixes
-        if: ${{ steps.lint_autofix.outputs.changed == 'true' && github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository }}
-        shell: bash
-        run: |
-          set -euo pipefail
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add Core common apps manage.py
-          git commit -m "ci: apply ruff fixes"
-          git push origin "HEAD:${{ github.event.pull_request.head.ref }}"
-
-      - name: Run lint (clean check)
-        run: docker compose run --rm --no-deps app ruff check --config .github/ruff.toml Core common apps manage.py
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: pip
+          cache-dependency-path: requirements-dev.txt
+      - run: pip install -r requirements-dev.txt
+      - run: ruff check .
+      - run: ruff format --check .
+      - run: mypy
 
   test:
+    name: Tests on PostgreSQL
     runs-on: ubuntu-latest
-
+    timeout-minutes: 15
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: bravo
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      DATABASE_URL: postgresql://postgres:postgres@localhost:5432/bravo
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
         with:
-          ref: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: pip
+          cache-dependency-path: requirements-dev.txt
+      - run: pip install -r requirements-dev.txt
+      - name: Django system checks
+        run: python manage.py check
+      - name: No missing migrations
+        run: python manage.py makemigrations --check --dry-run
+      - name: OpenAPI schema is valid and warning-free
+        run: python manage.py spectacular --validate --fail-on-warn --file openapi.yml
+      - name: Tests with coverage
+        run: pytest --cov --cov-report=term --cov-fail-under=88
+      - uses: actions/upload-artifact@v4
+        with:
+          name: openapi-schema
+          path: openapi.yml
 
-      - name: Prepare environment
-        run: cp example.env .env
+  audit:
+    name: Dependency audit
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+      - run: pip install pip-audit
+      - run: pip-audit -r requirements.txt
 
-      - name: Pin CI integration endpoints
+  docker:
+    name: Production image
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build
+        run: docker build --target prod -t bravo-backend:ci .
+      - name: Runs as an unprivileged user without secrets baked in
         run: |
-          {
-            echo "DATABASE_URL=postgresql://postgres:postgres@postgres:5432/auth_db"
-            echo "REDIS_URL=redis://redis:6379/0"
-            echo "LOCALSTACK_ENDPOINT=http://localstack:4566"
-            echo "AWS_S3_ENDPOINT_URL=http://localstack:4566"
-            echo "AWS_SES_ENDPOINT_URL=http://localstack:4566"
-            echo "AWS_DEFAULT_REGION=us-east-1"
-            echo "AWS_ACCESS_KEY_ID=test"
-            echo "AWS_SECRET_ACCESS_KEY=test"
-            echo "AWS_STORAGE_BUCKET_NAME=bravo-media"
-            echo "DEFAULT_FROM_EMAIL=no-reply@bravo.local"
-          } >> "$GITHUB_ENV"
-
-      - name: Build app image
-        run: docker compose build app
-
-      - name: Start dependencies
-        run: docker compose up -d postgres localstack
-
-      - name: Wait for dependencies
-        run: |
-          set -euo pipefail
-          for service in postgres localstack; do
-            container_id="$(docker compose ps -a -q "$service")"
-            if [ -z "$container_id" ]; then
-              echo "Container for $service was not created"
-              docker compose ps -a
-              exit 1
-            fi
-
-            echo "Waiting for $service to become healthy..."
-            for attempt in $(seq 1 60); do
-              state_status="$(docker inspect --format='{{.State.Status}}' "$container_id")"
-              health_status="$(docker inspect --format='{{if .State.Health}}{{.State.Health.Status}}{{else}}{{.State.Status}}{{end}}' "$container_id")"
-
-              if [ "$state_status" = "exited" ] || [ "$state_status" = "dead" ]; then
-                echo "$service is $state_status"
-                docker compose logs "$service"
-                exit 1
-              fi
-
-              if [ "$health_status" = "healthy" ] || [ "$health_status" = "running" ]; then
-                echo "$service is $health_status"
-                break
-              fi
-              if [ "$attempt" -eq 60 ]; then
-                echo "$service did not become ready in time"
-                docker compose logs "$service"
-                exit 1
-              fi
-              sleep 2
-            done
-          done
-
-          bucket_name="$(grep '^AWS_STORAGE_BUCKET_NAME=' .env | cut -d= -f2- || true)"
-          sender_email="$(grep '^DEFAULT_FROM_EMAIL=' .env | cut -d= -f2- || true)"
-          aws_region="$(grep '^AWS_DEFAULT_REGION=' .env | cut -d= -f2- || true)"
-          bucket_name="${bucket_name:-bravo-media}"
-          sender_email="${sender_email:-no-reply@bravo.local}"
-          aws_region="${aws_region:-us-east-1}"
-
-          echo "Ensuring LocalStack bootstrap resources (bucket=$bucket_name, sender=$sender_email)..."
-          if ! docker compose exec -T localstack awslocal s3api head-bucket --bucket "$bucket_name" >/dev/null 2>&1; then
-            if [ "$aws_region" = "us-east-1" ]; then
-              docker compose exec -T localstack awslocal s3api create-bucket --bucket "$bucket_name"
-            else
-              docker compose exec -T localstack awslocal s3api create-bucket --bucket "$bucket_name" --create-bucket-configuration "LocationConstraint=$aws_region"
-            fi
-          fi
-          docker compose exec -T localstack awslocal ses verify-email-identity --email-address "$sender_email" >/dev/null
-
-      - name: Run tests
-        run: docker compose run --rm --no-deps app python manage.py test apps.auth apps.organization apps.management
-
-      - name: Cleanup
-        if: always()
-        run: docker compose down -v --remove-orphans
+          docker run --rm --entrypoint sh bravo-backend:ci -c \
+            'test "$(id -u)" != "0" && test ! -e /app/.env && test ! -d /app/.git'
