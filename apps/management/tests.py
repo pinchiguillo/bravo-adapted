@@ -334,6 +334,27 @@ class ManagementApiTests(APITestCase):
         self.assertTrue(outstanding.exists())
         self.assertFalse(outstanding.filter(blacklistedtoken__isnull=True).exists())
 
+    def test_form_encoded_put_cannot_silently_demote_or_deactivate_an_admin(self):
+        self.client.force_authenticate(user=self.superuser)
+
+        response = self.client.put(
+            reverse("management-users-detail", kwargs={"uuid": self.superuser.uuid}),
+            {"username": self.superuser.username, "email": self.superuser.email},
+            format="multipart",
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
+        self.superuser.refresh_from_db()
+        self.assertTrue(self.superuser.is_superuser)
+        self.assertTrue(self.superuser.is_active)
+
+    def test_echoing_unchanged_role_fields_is_allowed(self):
+        response = self._patch_user(
+            self.admin_user, self.staff_candidate, {"is_staff": False, "first_name": "Renamed"}
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+
     def test_admins_cannot_change_their_own_role_or_status(self):
         demote = self._patch_user(self.superuser, self.superuser, {"is_superuser": False})
         self.client.force_authenticate(user=self.superuser)
@@ -1738,6 +1759,12 @@ class ManagementAccessControlTests(APITestCase):
 
     def test_anonymous_callers_are_rejected(self):
         self._assert_all(status.HTTP_401_UNAUTHORIZED)
+
+    def test_router_indexes_are_not_exposed(self):
+        self.client.force_authenticate(user=self.regular_user)
+        for path in ("/api/management/", "/api/management/rgpd/", "/api/management/notifications/"):
+            with self.subTest(path=path):
+                self.assertNotEqual(self.client.get(path).status_code, status.HTTP_200_OK)
 
     def test_non_staff_users_are_forbidden(self):
         self.client.force_authenticate(user=self.regular_user)

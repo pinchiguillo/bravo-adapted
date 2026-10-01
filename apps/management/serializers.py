@@ -10,7 +10,7 @@ from apps.job_chat.models import JobChat
 from apps.job_chat.serializers import JobChatMessageSerializer
 from apps.jobs.models import Job
 from apps.management.models import FeatureFlag
-from apps.management.permissions import ensure_can_change_roles
+from apps.management.permissions import SELF_LOCKOUT_FIELDS, ensure_can_change_roles
 from apps.organization.models import (
     AllowedCity,
     Category,
@@ -115,7 +115,14 @@ class ManagementUserSerializer(serializers.ModelSerializer):
             raise serializers.ValidationError(errors)
 
         if self.instance is not None:
-            ensure_can_change_roles(self.context["request"].user, self.instance, self.initial_data)
+            # Compare values, not submitted keys: a form-encoded PUT turns missing
+            # booleans into False, and echoing an unchanged value is harmless.
+            changed = {
+                field
+                for field in SELF_LOCKOUT_FIELDS
+                if field in attrs and attrs[field] != getattr(self.instance, field)
+            }
+            ensure_can_change_roles(self.context["request"].user, self.instance, changed)
 
         return attrs
 

@@ -19,6 +19,8 @@ from .views import (
 )
 
 router = DefaultRouter()
+# No browsable index of the staff API.
+router.include_root_view = False
 router.register("users", ManagementUserViewSet, basename="management-users")
 router.register("feature-flags", ManagementFeatureFlagViewSet, basename="management-feature-flags")
 router.register("categories", ManagementCategoryViewSet, basename="management-categories")
