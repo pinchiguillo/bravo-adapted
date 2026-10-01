@@ -1,499 +1,70 @@
-# WebSockets
-
-Documentación de endpoints WebSocket en tiempo real.
-
-## Overview
-
-El backend usa Django Channels para WebSocket. Dos superficies principales:
-
-| Endpoint | Autenticación | Propósito |
-|----------|---------------|-----------|
-| `ws/organization/search/` | Opcional | Búsqueda de organizaciones en tiempo real |
-| `ws/jobs/<job_uuid>/chat/` | Requerida | Chat de job completo: history, messages, widgets, typing |
-
-## 1. Organización Search (Público)
-
-### Ruta
+# Job chat WebSocket
 
 ```
-ws://localhost:8000/ws/organization/search/
-wss://api.example.com/ws/organization/search/  (producción)
+wss://<host>/ws/jobs/<job_uuid>/chat/
 ```
 
-### Autenticación
+Only the job's requester, the provider that owns the announcement, and staff can connect.
 
-**Opcional**. No requiere token.
+## Authentication
 
-Si se envía header `Authorization`, no se valida pero tampoco rechaza.
+Send a JWT access token in one of these ways, in order of preference:
 
-### Seguridad
+1. **Subprotocol** (browsers):
+   `new WebSocket(url, ["bearer", accessToken])`. The server accepts with the `bearer` subprotocol.
+2. **`Authorization: Bearer <token>` header** (native and server-side clients).
+3. **`?token=<token>` query parameter**: legacy web client only. It is accepted while
+   `JOB_CHAT_WS_ALLOW_QUERY_TOKEN` is on, because query strings end up in proxy logs.
 
-- Rate limit por IP
-- Query mínimo 3 caracteres
-- Validación de origen (`AllowedHostsOriginValidator`)
+Browser connections must come from an origin in `WS_ALLOWED_ORIGINS`. Connections without an
+`Origin` header (native apps) rely on the token alone.
 
-### Mensaje de Entrada
+The handshake is rejected when the token is invalid, the account is not active, or the user is not a
+participant of the job.
 
-Cliente → Servidor:
+## Messages from the client
+
+Every frame is a JSON object with a `type`.
+
+| `type` | Fields | Effect |
+|---|---|---|
+| `history` | `before` (optional message UUID) | Replies with a page of history |
+| `message` | `content`, `msg_type` (`plain_text` default, or `widget`) | Stores and broadcasts the message |
+| `proposal_status` | `message_uuid`, `status` (`accepted` or `rejected`) | Answers a price proposal |
+| `typing` | `is_typing` (boolean) | Broadcasts a typing indicator |
+
+A `widget` message is a price proposal; `content` is a JSON string:
 
 ```json
-{
-  "q": "Acme"
-}
+{"widget_type": "proposal",
+ "data": {"title": "Deep clean", "price": 120.5, "price_mode": "total", "currency": "EUR"}}
 ```
 
-Reglas:
-- `q` es obligatorio y string
-- Se aplica `strip()` para normalizar espacios
-- Mínimo 3 caracteres después de normalizar
-- Sin longitud máxima (se trunca en búsqueda)
-
-### Mensaje de Salida (Éxito)
-
-Servidor → Cliente:
-
-```json
-{
-  "type": "search_results",
-  "results": [
-    {
-      "id": "uuid",
-      "name": "Acme Corp",
-      "description": "...",
-      "verified": true,
-      "image_url": "https://..."
-    }
-  ],
-  "query": "Acme"
-}
-```
-
-Campos:
-- `type`: siempre `search_results`
-- `results`: array de organizaciones encontradas (máx 20)
-- `query`: query original enviada
-
-### Mensaje de Salida (Error)
-
-Servidor → Cliente:
-
-```json
-{
-  "type": "error",
-  "message": "Query must be at least 3 characters",
-  "code": "invalid_query"
-}
-```
-
-Códigos de error:
-- `invalid_query` — query < 3 caracteres o vacío
-- `rate_limited` — demasiadas solicitudes desde esta IP
-- `internal_error` — error del servidor
-
-### Comportamiento
-
-- Busca en `Organization.objects.filter(name__icontains=q)`
-- Respeta visibilidad y validación de organizaciones
-- Resultados limitados a 20 por query
-- Conexión persiste mientras cliente permanezca conectado
-- Se puede enviar múltiples queries en la misma conexión
-
-### Ejemplo Cliente JavaScript
-
-```javascript
-const ws = new WebSocket('ws://localhost:8000/ws/organization/search/');
-
-ws.addEventListener('open', () => {
-  ws.send(JSON.stringify({ q: 'Acme' }));
-});
-
-ws.addEventListener('message', (event) => {
-  const data = JSON.parse(event.data);
-  if (data.type === 'search_results') {
-    console.log('Found orgs:', data.results);
-  } else if (data.type === 'error') {
-    console.error('Error:', data.message);
-  }
-});
-
-ws.addEventListener('close', () => {
-  console.log('Connection closed');
-});
-```
-
----
-
-## 2. Job Chat (Autenticado)
-
-### Ruta
-
-```
-ws://localhost:8000/ws/jobs/<job_uuid>/chat/?token=<jwt_token>
-wss://api.example.com/ws/jobs/<job_uuid>/chat/?token=<jwt_token>  (producción)
-```
-
-**Nota**: Token se envía en query string (no en header) para compatibilidad con navegadores.
-
-### Autenticación
-
-**Requerida**. Se usa token JWT en query string.
-
-```
-ws://localhost:8000/ws/jobs/abc-123/chat/?token=eyJ0eXAi...
-```
-
-Proceso de validación:
-1. Extrae token de query string
-2. Valida token JWT (signature, expiración)
-3. Resuelve usuario
-4. Verifica que usuario es owner del job o staff
-
-Si falla: cierra conexión con código `4001` (Unauthorized).
-
-### Autorización
-
-Solo owner del job o staff pueden conectarse:
-
-```python
-# Si job.user != request.user y no es staff:
-# ❌ Rechaza conexión (4001)
-
-# Si es owner o staff:
-# ✅ Permite
-```
-
-### Seguridad
-
-- Rate limit por usuario: `JOB_CHAT_WS_RATE_LIMIT` (default 100) mensajes por `JOB_CHAT_WS_RATE_WINDOW` (default 60 segundos)
-- Una sola conexión WebSocket activa por (user, job) — desconecta la anterior si se abre otra
-- Validación de origen
-
-### Mensaje de Entrada
-
-#### Pedir Historial Inicial
-
-Cliente → Servidor:
-
-```json
-{
-  "type": "history"
-}
-```
-
-Servidor → Cliente:
-
-```json
-{
-  "type": "history",
-  "data": [
-    {
-      "uuid": "msg-uuid",
-      "user_id": 12,
-      "username": "john",
-      "type": "plain_text",
-      "content": "Hola",
-      "attachments": [],
-      "created_at": "2026-04-20T20:28:53Z",
-      "updated_at": "2026-04-20T20:28:53Z"
-    }
-  ]
-}
-```
-
-#### Enviar Mensaje
-
-Cliente → Servidor:
-
-```json
-{
-  "type": "message",
-  "content": "Hola, ¿cómo estás?",
-  "msg_type": "plain_text"
-}
-```
-
-Reglas:
-- `type` debe ser `history`, `message`, `proposal_status` o `typing`
-- `content` es requerido si `type` es `message`
-- `msg_type` admite `plain_text` y `widget`
-- Para widgets, `content` contiene el JSON serializado del widget
-- Se replica a todos los conectados a ese job
-
-#### Notificar Escritura
-
-Cliente → Servidor:
-
-```json
-{
-  "type": "typing"
-}
-```
-
-#### Actualizar Estado de Widget Propuesta
-
-Cliente → Servidor:
-
-```json
-{
-  "type": "proposal_status",
-  "message_uuid": "msg-uuid",
-  "status": "accepted"
-}
-```
-
-Reglas:
-- `message_uuid` es obligatorio
-- `status` admite `accepted` o `rejected`
-- solo funciona sobre mensajes `widget` con `widget_type = proposal`
-- la actualización se persiste y luego se reemite como `type = message`
-
-### Mensaje de Salida
-
-#### Nuevo Mensaje o Widget Actualizado
-
-Servidor → Clientes:
-
-```json
-{
-  "type": "message",
-  "data": {
-    "uuid": "msg-uuid",
-    "user_id": 12,
-    "username": "john",
-    "type": "plain_text",
-    "content": "Hola, ¿cómo estás?",
-    "attachments": [],
-    "created_at": "2026-04-20T20:28:53Z",
-    "updated_at": "2026-04-20T20:28:53Z"
-  }
-}
-```
-
-Si el mensaje es widget, `data.content` contiene el JSON serializado del widget.
-
-#### Confirmación de Escritura
-
-Servidor → Clientes:
-
-```json
-{
-  "type": "typing",
-  "user_id": "user-uuid",
-  "username": "Jane Smith"
-}
-```
-
-#### Error
-
-Servidor → Cliente:
-
-```json
-{
-  "type": "error",
-  "message": "Unknown message type"
-}
-```
-
-### Comportamiento
-
-- **Historial**: se obtiene por WebSocket con `{"type":"history"}`; no hay endpoint REST de mensajes para el flujo principal del chat
-- **Mensajes**: se crean por WebSocket con `{"type":"message", ...}`
-- **Widgets**: se crean por WebSocket enviando `msg_type = "widget"`
-- **Acciones sobre widgets**: se realizan por WebSocket con `type = "proposal_status"`
-- **Adjuntos**: siguen usando REST para ciclo de upload/attach, pero el mensaje/chat ya no se consulta por REST
-
-### Ejemplo Cliente JavaScript
-
-```javascript
-const ws = new WebSocket('ws://localhost:8000/ws/jobs/abc-123/chat/?token=jwt');
-
-ws.addEventListener('open', () => {
-  ws.send(JSON.stringify({ type: 'history' }));
-});
-
-ws.addEventListener('message', (event) => {
-  const data = JSON.parse(event.data);
-
-  if (data.type === 'history') {
-    console.log('Initial messages:', data.data);
-  } else if (data.type === 'message') {
-    console.log('New or updated message:', data.data);
-  } else if (data.type === 'typing') {
-    console.log('Typing:', data.username);
-  } else if (data.type === 'error') {
-    console.error(data.message);
-  }
-});
-
-function sendText(content) {
-  ws.send(JSON.stringify({
-    type: 'message',
-    msg_type: 'plain_text',
-    content,
-  }));
-}
-
-function sendProposal(widget) {
-  ws.send(JSON.stringify({
-    type: 'message',
-    msg_type: 'widget',
-    content: JSON.stringify(widget),
-  }));
-}
-
-function updateProposalStatus(messageUuid, status) {
-  ws.send(JSON.stringify({
-    type: 'proposal_status',
-    message_uuid: messageUuid,
-    status,
-  }));
-}
-```
-ws.addEventListener('open', () => {
-  console.log('Connected');
-});
-
-ws.addEventListener('message', (event) => {
-  const data = JSON.parse(event.data);
-  
-  if (data.type === 'message') {
-    console.log(`${data.author.name}: ${data.text}`);
-  } else if (data.type === 'typing') {
-    console.log(`${data.user_name} está escribiendo...`);
-  } else if (data.type === 'error') {
-    console.error(`Error: ${data.message}`);
-  }
-});
-
-// Enviar mensaje
-function sendMessage(text) {
-  ws.send(JSON.stringify({ type: 'message', text }));
-}
-
-// Notificar escritura
-function notifyTyping() {
-  ws.send(JSON.stringify({ type: 'typing' }));
-}
-
-ws.addEventListener('close', () => {
-  console.log('Disconnected');
-});
-```
-
----
-
-## Almacenamiento de Adjuntos
-
-### Subir Adjunto
-
-Endpoint REST: `POST /api/jobs/<uuid>/send/`
-
-```bash
-curl -X POST http://localhost:8000/api/jobs/abc-123/send/ \
-  -H "Authorization: Bearer <token>" \
-  -F "file=@document.pdf"
-```
-
-Respuesta:
-
-```json
-{
-  "id": "msg-uuid",
-  "type": "message",
-  "text": null,
-  "author": {...},
-  "created_at": "2026-04-20T20:28:53Z",
-  "attachments": [
-    {
-      "id": "att-uuid",
-      "filename": "document.pdf",
-      "content_type": "application/pdf",
-      "size_bytes": 102400,
-      "download_url": "https://api.example.com/api/jobs/.../attachments/.../download"
-    }
-  ]
-}
-```
-
-### Descargar Adjunto
-
-Endpoint REST: `GET /api/jobs/<uuid>/attachments/<att_uuid>/download/`
-
-```bash
-curl http://localhost:8000/api/jobs/abc-123/attachments/att-uuid/download/ \
-  -H "Authorization: Bearer <token>"
-```
-
-Retorna:
-- URL firmada con TTL (`JOB_CHAT_ATTACHMENT_URL_TTL_SECONDS`, default 1 hora)
-- Headers para descargar directo desde S3
-
----
-
-## Configuración Relevante
-
-### Rate Limiting WebSocket
-
-```env
-JOB_CHAT_WS_RATE_LIMIT=100           # mensajes máximos
-JOB_CHAT_WS_RATE_WINDOW=60           # en segundos
-```
-
-### Adjuntos
-
-```env
-JOB_CHAT_ATTACHMENT_MAX_BYTES=5242880                # 5MB
-JOB_CHAT_ATTACHMENT_ALLOWED_CONTENT_TYPES=image/jpeg,image/png,application/pdf
-JOB_CHAT_ATTACHMENT_URL_TTL_SECONDS=3600             # 1 hora
-```
-
----
-
-## Troubleshooting
-
-### Conexión rechazada (401)
-
-**Síntoma**: `4001 - Unauthorized`
-
-**Causas**:
-- Token inválido o expirado
-- Usuario no es owner del job
-- Usuario no es staff
-
-**Solución**: Refrescar token, validar permisos.
-
-### Rate Limited
-
-**Síntoma**: Recibe `{"type": "error", "code": "rate_limited"}`
-
-**Solución**: Esperar ventana de tiempo (`JOB_CHAT_WS_RATE_WINDOW`).
-
-### Mensajes no llegan
-
-**Síntoma**: Envía, pero otros usuarios no ven el mensaje
-
-**Causas**:
-- Redis no disponible (en multiproceso)
-- Usuario desconectado antes de que se replique
-
-**Solución**:
-- Verificar Redis está running
-- Revisar logs del server: `docker compose logs app`
-
-### Adjuntos no se suben
-
-**Síntoma**: `413 Payload Too Large` o `400 Bad Request`
-
-**Causas**:
-- Archivo > `JOB_CHAT_ATTACHMENT_MAX_BYTES`
-- Content-Type no permitido
-
-**Solución**: Revisar `ENVIRONMENT.md` para limits.
-
----
-
-## Documentación Relacionada
-
-- [ARCHITECTURE.md](./ARCHITECTURE.md) — Visión general, Channels
-- [OPERATIONS.md](./OPERATIONS.md) — Troubleshooting Redis
-- [ENVIRONMENT.md](./ENVIRONMENT.md) — Variables de configuración
+`description`, `category` and `subcategory` are optional. `price` is a non-negative amount with
+two decimals, `price_mode` is one of `total`, `hourly`, `daily`, `monthly`, `per_sqm`, `per_unit`,
+and `currency` one of `EUR`, `USD`, `GBP`. The server always stores a new proposal with
+`"status": "pending"`. Only the other participant can answer it, once; accepting it moves a pending
+job to `active`.
+
+## Messages from the server
+
+| `type` | Fields |
+|---|---|
+| `history` | `data`: messages, oldest first; `has_more`: older messages exist (pass the first UUID as `before`) |
+| `message` | `data`: a stored or updated message (`uuid`, `user_id`, `username`, `type`, `content`, `attachments`, `created_at`, `updated_at`) |
+| `user_status` | `status` (`online` or `offline`), `user_id`, `username` |
+| `typing` | `user_id`, `username`, `is_typing` |
+| `error` | `message` |
+
+## Limits and session checks
+
+- Frames other than `typing` count against `JOB_CHAT_WS_RATE_LIMIT` per user per
+  `JOB_CHAT_WS_RATE_WINDOW` seconds, across all of that user's sockets.
+- Identical typing indicators within two seconds are dropped.
+- Before acting on a frame, the server checks that the access token has not expired and that the
+  account is still active and still a participant. If not, it sends an `error` and closes with
+  code **4401**; the client should refresh its token and reconnect.
+- Binary frames and JSON that is not an object get an `error` frame.
+
+The same rules apply to the REST endpoints under `/api/jobs/<job_uuid>/`, and messages sent or
+answered over REST are broadcast to connected sockets.
