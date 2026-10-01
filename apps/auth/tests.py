@@ -4,7 +4,6 @@ from django.contrib.auth import get_user_model
 from django.contrib.auth.models import Permission
 from django.contrib.contenttypes.models import ContentType
 from django.core import mail
-from django.core.cache import cache
 from django.test import override_settings
 from rest_framework.test import APITestCase
 from rest_framework.throttling import SimpleRateThrottle
@@ -21,7 +20,6 @@ from apps.organization.models import Organization
 )
 class AuthApiTests(APITestCase):
     def setUp(self):
-        cache.clear()
         user_model = get_user_model()
         self.password = "ChangeMe123!"
         self.email = "root@example.com"
@@ -504,7 +502,6 @@ class AuthApiTests(APITestCase):
 
 class AuthThrottleTests(APITestCase):
     def setUp(self):
-        cache.clear()
         self.password = "ChangeMe123!"
         self.email = "throttle@example.com"
         self.user = get_user_model().objects.create_user(

@@ -4,7 +4,6 @@ from unittest.mock import patch
 from django.apps import apps as django_apps
 from django.conf import settings
 from django.contrib.auth import get_user_model
-from django.core.cache import cache
 from django.core.files.uploadedfile import SimpleUploadedFile
 from django.test import override_settings
 from django.urls import reverse
@@ -488,7 +487,6 @@ class RgpdAnonymousConsentBehaviorTests(APITestCase):
         },
     )
     def test_public_anonymous_endpoint_is_throttled(self):
-        cache.clear()
         factory = APIRequestFactory()
         view = RgpdAnonymousConsentViewSet()
         view.action = "create"

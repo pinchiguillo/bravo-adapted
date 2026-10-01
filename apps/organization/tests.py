@@ -6,7 +6,6 @@ from unittest.mock import patch
 
 from django.contrib.auth import get_user_model
 from django.contrib.auth.models import AnonymousUser
-from django.core.cache import cache
 from django.core.exceptions import ValidationError
 from django.core.files.uploadedfile import SimpleUploadedFile
 from django.db.utils import IntegrityError
@@ -870,7 +869,6 @@ class OrganizationApiTests(APITestCase):
         )
 
     def test_organization_public_retrieve_is_throttled(self):
-        cache.clear()
 
         class OrganizationPublicReadTestThrottle(SimpleRateThrottle):
             scope = "organization_public_read_test"
@@ -2083,7 +2081,6 @@ class OrganizationApiTests(APITestCase):
             )
 
     def test_organization_write_is_throttled(self):
-        cache.clear()
         self.client.force_authenticate(user=self.owner)
 
         class OrganizationWriteTestThrottle(SimpleRateThrottle):
@@ -2399,7 +2396,6 @@ class AnnouncementViewCountMiddlewareTests(APITestCase):
             free_text="Middleware text",
         )
         self.factory = RequestFactory()
-        cache.clear()
 
     def test_anonymous_visitor_is_counted_only_once(self):
         middleware = AnnouncementViewCountMiddleware(lambda incoming_request: None)
