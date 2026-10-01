@@ -8,7 +8,7 @@ from django.core.files.uploadedfile import SimpleUploadedFile
 from django.core.mail import EmailMultiAlternatives
 from django.test import RequestFactory, SimpleTestCase, TestCase, override_settings
 
-from common.client_ip import get_client_ip
+from common.client_ip import get_client_ip, rate_limit_identity
 from common.email_backends import SesEmailBackend
 from common.exception_handler import exception_handler
 from common.exceptions import ConflictError, DomainError, NotFoundError
@@ -102,6 +102,18 @@ class ClientIpTests(SimpleTestCase):
 
     def test_missing_remote_addr_returns_none(self):
         self.assertIsNone(self._ip(""))
+
+    def test_ipv4_mapped_addresses_are_normalised(self):
+        self.assertEqual(self._ip("::ffff:203.0.113.5"), "203.0.113.5")
+        self.assertEqual(self._ip("::ffff:10.0.0.2", "203.0.113.9"), "203.0.113.9")
+
+    def test_ipv6_clients_are_rate_limited_per_64(self):
+        same_subscriber = {rate_limit_identity("2001:db8::1"), rate_limit_identity("2001:db8::ffff:2")}
+        other_subscriber = rate_limit_identity("2001:db8:0:1::1")
+
+        self.assertEqual(len(same_subscriber), 1)
+        self.assertNotIn(other_subscriber, same_subscriber)
+        self.assertEqual(rate_limit_identity("203.0.113.5"), "203.0.113.5")
 
 
 class DomainExceptionHandlerTests(SimpleTestCase):

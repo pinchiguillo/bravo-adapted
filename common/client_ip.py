@@ -5,9 +5,13 @@ from django.conf import settings
 
 def _parse_ip(value):
     try:
-        return ipaddress.ip_address(value.strip())
+        address = ipaddress.ip_address(value.strip())
     except ValueError:
         return None
+    # ::ffff:a.b.c.d is an IPv4 client on a dual-stack socket.
+    if address.version == 6 and address.ipv4_mapped is not None:
+        return address.ipv4_mapped
+    return address
 
 
 def _trusted_networks():
@@ -43,3 +47,17 @@ def get_client_ip(request):
         if not is_trusted(address):
             return str(address)
     return str(remote_addr)
+
+
+def rate_limit_identity(client_ip):
+    """Key for per-client rate limits.
+
+    A single IPv6 subscriber usually controls a whole /64, so keying on the
+    full address would hand out unlimited buckets; group IPv6 by /64.
+    """
+    if client_ip is None:
+        return ""
+    address = ipaddress.ip_address(client_ip)
+    if address.version == 6:
+        return str(ipaddress.ip_network(f"{address}/64", strict=False))
+    return client_ip

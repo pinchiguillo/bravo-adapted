@@ -1,6 +1,6 @@
 from rest_framework.throttling import ScopedRateThrottle
 
-from common.client_ip import get_client_ip
+from common.client_ip import get_client_ip, rate_limit_identity
 
 
 class ClientIPScopedRateThrottle(ScopedRateThrottle):
@@ -11,7 +11,7 @@ class ClientIPScopedRateThrottle(ScopedRateThrottle):
     """
 
     def get_ident(self, request):
-        return get_client_ip(request) or ""
+        return rate_limit_identity(get_client_ip(request))
 
 
 class ActionScopedRateThrottleMixin:
