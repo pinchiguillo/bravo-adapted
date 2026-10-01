@@ -1,13 +1,14 @@
-from django.http import JsonResponse
+from django.http import HttpRequest, JsonResponse
 from drf_spectacular.utils import extend_schema, inline_serializer
 from rest_framework import serializers
 from rest_framework.decorators import api_view, permission_classes
 from rest_framework.permissions import AllowAny
+from rest_framework.request import Request
 
 from Core.settings import read_project_version
 
 
-def healthcheck(_request):
+def healthcheck(_request: HttpRequest) -> JsonResponse:
     return JsonResponse({"status": "ok"})
 
 
@@ -24,5 +25,5 @@ def healthcheck(_request):
 )
 @api_view(["GET"])
 @permission_classes([AllowAny])
-def api_version(_request):
+def api_version(_request: Request) -> JsonResponse:
     return JsonResponse({"version": read_project_version()})

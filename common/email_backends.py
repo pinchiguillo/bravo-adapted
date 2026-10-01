@@ -1,11 +1,15 @@
+from collections.abc import Sequence
+from typing import Any
+
 import boto3
 from botocore.exceptions import BotoCoreError, ClientError
 from django.conf import settings
+from django.core.mail import EmailMessage
 from django.core.mail.backends.base import BaseEmailBackend
 
 
 class SesEmailBackend(BaseEmailBackend):
-    def __init__(self, **kwargs):
+    def __init__(self, **kwargs: Any) -> None:
         super().__init__(**kwargs)
         self.client = boto3.client(
             "ses",
@@ -15,7 +19,7 @@ class SesEmailBackend(BaseEmailBackend):
             aws_secret_access_key=getattr(settings, "AWS_SECRET_ACCESS_KEY", None),
         )
 
-    def send_messages(self, email_messages):
+    def send_messages(self, email_messages: Sequence[EmailMessage]) -> int:
         if not email_messages:
             return 0
 
@@ -25,7 +29,13 @@ class SesEmailBackend(BaseEmailBackend):
             if not recipients:
                 continue
 
-            payload = {
+            body: dict[str, dict[str, str]] = {"Text": {"Data": str(message.body or "")}}
+            for alternative, mimetype in getattr(message, "alternatives", []):
+                if mimetype == "text/html":
+                    body["Html"] = {"Data": str(alternative)}
+                    break
+
+            payload: dict[str, Any] = {
                 "Source": message.from_email or settings.DEFAULT_FROM_EMAIL,
                 "Destination": {
                     "ToAddresses": message.to or [],
@@ -34,17 +44,11 @@ class SesEmailBackend(BaseEmailBackend):
                 },
                 "Message": {
                     "Subject": {"Data": message.subject or ""},
-                    "Body": {"Text": {"Data": message.body or ""}},
+                    "Body": body,
                 },
             }
-
             if message.reply_to:
                 payload["ReplyToAddresses"] = message.reply_to
-
-            for alternative, mimetype in getattr(message, "alternatives", []):
-                if mimetype == "text/html":
-                    payload["Message"]["Body"]["Html"] = {"Data": alternative}
-                    break
 
             try:
                 self.client.send_email(**payload)

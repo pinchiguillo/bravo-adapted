@@ -29,3 +29,34 @@ omit = ["*/migrations/*", "*/tests.py", "*/tests_*.py", "Core/settings_test.py",
 [tool.coverage.report]
 show_missing = true
 skip_covered = true
+
+[tool.mypy]
+python_version = "3.12"
+plugins = ["mypy_django_plugin.main", "mypy_drf_plugin.main"]
+# Typed core: shared utilities, the S3 upload pipeline and the chat, session
+# and login services. The rest of the code base is checked progressively.
+files = [
+    "common",
+    "apps/assets",
+    "apps/auth/sessions.py",
+    "apps/auth/login_guard.py",
+    "apps/job_chat/services.py",
+    "apps/job_chat/rate_limit.py",
+]
+exclude = ["/migrations/", "tests\\.py$", "tests_.*\\.py$"]
+follow_imports = "silent"
+disallow_untyped_defs = true
+disallow_incomplete_defs = true
+check_untyped_defs = true
+no_implicit_optional = true
+warn_unused_ignores = true
+warn_redundant_casts = true
+warn_return_any = true
+strict_equality = true
+
+[[tool.mypy.overrides]]
+module = ["storages.*", "channels.*", "moto.*", "boto3.*", "botocore.*", "PIL.*"]
+ignore_missing_imports = true
+
+[tool.django-stubs]
+django_settings_module = "Core.settings_test"

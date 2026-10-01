@@ -1,5 +1,7 @@
 import json
 import logging
+from typing import Any
+from uuid import UUID
 
 from asgiref.sync import async_to_sync
 from channels.layers import get_channel_layer
@@ -24,11 +26,11 @@ from .serializers import (
 logger = logging.getLogger(__name__)
 
 
-def chat_group_name(job_uuid):
+def chat_group_name(job_uuid: UUID | str) -> str:
     return f"job_chat_{job_uuid}"
 
 
-def post_message(*, job, user, message_type, content):
+def post_message(*, job: Job, user: Any, message_type: str, content: str) -> JobChatMessage:
     """Persist a validated chat message, then notify the other participant.
 
     A failing notification must not lose or duplicate the message, so it is
@@ -43,7 +45,7 @@ def post_message(*, job, user, message_type, content):
     return message
 
 
-def set_proposal_status(*, job, message_uuid, actor, new_status):
+def set_proposal_status(*, job: Job, message_uuid: UUID | str, actor: Any, new_status: str) -> JobChatMessage:
     """Accept or reject a price proposal.
 
     Only the other participant can answer, and only while the proposal is
@@ -85,7 +87,7 @@ def set_proposal_status(*, job, message_uuid, actor, new_status):
     return message
 
 
-def broadcast_message(job_uuid, message):
+def broadcast_message(job_uuid: UUID | str, message: JobChatMessage) -> None:
     """Push a message to every socket connected to the job chat."""
     # Best effort: the message is already stored and clients can reload the
     # history, so a channel-layer outage must not turn the request into a 500.
@@ -101,7 +103,9 @@ def broadcast_message(job_uuid, message):
         logger.exception("Could not broadcast chat message %s", message.uuid)
 
 
-def get_history_page(job_chat, *, before_uuid=None, limit=None):
+def get_history_page(
+    job_chat: JobChat, *, before_uuid: str | None = None, limit: int | None = None
+) -> tuple[list[JobChatMessage], bool]:
     """Return (messages oldest-first, has_more) for the newest page before a message.
 
     Keyset pagination on (created_at, id): stable while new messages arrive,

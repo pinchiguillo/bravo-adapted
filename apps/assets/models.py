@@ -76,5 +76,5 @@ class Asset(models.Model):
             models.Index(fields=["expires_at"]),
         ]
 
-    def __str__(self):
+    def __str__(self) -> str:
         return f"Asset({self.kind}/{self.status}/{self.id})"

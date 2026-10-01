@@ -1,9 +1,13 @@
 import ipaddress
 
 from django.conf import settings
+from django.http import HttpRequest
+
+IPAddress = ipaddress.IPv4Address | ipaddress.IPv6Address
+IPNetwork = ipaddress.IPv4Network | ipaddress.IPv6Network
 
 
-def _parse_ip(value):
+def _parse_ip(value: str) -> IPAddress | None:
     try:
         address = ipaddress.ip_address(value.strip())
     except ValueError:
@@ -14,11 +18,11 @@ def _parse_ip(value):
     return address
 
 
-def _trusted_networks():
+def _trusted_networks() -> tuple[IPNetwork, ...]:
     return tuple(ipaddress.ip_network(value, strict=False) for value in settings.TRUSTED_PROXY_IPS)
 
 
-def get_client_ip(request):
+def get_client_ip(request: HttpRequest) -> str | None:
     """Return the address of the client as seen by the outermost trusted proxy.
 
     X-Forwarded-For is honoured only when the direct peer is a trusted proxy
@@ -33,7 +37,7 @@ def get_client_ip(request):
 
     trusted = _trusted_networks()
 
-    def is_trusted(address):
+    def is_trusted(address: IPAddress) -> bool:
         return any(address in network for network in trusted)
 
     if not is_trusted(remote_addr):
@@ -49,7 +53,7 @@ def get_client_ip(request):
     return str(remote_addr)
 
 
-def rate_limit_identity(client_ip):
+def rate_limit_identity(client_ip: str | None) -> str:
     """Key for per-client rate limits.
 
     A single IPv6 subscriber usually controls a whole /64, so keying on the

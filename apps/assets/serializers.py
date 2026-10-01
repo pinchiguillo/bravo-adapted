@@ -2,6 +2,7 @@ import mimetypes
 import os
 import uuid as uuid_module
 from datetime import timedelta
+from typing import Any
 
 from django.core.files.storage import default_storage
 from django.db import transaction
@@ -36,20 +37,20 @@ class AssetInitiateUploadSerializer(serializers.Serializer):
     size_bytes = serializers.IntegerField(min_value=1)
     draft_token = serializers.CharField(max_length=64, required=False, allow_blank=True, default="")
 
-    def validate_kind(self, value):
+    def validate_kind(self, value: str) -> str:
         request = self.context.get("request")
         is_staff = bool(request and request.user.is_staff)
         if value not in CLIENT_KINDS and not is_staff:
             raise serializers.ValidationError("This kind of asset cannot be uploaded here.")
         return value
 
-    def validate_filename(self, value):
+    def validate_filename(self, value: str) -> str:
         filename = os.path.basename(str(value).strip())
         if not filename:
             raise serializers.ValidationError("Filename is required.")
         return filename
 
-    def validate(self, attrs):
+    def validate(self, attrs: dict[str, Any]) -> dict[str, Any]:
         attrs = super().validate(attrs)
         kind = attrs["kind"]
         rules = get_kind_rules(kind)
@@ -72,8 +73,9 @@ class AssetInitiateUploadSerializer(serializers.Serializer):
 
         return attrs
 
-    def create(self, validated_data):
-        request = self.context.get("request")
+    def create(self, validated_data: dict[str, Any]) -> dict[str, Any]:
+        # The view always passes the request; uploads belong to its user.
+        request = self.context["request"]
         kind = validated_data["kind"]
         rules = get_kind_rules(kind)
         ttl = rules["ttl_seconds"]
@@ -114,10 +116,7 @@ class AssetInitiateUploadSerializer(serializers.Serializer):
             ttl_seconds=ttl,
         )
 
-        if request:
-            complete_url = request.build_absolute_uri(reverse("asset-complete-upload", kwargs={"asset_id": asset.id}))
-        else:
-            complete_url = reverse("asset-complete-upload", kwargs={"asset_id": asset.id})
+        complete_url = request.build_absolute_uri(reverse("asset-complete-upload", kwargs={"asset_id": asset.id}))
 
         return {
             "asset_id": asset.id,
@@ -139,7 +138,7 @@ class AssetUploadTargetSerializer(serializers.Serializer):
     expires_in = serializers.IntegerField(read_only=True)
     complete_url = serializers.URLField(read_only=True)
 
-    def to_representation(self, instance):
+    def to_representation(self, instance: Any) -> Any:
         return instance  # instance is already a dict
 
 
@@ -173,7 +172,7 @@ class AssetCompleteUploadSerializer(serializers.Serializer):
     and marks the Asset as CONFIRMED.
     """
 
-    def validate(self, attrs):
+    def validate(self, attrs: dict[str, Any]) -> dict[str, Any]:
         request = self.context.get("request")
         asset = self.context.get("asset")
 
@@ -191,7 +190,7 @@ class AssetCompleteUploadSerializer(serializers.Serializer):
 
         return attrs
 
-    def create(self, validated_data):
+    def create(self, validated_data: dict[str, Any]) -> Asset:
         with transaction.atomic():
             # Re-read under a row lock: two concurrent confirmations must not both
             # move the object.
@@ -204,7 +203,7 @@ class AssetCompleteUploadSerializer(serializers.Serializer):
                 pending_key=asset.pending_key,
                 final_key=asset.key,
                 content_type=asset.content_type_client,
-                expected_size=asset.size_client,
+                expected_size=asset.size_client or 0,
             )
 
             asset.pending_key = ""

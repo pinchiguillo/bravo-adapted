@@ -1,7 +1,10 @@
+from uuid import UUID
+
 from drf_spectacular.utils import OpenApiResponse, OpenApiTypes, extend_schema
 from rest_framework import status
 from rest_framework.decorators import api_view, permission_classes
 from rest_framework.exceptions import NotFound
+from rest_framework.request import Request
 from rest_framework.response import Response
 
 from common.permissions import IsActiveAccount
@@ -30,7 +33,7 @@ from .serializers import (
 )
 @api_view(["POST"])
 @permission_classes([IsActiveAccount])
-def initiate_upload(request):
+def initiate_upload(request: Request) -> Response:
     serializer = AssetInitiateUploadSerializer(
         data=request.data,
         context={"request": request},
@@ -58,7 +61,7 @@ def initiate_upload(request):
 )
 @api_view(["POST"])
 @permission_classes([IsActiveAccount])
-def complete_upload(request, asset_id):
+def complete_upload(request: Request, asset_id: UUID) -> Response:
     try:
         asset = Asset.objects.get(id=asset_id)
     except Asset.DoesNotExist:

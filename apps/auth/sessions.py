@@ -6,6 +6,7 @@ JWT_MAX_SESSION_AGE by refreshing forever.
 """
 
 import time
+from typing import Any, cast
 
 from django.conf import settings
 from rest_framework_simplejwt.exceptions import TokenBackendError
@@ -17,33 +18,35 @@ from rest_framework_simplejwt.tokens import RefreshToken
 AUTH_TIME_CLAIM = "auth_time"
 
 
-def issue_tokens(user):
+def issue_tokens(user: Any) -> RefreshToken:
     """Start a new session for the user and return its refresh token."""
     refresh = RefreshToken.for_user(user)
     refresh[AUTH_TIME_CLAIM] = int(time.time())
     return refresh
 
 
-def verified_payload(raw_token):
+def verified_payload(raw_token: str) -> dict[str, Any] | None:
     """Payload of a correctly signed, unexpired token, or None. Ignores the blacklist."""
     try:
-        return token_backend.decode(raw_token, verify=True)
+        # The stub types this as Token, but decode() takes the encoded string.
+        payload: dict[str, Any] = token_backend.decode(cast(Any, raw_token), verify=True)
+        return payload
     except TokenBackendError:
         return None
 
 
-def session_expired(payload):
+def session_expired(payload: dict[str, Any]) -> bool:
     auth_time = payload.get(AUTH_TIME_CLAIM)
     if auth_time is None:
         return False
-    return time.time() - auth_time > settings.JWT_MAX_SESSION_AGE.total_seconds()
+    return bool(time.time() - auth_time > settings.JWT_MAX_SESSION_AGE.total_seconds())
 
 
-def is_revoked(payload):
+def is_revoked(payload: dict[str, Any]) -> bool:
     return BlacklistedToken.objects.filter(token__jti=payload.get(api_settings.JTI_CLAIM)).exists()
 
 
-def revoke_all_refresh_tokens(user_id):
+def revoke_all_refresh_tokens(user_id: int) -> int:
     """Blacklist every outstanding refresh token of a user; returns how many were revoked."""
     outstanding = OutstandingToken.objects.filter(user_id=user_id, blacklistedtoken__isnull=True)
     revoked = [BlacklistedToken(token=token) for token in outstanding]

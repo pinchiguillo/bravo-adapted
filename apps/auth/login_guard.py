@@ -11,16 +11,16 @@ from django.core.cache import cache
 from django.utils.crypto import salted_hmac
 
 
-def _key(email):
+def _key(email: str) -> str:
     digest = salted_hmac("auth.login-failures", email.strip().lower()).hexdigest()
     return f"auth:login-failures:{digest}"
 
 
-def is_locked(email):
+def is_locked(email: str) -> bool:
     return (cache.get(_key(email)) or 0) >= settings.AUTH_LOGIN_MAX_FAILURES
 
 
-def register_failure(email):
+def register_failure(email: str) -> None:
     key = _key(email)
     if cache.add(key, 1, timeout=settings.AUTH_LOGIN_FAILURE_WINDOW_SECONDS):
         return
@@ -30,5 +30,5 @@ def register_failure(email):
         cache.add(key, 1, timeout=settings.AUTH_LOGIN_FAILURE_WINDOW_SECONDS)
 
 
-def reset(email):
+def reset(email: str) -> None:
     cache.delete(_key(email))

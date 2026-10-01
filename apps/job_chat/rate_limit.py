@@ -5,7 +5,7 @@ from django.conf import settings
 from django.core.cache import cache
 
 
-async def allow_client_frame(user_id):
+async def allow_client_frame(user_id: int) -> bool:
     """Fixed-window rate limit for WebSocket frames, shared across workers via the cache.
 
     Counts per user rather than per socket, so opening more tabs does not
