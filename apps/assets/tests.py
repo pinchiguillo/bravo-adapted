@@ -3,6 +3,7 @@ import io
 import boto3
 from django.conf import settings
 from django.contrib.auth import get_user_model
+from django.test import override_settings
 from django.urls import reverse
 from PIL import Image
 from rest_framework import status
@@ -160,3 +161,28 @@ class AssetUploadTests(APITestCase):
         response = self._complete(asset)
 
         self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+
+
+class PublicMediaUrlTests(APITestCase):
+    SIGNED = "https://s3.eu-west-1.amazonaws.com/bravo-media/assets/x.png?X-Amz-Signature=abc&X-Amz-Expires=300"
+
+    @override_settings(MEDIA_PUBLIC_BASE_URL="", MEDIA_URL="https://cdn.example.com/bravo-media/")
+    def test_presigned_urls_are_returned_untouched_outside_the_dev_proxy(self):
+        from .services import build_public_media_url
+
+        # Rebuilding them on MEDIA_URL would change the signed host and break SigV4.
+        self.assertEqual(build_public_media_url("assets/x.png", signed_url=self.SIGNED), self.SIGNED)
+
+    @override_settings(MEDIA_PUBLIC_BASE_URL="/s3", MEDIA_URL="/s3/bravo-media/")
+    def test_development_routes_presigned_urls_through_the_media_proxy(self):
+        from .services import build_public_media_url
+
+        url = build_public_media_url("assets/x.png", signed_url=self.SIGNED)
+
+        self.assertEqual(url, "/s3/bravo-media/assets/x.png?X-Amz-Signature=abc&X-Amz-Expires=300")
+
+    @override_settings(MEDIA_PUBLIC_BASE_URL="", MEDIA_URL="https://cdn.example.com/bravo-media/")
+    def test_unsigned_objects_are_served_from_media_url(self):
+        from .services import build_public_media_url
+
+        self.assertEqual(build_public_media_url("assets/x.png"), "https://cdn.example.com/bravo-media/assets/x.png")

@@ -160,7 +160,6 @@ AWS_LEGAL_DOCUMENTS_BUCKET_NAME = os.getenv(
     f"{AWS_STORAGE_BUCKET_NAME}-legal",
 )
 AWS_S3_PUBLIC_URL = os.getenv("AWS_S3_PUBLIC_URL", "")
-AWS_S3_PRESIGNED_URL_ENDPOINT = os.getenv("AWS_S3_PRESIGNED_URL_ENDPOINT", "")
 # "/s3" is the nginx proxy to LocalStack in development; production serves media from S3/CDN.
 MEDIA_PUBLIC_BASE_URL = os.getenv("MEDIA_PUBLIC_BASE_URL", "" if IS_PRODUCTION else "/s3")
 LEGAL_DOCUMENTS_UPLOAD_PREFIX = (

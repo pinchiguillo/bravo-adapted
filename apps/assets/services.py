@@ -9,11 +9,13 @@ import io
 import os
 import uuid
 from datetime import timedelta
-from urllib.parse import urlsplit, urlunparse
+from typing import Any
+from urllib.parse import urlsplit
 
 from botocore.exceptions import ClientError
 from django.conf import settings
 from django.core import signing
+from django.http import HttpRequest
 from django.utils import timezone
 from django.utils.encoding import filepath_to_uri
 
@@ -38,7 +40,7 @@ _MAGIC_BYTES: dict[str, bytes] = {
 class UploadRejected(DomainError):
     """The uploaded object does not match what the client declared."""
 
-    def __init__(self, message):
+    def __init__(self, message: str) -> None:
         super().__init__(message, code="upload_rejected", field="file")
 
 
@@ -47,49 +49,31 @@ class UploadRejected(DomainError):
 # ---------------------------------------------------------------------------
 
 
-def build_public_media_url(file_name: str, *, request=None, signed_url: str | None = None) -> str | None:
-    """
-    Build a public-facing URL for a file stored in S3.
+def build_public_media_url(
+    file_name: str, *, request: HttpRequest | None = None, signed_url: str | None = None
+) -> str | None:
+    """URL a client should use to reach a stored object.
 
-    If MEDIA_URL is configured it is used as the base; query-string
-    signature params from *signed_url* are appended when present.
-    AWS_S3_PRESIGNED_URL_ENDPOINT can override the host for local dev.
+    Presigned URLs are returned unchanged: SigV4 signs the host and path, so
+    rebuilding them on another base (a CDN, another addressing style) breaks
+    the signature. The exception is development, where MEDIA_PUBLIC_BASE_URL
+    points at the nginx proxy in front of LocalStack, which does not verify
+    signatures. Unsigned objects are served from MEDIA_URL.
     """
     if not file_name:
         return None
+    if signed_url and not settings.MEDIA_PUBLIC_BASE_URL:
+        return signed_url
 
-    media_url = getattr(settings, "MEDIA_URL", "")
-    presigned_url_endpoint = getattr(settings, "AWS_S3_PRESIGNED_URL_ENDPOINT", "")
-    query = ""
-
+    url = f"{settings.MEDIA_URL.rstrip('/')}/{filepath_to_uri(file_name).lstrip('/')}"
     if signed_url:
         query = urlsplit(signed_url).query
-        if presigned_url_endpoint:
-            parsed = urlsplit(signed_url)
-            ep = urlsplit(presigned_url_endpoint)
-            signed_url = urlunparse(
-                (
-                    ep.scheme or parsed.scheme,
-                    ep.netloc or parsed.netloc,
-                    parsed.path,
-                    parsed.params,
-                    parsed.query,
-                    parsed.fragment,
-                )
-            )
-
-    if media_url:
-        url = f"{media_url.rstrip('/')}/{filepath_to_uri(file_name).lstrip('/')}"
         if query:
             url = f"{url}?{query}"
-    elif signed_url:
-        url = signed_url
-    else:
-        return None
 
     if request is None or not url.startswith("/"):
         return url
-    return request.build_absolute_uri(url)
+    return str(request.build_absolute_uri(url))
 
 
 # ---------------------------------------------------------------------------
@@ -97,12 +81,13 @@ def build_public_media_url(file_name: str, *, request=None, signed_url: str | No
 # ---------------------------------------------------------------------------
 
 
-def build_upload_token(payload: dict, *, salt: str) -> str:
+def build_upload_token(payload: dict[str, Any], *, salt: str) -> str:
     return signing.dumps(payload, salt=salt)
 
 
-def load_upload_token(token: str, *, salt: str, max_age: int) -> dict:
-    return signing.loads(token, salt=salt, max_age=max_age)
+def load_upload_token(token: str, *, salt: str, max_age: int) -> dict[str, Any]:
+    payload: dict[str, Any] = signing.loads(token, salt=salt, max_age=max_age)
+    return payload
 
 
 # ---------------------------------------------------------------------------
@@ -137,10 +122,10 @@ def build_pending_asset_key(kind: str, asset_id: str, filename: str) -> str:
 # ---------------------------------------------------------------------------
 
 
-def generate_presigned_upload_url(storage, *, key: str, content_type: str, ttl_seconds: int) -> str:
+def generate_presigned_upload_url(storage: Any, *, key: str, content_type: str, ttl_seconds: int) -> str:
     """Generate a presigned PUT URL for direct client-to-S3 upload."""
     client = storage.connection.meta.client
-    return client.generate_presigned_url(
+    url: str = client.generate_presigned_url(
         "put_object",
         Params={
             "Bucket": storage.bucket_name,
@@ -150,6 +135,7 @@ def generate_presigned_upload_url(storage, *, key: str, content_type: str, ttl_s
         ExpiresIn=ttl_seconds,
         HttpMethod="PUT",
     )
+    return url
 
 
 def validate_file_magic_bytes(file_bytes: bytes, content_type: str) -> None:
@@ -174,7 +160,7 @@ def validate_file_magic_bytes(file_bytes: bytes, content_type: str) -> None:
 
 
 def move_pending_to_confirmed(
-    storage,
+    storage: Any,
     *,
     pending_key: str,
     final_key: str,
@@ -229,7 +215,7 @@ def move_pending_to_confirmed(
     client.delete_object(Bucket=storage.bucket_name, Key=pending_key)
 
 
-def cleanup_expired_pending_files(storage, prefix: str, max_age_seconds: int) -> None:
+def cleanup_expired_pending_files(storage: Any, prefix: str, max_age_seconds: int) -> None:
     """Delete objects under *prefix* in S3 that are older than *max_age_seconds*."""
     if not hasattr(storage, "bucket_name") or not hasattr(storage, "connection"):
         return
@@ -259,7 +245,7 @@ def cleanup_expired_pending_files(storage, prefix: str, max_age_seconds: int) ->
         )
 
 
-def delete_s3_file(storage, key: str) -> None:
+def delete_s3_file(storage: Any, key: str) -> None:
     """Delete a single object from S3. No-op if storage is not S3 or key is empty."""
     if not key or not hasattr(storage, "bucket_name") or not hasattr(storage, "connection"):
         return
