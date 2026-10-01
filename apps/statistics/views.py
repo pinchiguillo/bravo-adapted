@@ -1,3 +1,4 @@
+from drf_spectacular.types import OpenApiTypes
 from drf_spectacular.utils import extend_schema
 from rest_framework import permissions
 from rest_framework.response import Response
@@ -18,20 +19,20 @@ class StatisticsManagementViewMixin:
 
 @extend_schema(tags=["Management / Statistics"])
 class ManagementStatisticsDashboardView(StatisticsManagementViewMixin, APIView):
-    @extend_schema(summary="Get dashboard statistics")
+    @extend_schema(summary="Get dashboard statistics", responses=OpenApiTypes.OBJECT)
     def get(self, request):
         return Response(get_dashboard_payload())
 
 
 @extend_schema(tags=["Management / Statistics"])
 class ManagementStatisticsAnalyticsOverviewView(StatisticsManagementViewMixin, APIView):
-    @extend_schema(summary="Get analytics overview statistics")
+    @extend_schema(summary="Get analytics overview statistics", responses=OpenApiTypes.OBJECT)
     def get(self, request):
         return Response(get_analytics_overview_payload())
 
 
 @extend_schema(tags=["Management / Statistics"])
 class ManagementStatisticsWebstatsView(StatisticsManagementViewMixin, APIView):
-    @extend_schema(summary="Get webstats statistics")
+    @extend_schema(summary="Get webstats statistics", responses=OpenApiTypes.OBJECT)
     def get(self, request):
         return Response(get_webstats_payload())

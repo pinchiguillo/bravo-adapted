@@ -2,8 +2,8 @@ import base64
 
 from django.db.models import Prefetch
 from django.shortcuts import get_object_or_404
-from drf_spectacular.utils import extend_schema, extend_schema_view
-from rest_framework import mixins, permissions, status, viewsets
+from drf_spectacular.utils import extend_schema, extend_schema_view, inline_serializer
+from rest_framework import mixins, permissions, serializers, status, viewsets
 from rest_framework.decorators import api_view, permission_classes
 from rest_framework.exceptions import NotFound, PermissionDenied
 from rest_framework.response import Response
@@ -338,16 +338,6 @@ class AnnouncementViewSet(
         request=AnnouncementImageUploadRequestSerializer,
         responses={status.HTTP_201_CREATED: AnnouncementImageUploadTargetSerializer},
     ),
-    complete_upload=extend_schema(
-        summary="Complete announcement image upload",
-        description=(
-            "Confirms a previously prepared direct upload after the client has "
-            "uploaded the binary to S3-compatible storage."
-        ),
-        parameters=[organization_uuid_parameter, announcement_uuid_parameter],
-        request=AnnouncementImageUploadCompleteSerializer,
-        responses={status.HTTP_201_CREATED: AnnouncementImageSerializer},
-    ),
     destroy=extend_schema(
         summary="Delete announcement image",
         description="Deletes an image from an announcement owned by the organization in the URL.",
@@ -406,6 +396,16 @@ class AnnouncementImageViewSet(
         )
         return Response(response_serializer.data, status=status.HTTP_201_CREATED)
 
+    @extend_schema(
+        summary="Complete announcement image upload",
+        description=(
+            "Confirms a previously prepared direct upload after the client has "
+            "uploaded the binary to S3-compatible storage."
+        ),
+        parameters=[organization_uuid_parameter, announcement_uuid_parameter],
+        request=AnnouncementImageUploadCompleteSerializer,
+        responses={status.HTTP_201_CREATED: AnnouncementImageSerializer},
+    )
     def complete_upload(self, request, *args, **kwargs):
         announcement = self._get_announcement(for_write=True)
         serializer = AnnouncementImageUploadCompleteSerializer(
@@ -547,7 +547,16 @@ class OrganizationAnnouncementImageBase64ViewSet(
         return self._build_base64_response(self.get_object())
 
 
-@extend_schema(tags=["Announcements"])
+@extend_schema(
+    tags=["Announcements"],
+    summary="Add or remove a favorite announcement",
+    request=None,
+    responses={
+        200: inline_serializer("FavoriteResponse", {"favorited": serializers.BooleanField()}),
+        201: inline_serializer("FavoriteCreatedResponse", {"favorited": serializers.BooleanField()}),
+        204: None,
+    },
+)
 @api_view(["POST", "DELETE"])
 @permission_classes([IsActiveAccount])
 def announcement_favorite(request, uuid):
@@ -565,7 +574,13 @@ def announcement_favorite(request, uuid):
     return Response(status=204)
 
 
-@extend_schema(tags=["Announcements"])
+@extend_schema(
+    tags=["Announcements"],
+    summary="List my favorite announcement UUIDs",
+    responses=inline_serializer(
+        "FavoriteListResponse", {"favorites": serializers.ListField(child=serializers.UUIDField())}
+    ),
+)
 @api_view(["GET"])
 @permission_classes([IsActiveAccount])
 def list_my_favorites(request):

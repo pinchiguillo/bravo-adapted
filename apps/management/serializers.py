@@ -39,7 +39,7 @@ class ManagementUserOrganizationSerializer(serializers.ModelSerializer):
         )
         read_only_fields = fields
 
-    def get_admin_url(self, obj):
+    def get_admin_url(self, obj) -> str:
         request = self.context.get("request")
         admin_path = f"/admin/organization/organization/{obj.pk}/change/"
 

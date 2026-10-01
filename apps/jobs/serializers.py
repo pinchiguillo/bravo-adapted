@@ -145,7 +145,8 @@ class JobListSerializer(serializers.ModelSerializer):
             return obj.last_message_content[:60]
         return "📋 Propuesta"
 
-    def get_unread_count(self, obj):
+    def get_unread_count(self, obj) -> int:
+        # Read receipts are not tracked yet; the field keeps the client contract stable.
         return 0
 
     class Meta:

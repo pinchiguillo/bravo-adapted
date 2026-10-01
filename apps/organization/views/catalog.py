@@ -1,4 +1,5 @@
-from drf_spectacular.utils import extend_schema, extend_schema_view
+from drf_spectacular.types import OpenApiTypes
+from drf_spectacular.utils import OpenApiParameter, extend_schema, extend_schema_view
 from rest_framework import mixins, permissions, viewsets
 from rest_framework.decorators import action
 from rest_framework.response import Response
@@ -89,6 +90,7 @@ class ServiceCatalogViewSet(
         "services_by_category": "organization_public_read",
     }
 
+    @extend_schema(parameters=[OpenApiParameter("category_uuid", OpenApiTypes.UUID, OpenApiParameter.PATH)])
     @action(detail=False, methods=["get"], url_path="(?P<category_uuid>[^/.]+)")
     def services_by_category(self, request, category_uuid=None):
         """Get all services for a specific category"""

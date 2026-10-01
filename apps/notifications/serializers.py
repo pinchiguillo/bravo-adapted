@@ -48,7 +48,7 @@ class NotificationRecipientSerializer(serializers.ModelSerializer):
         )
         read_only_fields = fields
 
-    def get_channels(self, obj):
+    def get_channels(self, obj) -> list[str]:
         channels = []
         if obj.in_app_enabled:
             channels.append(Notification.Channel.IN_APP)
@@ -114,19 +114,19 @@ class ManagementNotificationSerializer(serializers.ModelSerializer):
             obj._notification_summary = summarize_notification(obj)
         return obj._notification_summary
 
-    def get_recipient_count(self, obj):
+    def get_recipient_count(self, obj) -> int:
         return self._summary(obj)["recipient_count"]
 
-    def get_read_count(self, obj):
+    def get_read_count(self, obj) -> int:
         return self._summary(obj)["read_count"]
 
-    def get_email_status_counts(self, obj):
+    def get_email_status_counts(self, obj) -> dict[str, int]:
         return self._summary(obj)["email_status_counts"]
 
-    def get_push_status_counts(self, obj):
+    def get_push_status_counts(self, obj) -> dict[str, int]:
         return self._summary(obj)["push_status_counts"]
 
-    def get_created_by_email(self, obj):
+    def get_created_by_email(self, obj) -> str | None:
         created_by = getattr(obj, "created_by", None)
         return getattr(created_by, "email", None)
 

@@ -34,6 +34,8 @@ class NotificationViewSet(
 ):
     permission_classes = [IsActiveAccount]
     serializer_class = NotificationRecipientSerializer
+    # Only for schema introspection; get_queryset() scopes rows to the caller.
+    queryset = NotificationRecipient.objects.none()
     throttle_scope_prefix = "notifications"
     throttle_scope_action_map = {
         "list": "notifications_read",
@@ -87,11 +89,17 @@ class NotificationViewSet(
 class NotificationPreferenceView(APIView):
     permission_classes = [IsActiveAccount]
 
+    @extend_schema(summary="Get my notification preferences", responses=NotificationPreferenceSerializer)
     def get(self, request, *args, **kwargs):
         preferences, _ = NotificationPreference.objects.get_or_create(user=request.user)
         serializer = NotificationPreferenceSerializer(preferences)
         return Response(serializer.data)
 
+    @extend_schema(
+        summary="Update my notification preferences",
+        request=NotificationPreferenceSerializer,
+        responses=NotificationPreferenceSerializer,
+    )
     def patch(self, request, *args, **kwargs):
         preferences, _ = NotificationPreference.objects.get_or_create(user=request.user)
         serializer = NotificationPreferenceSerializer(

@@ -234,21 +234,9 @@ class RgpdPublicPolicyViewSet(mixins.ListModelMixin, viewsets.GenericViewSet):
         return Response(serializer.data, status=status.HTTP_200_OK)
 
 
-@extend_schema_view(
-    list=extend_schema(
-        tags=["RGPD"],
-        summary="List my RGPD requests",
-        responses=RgpdDataRequestSerializer(many=True),
-    ),
-    create=extend_schema(
-        tags=["RGPD"],
-        summary="Create RGPD request",
-        request=RgpdDataRequestCreateSerializer,
-        responses={201: RgpdDataRequestSerializer},
-    ),
-)
 class RgpdDataRequestViewSet(ActionScopedRateThrottleMixin, viewsets.GenericViewSet):
     permission_classes = [IsActiveAccount]
+    serializer_class = RgpdDataRequestSerializer
     throttle_scope_prefix = "rgpd"
     throttle_scope_action_map = {
         "me": "rgpd_authenticated_read",
@@ -258,11 +246,18 @@ class RgpdDataRequestViewSet(ActionScopedRateThrottleMixin, viewsets.GenericView
     def get_queryset(self):
         return RgpdDataRequest.objects.filter(user=self.request.user).order_by("-submitted_at", "-id")
 
+    @extend_schema(tags=["RGPD"], summary="List my RGPD requests", responses=RgpdDataRequestSerializer(many=True))
     @action(detail=False, methods=["get"], url_path="me")
     def me(self, request):
         serializer = RgpdDataRequestSerializer(self.get_queryset(), many=True)
         return Response(serializer.data, status=status.HTTP_200_OK)
 
+    @extend_schema(
+        tags=["RGPD"],
+        summary="Create RGPD request",
+        request=RgpdDataRequestCreateSerializer,
+        responses={201: RgpdDataRequestSerializer},
+    )
     @me.mapping.post
     def create_me(self, request):
         serializer = RgpdDataRequestCreateSerializer(data=request.data)

@@ -2,6 +2,7 @@ import uuid
 
 from django.contrib.auth import get_user_model
 from django.db.models import Count, Q, Sum
+from drf_spectacular.types import OpenApiTypes
 from drf_spectacular.utils import OpenApiParameter, extend_schema, extend_schema_view
 from rest_framework import mixins, permissions, status, viewsets
 from rest_framework.decorators import action
@@ -709,6 +710,7 @@ class ManagementStatsView(APIView):
     @extend_schema(
         summary="Get management statistics",
         description="Aggregated counts for users, organizations, announcements, jobs and catalogs.",
+        responses=OpenApiTypes.OBJECT,
     )
     def get(self, request):
         User = get_user_model()
@@ -803,6 +805,7 @@ class ManagementAssetStatsView(APIView):
     @extend_schema(
         summary="Get asset statistics",
         description="Aggregated counts and sizes for assets by kind and status.",
+        responses=OpenApiTypes.OBJECT,
     )
     def get(self, request):
         base_queryset = Asset.objects.all()

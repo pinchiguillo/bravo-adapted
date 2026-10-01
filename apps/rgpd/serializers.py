@@ -66,15 +66,19 @@ class RgpdConsentSerializer(serializers.ModelSerializer):
         )
 
     def _build_snapshot(self, obj):
-        return build_policy_acceptance_snapshot(user=obj.user)
+        # Three fields read the same snapshot; build it once per object.
+        cache = self.__dict__.setdefault("_snapshots", {})
+        if obj.pk not in cache:
+            cache[obj.pk] = build_policy_acceptance_snapshot(user=obj.user)
+        return cache[obj.pk]
 
-    def get_accepted_documents(self, obj):
+    def get_accepted_documents(self, obj) -> dict[str, dict]:
         return self._build_snapshot(obj)["accepted_documents"]
 
-    def get_required_documents(self, obj):
+    def get_required_documents(self, obj) -> list[dict]:
         return self._build_snapshot(obj)["required_documents"]
 
-    def get_requires_reacceptance(self, obj):
+    def get_requires_reacceptance(self, obj) -> bool:
         return self._build_snapshot(obj)["requires_reacceptance"]
 
 
@@ -138,15 +142,18 @@ class RgpdAnonymousConsentSerializer(serializers.ModelSerializer):
         )
 
     def _build_snapshot(self, obj):
-        return build_policy_acceptance_snapshot(anonymous_consent=obj)
+        cache = self.__dict__.setdefault("_snapshots", {})
+        if obj.pk not in cache:
+            cache[obj.pk] = build_policy_acceptance_snapshot(anonymous_consent=obj)
+        return cache[obj.pk]
 
-    def get_accepted_documents(self, obj):
+    def get_accepted_documents(self, obj) -> dict[str, dict]:
         return self._build_snapshot(obj)["accepted_documents"]
 
-    def get_required_documents(self, obj):
+    def get_required_documents(self, obj) -> list[dict]:
         return self._build_snapshot(obj)["required_documents"]
 
-    def get_requires_reacceptance(self, obj):
+    def get_requires_reacceptance(self, obj) -> bool:
         return self._build_snapshot(obj)["requires_reacceptance"]
 
 
@@ -299,7 +306,7 @@ class ManagementRgpdPolicyDocumentSerializer(serializers.ModelSerializer):
         )
         read_only_fields = fields
 
-    def get_current_version(self, obj):
+    def get_current_version(self, obj) -> dict | None:
         version = obj.versions.filter(is_current=True, is_published=True).first()
         if version is None:
             return None

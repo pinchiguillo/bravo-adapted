@@ -491,9 +491,15 @@ SIMPLE_JWT = {
     "USER_AUTHENTICATION_RULE": "common.permissions.user_can_authenticate",
 }
 
+# Choice sets shared by several models (account/organization status, delivery
+# status) are named once.
 spectacular_enum_name_overrides = {
     "ActiveStateStatusEnum": "apps.auth.models.CustomUser.Status",
     "AnnouncementStatusEnum": "apps.organization.models.announcement.Announcement.Status",
+    "JobStatusEnum": "apps.jobs.models.job.Job.Status",
+    "AssetStatusEnum": "apps.assets.models.Asset.Status",
+    "DeliveryStatusEnum": "apps.notifications.models.NotificationRecipient.DeliveryStatus",
+    "DataRequestStatusEnum": "apps.rgpd.models.RgpdDataRequest.Status",
 }
 
 SPECTACULAR_SETTINGS = {
