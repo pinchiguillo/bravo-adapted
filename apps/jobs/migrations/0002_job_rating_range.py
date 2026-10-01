@@ -6,6 +6,13 @@ from django.conf import settings
 from django.db import migrations, models
 
 
+def clear_out_of_range_ratings(apps, schema_editor):
+    """Ratings outside 1-5 were accepted before; they carry no usable signal."""
+    Job = apps.get_model("jobs", "Job")
+    out_of_range = models.Q(organization_rating__lt=1) | models.Q(organization_rating__gt=5)
+    Job.objects.filter(out_of_range).update(organization_rating=None)
+
+
 class Migration(migrations.Migration):
 
     dependencies = [
@@ -15,6 +22,7 @@ class Migration(migrations.Migration):
     ]
 
     operations = [
+        migrations.RunPython(clear_out_of_range_ratings, migrations.RunPython.noop),
         migrations.AlterField(
             model_name='job',
             name='organization_rating',

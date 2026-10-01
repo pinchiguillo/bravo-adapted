@@ -5,6 +5,32 @@ from decimal import Decimal
 from django.db import migrations, models
 
 
+def refuse_negative_prices(apps, schema_editor):
+    """Stop before adding the CHECK constraints if negative prices exist.
+
+    Money is not rewritten silently: fix or delete those rows, then migrate.
+    """
+    ServicePrice = apps.get_model("organization", "ServicePrice")
+    OrganizationPricing = apps.get_model("organization", "OrganizationPricing")
+    negative_prices = ServicePrice.objects.filter(amount__lt=0).count()
+    negative_plans = OrganizationPricing.objects.filter(monthly_price__lt=0).count()
+    if negative_prices or negative_plans:
+        raise RuntimeError(
+            f"Found {negative_prices} negative service prices and {negative_plans} negative plan prices; "
+            "correct them before applying organization.0018."
+        )
+
+
+def normalise_currencies(apps, schema_editor):
+    for model_name in ("ServicePrice", "OrganizationPricing"):
+        model = apps.get_model("organization", model_name)
+        for row in model.objects.exclude(currency__in=["EUR", "USD", "GBP"]).only("pk", "currency"):
+            normalised = row.currency.strip().upper()
+            if normalised not in {"EUR", "USD", "GBP"}:
+                raise RuntimeError(f"{model_name} {row.pk} has unsupported currency {row.currency!r}.")
+            model.objects.filter(pk=row.pk).update(currency=normalised)
+
+
 class Migration(migrations.Migration):
 
     dependencies = [
@@ -12,6 +38,8 @@ class Migration(migrations.Migration):
     ]
 
     operations = [
+        migrations.RunPython(refuse_negative_prices, migrations.RunPython.noop),
+        migrations.RunPython(normalise_currencies, migrations.RunPython.noop),
         migrations.AlterField(
             model_name='organizationpricing',
             name='currency',
