@@ -8,11 +8,18 @@ from django.core.exceptions import ValidationError as DjangoValidationError
 from django.db import transaction
 from django.db.models import Q
 
+from apps.jobs.models import Job
 from apps.notifications.services import emit_job_chat_message_notification
 from common.exceptions import ConflictError, DomainError, NotFoundError, PermissionDeniedError
 
 from .models import JobChat, JobChatMessage
-from .serializers import PROPOSAL_ANSWERS, PROPOSAL_PENDING, PROPOSAL_WIDGET, JobChatMessageSerializer
+from .serializers import (
+    PROPOSAL_ACCEPTED,
+    PROPOSAL_ANSWERS,
+    PROPOSAL_PENDING,
+    PROPOSAL_WIDGET,
+    JobChatMessageSerializer,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -71,6 +78,10 @@ def set_proposal_status(*, job, message_uuid, actor, new_status):
         proposal["status"] = new_status
         message.content = json.dumps(widget)
         message.save(update_fields=["content", "updated_at"])
+
+        if new_status == PROPOSAL_ACCEPTED:
+            # Agreeing on a price is what starts the job.
+            Job.objects.filter(pk=job.pk, status=Job.Status.PENDING).update(status=Job.Status.ACTIVE)
     return message
 
 

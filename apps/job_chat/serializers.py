@@ -36,7 +36,8 @@ class JobChatMessageSerializer(serializers.ModelSerializer):
 
 PROPOSAL_WIDGET = "proposal"
 PROPOSAL_PENDING = "pending"
-PROPOSAL_ANSWERS = ("accepted", "rejected")
+PROPOSAL_ACCEPTED = "accepted"
+PROPOSAL_ANSWERS = (PROPOSAL_ACCEPTED, "rejected")
 PROPOSAL_PRICE_MODES = ("total", "hourly", "daily", "monthly", "per_sqm", "per_unit")
 
 

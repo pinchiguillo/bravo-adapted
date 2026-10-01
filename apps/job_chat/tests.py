@@ -185,6 +185,26 @@ class ProposalWidgetTests(JobChatTestCase):
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertEqual(json.loads(response.data["content"])["data"]["status"], "accepted")
 
+    def test_accepting_a_proposal_starts_a_pending_job(self):
+        self.job.status = Job.Status.PENDING
+        self.job.save(update_fields=["status"])
+        proposal = self._send(self.provider_user, self._proposal()).data
+
+        self._answer(self.customer, proposal["uuid"], "accepted")
+
+        self.job.refresh_from_db()
+        self.assertEqual(self.job.status, Job.Status.ACTIVE)
+
+    def test_rejecting_a_proposal_leaves_the_job_pending(self):
+        self.job.status = Job.Status.PENDING
+        self.job.save(update_fields=["status"])
+        proposal = self._send(self.provider_user, self._proposal()).data
+
+        self._answer(self.customer, proposal["uuid"], "rejected")
+
+        self.job.refresh_from_db()
+        self.assertEqual(self.job.status, Job.Status.PENDING)
+
     def test_author_cannot_answer_their_own_proposal(self):
         proposal = self._send(self.provider_user, self._proposal()).data
 

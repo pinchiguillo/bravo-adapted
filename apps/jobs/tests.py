@@ -366,3 +366,22 @@ class JobApiTests(APITestCase):
         job = next(item for item in response.data if item["uuid"] == str(self.user_job.uuid))
         self.assertEqual(job["last_message_preview"], "latest message")
         self.assertIsNotNone(job["last_message_time"])
+
+    def test_provider_can_decline_a_pending_request(self):
+        response = self._patch(self.other_user, self.provider_visible_job, {"status": "rejected"})
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.provider_visible_job.refresh_from_db()
+        self.assertEqual(self.provider_visible_job.status, Job.Status.REJECTED)
+
+    def test_provider_can_mark_an_active_job_completed_but_not_rate_it(self):
+        completed = self._patch(self.other_user, self.user_job, {"status": "completed"})
+        rating = self._patch(self.other_user, self.user_job, {"organization_rating": "5.00"})
+
+        self.assertEqual(completed.status_code, status.HTTP_200_OK)
+        self.assertEqual(rating.status_code, status.HTTP_400_BAD_REQUEST)
+
+    def test_provider_cannot_use_requester_transitions(self):
+        response = self._patch(self.other_user, self.provider_visible_job, {"status": "inactive"})
+
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)

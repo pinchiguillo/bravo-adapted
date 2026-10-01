@@ -89,7 +89,7 @@ class JobCreateSerializer(serializers.ModelSerializer):
 
 
 class JobUpdateSerializer(serializers.ModelSerializer):
-    """Requesters move a job through Job.REQUESTER_TRANSITIONS and rate it once completed."""
+    """Participants move a job through their allowed transitions; requesters rate completed jobs."""
 
     class Meta:
         model = Job
@@ -100,11 +100,23 @@ class JobUpdateSerializer(serializers.ModelSerializer):
         actor = self.context["request"].user
         new_status = attrs.get("status", job.status)
 
-        allowed = Job.REQUESTER_TRANSITIONS.get(job.status, set())
-        if new_status != job.status and not actor.is_staff and new_status not in allowed:
-            raise serializers.ValidationError({"status": f"A job cannot move from '{job.status}' to '{new_status}'."})
-        if attrs.get("organization_rating") is not None and new_status != Job.Status.COMPLETED:
-            raise serializers.ValidationError({"organization_rating": "Only completed jobs can be rated."})
+        if new_status != job.status and not actor.is_staff:
+            if job.is_requester(actor):
+                allowed = Job.REQUESTER_TRANSITIONS.get(job.status, set())
+            elif job.is_provider(actor):
+                allowed = Job.PROVIDER_TRANSITIONS.get(job.status, set())
+            else:
+                allowed = set()
+            if new_status not in allowed:
+                raise serializers.ValidationError(
+                    {"status": f"You cannot move this job from '{job.status}' to '{new_status}'."}
+                )
+
+        if attrs.get("organization_rating") is not None:
+            if not (job.is_requester(actor) or actor.is_staff):
+                raise serializers.ValidationError({"organization_rating": "Only the requester can rate a job."})
+            if new_status != Job.Status.COMPLETED:
+                raise serializers.ValidationError({"organization_rating": "Only completed jobs can be rated."})
         return attrs
 
 

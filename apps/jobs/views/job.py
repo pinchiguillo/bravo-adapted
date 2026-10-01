@@ -37,7 +37,7 @@ from ..serializers import JobListSerializer, JobSerializer, JobUpdateSerializer
     ),
     update=extend_schema(
         summary="Update job",
-        description="Updates a job's status or rating.",
+        description="Moves a job through the participant's allowed transitions; the requester rates completed jobs.",
         request=JobUpdateSerializer,
         responses={
             status.HTTP_200_OK: JobSerializer,
@@ -132,8 +132,9 @@ class JobViewSet(
         return Response(serializer.data)
 
     def perform_update(self, serializer):
-        job = self.get_object()
-        if job.user != self.request.user and not self.request.user.is_staff:
+        job = serializer.instance
+        user = self.request.user
+        if not (job.is_requester(user) or job.is_provider(user) or user.is_staff):
             raise PermissionDenied("You don't have permission to update this job.")
         serializer.save()
 

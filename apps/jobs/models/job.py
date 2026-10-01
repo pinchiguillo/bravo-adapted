@@ -15,10 +15,16 @@ class Job(models.Model):
         SUSPENDED = "suspended", "Suspended"
         INACTIVE = "inactive", "Inactive"
 
-    # Status changes a requester may make; staff can set any status.
+    # Status changes each participant may make; staff can set any status.
+    # PENDING -> ACTIVE happens when the requester accepts a price proposal
+    # (job_chat.services.set_proposal_status).
     REQUESTER_TRANSITIONS = {
         Status.PENDING: {Status.INACTIVE},
         Status.ACTIVE: {Status.COMPLETED, Status.INACTIVE},
+    }
+    PROVIDER_TRANSITIONS = {
+        Status.PENDING: {Status.REJECTED},
+        Status.ACTIVE: {Status.COMPLETED},
     }
 
     id = models.AutoField(primary_key=True)
