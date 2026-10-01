@@ -487,6 +487,11 @@ REST_FRAMEWORK = {
     },
 }
 
+# A session (login) cannot be kept alive by refreshing beyond this age.
+JWT_MAX_SESSION_AGE = timedelta(days=env_int("JWT_MAX_SESSION_DAYS", 30))
+AUTH_LOGIN_MAX_FAILURES = env_int("AUTH_LOGIN_MAX_FAILURES", 10)
+AUTH_LOGIN_FAILURE_WINDOW_SECONDS = env_int("AUTH_LOGIN_FAILURE_WINDOW_SECONDS", 15 * 60)
+
 SIMPLE_JWT = {
     "ACCESS_TOKEN_LIFETIME": timedelta(minutes=env_int("JWT_ACCESS_TOKEN_LIFETIME_MINUTES", 15)),
     "REFRESH_TOKEN_LIFETIME": timedelta(days=env_int("JWT_REFRESH_TOKEN_LIFETIME_DAYS", 7)),

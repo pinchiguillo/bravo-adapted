@@ -320,6 +320,20 @@ class ManagementApiTests(APITestCase):
         self.superuser.refresh_from_db()
         self.assertEqual(self.superuser.status, self.superuser.Status.ACTIVE)
 
+    def test_resetting_a_password_ends_the_users_sessions(self):
+        from rest_framework_simplejwt.token_blacklist.models import OutstandingToken
+
+        from apps.auth.sessions import issue_tokens
+
+        issue_tokens(self.staff_candidate)
+
+        response = self._patch_user(self.admin_user, self.staff_candidate, {"password": "A-New-Passw0rd-123"})
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        outstanding = OutstandingToken.objects.filter(user=self.staff_candidate)
+        self.assertTrue(outstanding.exists())
+        self.assertFalse(outstanding.filter(blacklistedtoken__isnull=True).exists())
+
     def test_admins_cannot_change_their_own_role_or_status(self):
         demote = self._patch_user(self.superuser, self.superuser, {"is_superuser": False})
         self.client.force_authenticate(user=self.superuser)

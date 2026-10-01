@@ -216,6 +216,61 @@ class AuthApiTests(APITestCase):
         self.assertEqual(response.status_code, 401)
         self.assertEqual(response.data["code"], "token_not_valid")
 
+    def _expired_access_token(self):
+        from datetime import timedelta
+
+        from rest_framework_simplejwt.tokens import AccessToken
+
+        token = AccessToken.for_user(self.user)
+        token.set_exp(lifetime=-timedelta(minutes=1))
+        return str(token)
+
+    def test_refresh_and_logout_ignore_a_stale_authorization_header(self):
+        refresh = self._login_tokens()["refresh"]
+        self.client.credentials(HTTP_AUTHORIZATION=f"Bearer {self._expired_access_token()}")
+
+        refreshed = self.client.post("/api/auth/token/refresh/", {"refresh": refresh}, format="json")
+        logout = self.client.post("/api/auth/logout/", {"refresh": refreshed.data["refresh"]}, format="json")
+
+        self.assertEqual(refreshed.status_code, 200)
+        self.assertEqual(logout.status_code, 204)
+
+    def test_replaying_a_rotated_refresh_token_ends_every_session(self):
+        old_refresh = self._login_tokens()["refresh"]
+        current_refresh = self.client.post(
+            "/api/auth/token/refresh/", {"refresh": old_refresh}, format="json"
+        ).data["refresh"]
+        other_device_refresh = self._login_tokens()["refresh"]
+
+        replay = self.client.post("/api/auth/token/refresh/", {"refresh": old_refresh}, format="json")
+
+        self.assertEqual(replay.status_code, 401)
+        for token in (current_refresh, other_device_refresh):
+            response = self.client.post("/api/auth/token/refresh/", {"refresh": token}, format="json")
+            self.assertEqual(response.status_code, 401)
+
+    @override_settings(JWT_MAX_SESSION_AGE=__import__("datetime").timedelta(seconds=0))
+    def test_sessions_cannot_be_refreshed_past_their_maximum_age(self):
+        refresh = self._login_tokens()["refresh"]
+
+        response = self.client.post("/api/auth/token/refresh/", {"refresh": refresh}, format="json")
+
+        self.assertEqual(response.status_code, 401)
+        self.assertIn("expired", str(response.data["detail"]).lower())
+
+    def test_logout_all_revokes_every_device(self):
+        first = self._login_tokens()
+        second = self._login_tokens()
+        self.client.credentials(HTTP_AUTHORIZATION=f"Bearer {first['access']}")
+
+        response = self.client.post("/api/auth/logout-all/")
+
+        self.client.credentials()
+        self.assertEqual(response.status_code, 204)
+        for token in (first["refresh"], second["refresh"]):
+            refreshed = self.client.post("/api/auth/token/refresh/", {"refresh": token}, format="json")
+            self.assertEqual(refreshed.status_code, 401)
+
     def test_access_tokens_are_short_lived(self):
         from datetime import timedelta
 
@@ -514,6 +569,49 @@ class AuthThrottleTests(APITestCase):
 
         self.assertEqual(statuses[:5], [401] * 5)
         self.assertEqual(statuses[5], 429)
+
+    def test_a_valid_bearer_token_does_not_open_a_new_login_bucket(self):
+        from rest_framework_simplejwt.tokens import AccessToken
+
+        attacker = get_user_model().objects.create_user(
+            username="attacker", email="attacker@example.com", password=self.password, email_verified=True
+        )
+        payload = {"email": self.email, "password": "wrong-password"}
+        anonymous = [self.client.post("/api/auth/login/", payload, format="json").status_code for _ in range(5)]
+        self.client.credentials(HTTP_AUTHORIZATION=f"Bearer {AccessToken.for_user(attacker)}")
+
+        with_token = self.client.post("/api/auth/login/", payload, format="json")
+
+        self.assertEqual(anonymous, [401] * 5)
+        self.assertEqual(with_token.status_code, 429)
+
+    @override_settings(TRUSTED_PROXY_IPS=["127.0.0.1"], AUTH_LOGIN_MAX_FAILURES=3)
+    def test_failed_logins_are_limited_per_account_across_ips(self):
+        def attempt(index, password="wrong-password"):
+            return self.client.post(
+                "/api/auth/login/",
+                {"email": self.email, "password": password},
+                format="json",
+                HTTP_X_FORWARDED_FOR=f"198.51.100.{index}",
+            ).status_code
+
+        failures = [attempt(index) for index in range(3)]
+        locked = attempt(10, password=self.password)
+
+        self.assertEqual(failures, [401] * 3)
+        self.assertEqual(locked, 429)
+
+    @override_settings(AUTH_LOGIN_MAX_FAILURES=3)
+    def test_a_successful_login_resets_the_account_counter(self):
+        payload = {"email": self.email, "password": "wrong-password"}
+        self.client.post("/api/auth/login/", payload, format="json")
+        self.client.post("/api/auth/login/", payload, format="json")
+
+        success = self.client.post("/api/auth/login/", {"email": self.email, "password": self.password}, format="json")
+        after = [self.client.post("/api/auth/login/", payload, format="json").status_code for _ in range(2)]
+
+        self.assertEqual(success.status_code, 200)
+        self.assertEqual(after, [401, 401])
 
     def test_register_is_throttled_after_rate_limit(self):
         class RegisterTestThrottle(SimpleRateThrottle):

@@ -10,8 +10,8 @@ ignore = [
 ]
 
 [tool.ruff.lint.per-file-ignores]
-"**/tests.py" = ["S101", "S105", "S106", "S108", "S311"]
-"**/tests_*.py" = ["S101", "S105", "S106", "S108", "S311"]
+"**/tests.py" = ["S101", "S105", "S106", "S107", "S108", "S311"]
+"**/tests_*.py" = ["S101", "S105", "S106", "S107", "S108", "S311"]
 "conftest.py" = ["S101"]
 "apps/*/management/commands/*.py" = ["S311"]  # demo seed data, not security-sensitive randomness
 "scripts/**" = ["S", "T20", "BLE", "B", "SIM105"]  # standalone smoke scripts that print and call external URLs

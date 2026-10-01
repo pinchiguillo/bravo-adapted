@@ -5,6 +5,7 @@ from drf_spectacular.utils import extend_schema_field
 from rest_framework import serializers
 
 from apps.assets.models import Asset
+from apps.auth.sessions import revoke_all_refresh_tokens
 from apps.job_chat.models import JobChat
 from apps.job_chat.serializers import JobChatMessageSerializer
 from apps.jobs.models import Job
@@ -136,6 +137,9 @@ class ManagementUserSerializer(serializers.ModelSerializer):
         if password:
             instance.set_password(password)
         instance.save()
+        if password:
+            # A reset password must end the sessions opened with the old one.
+            revoke_all_refresh_tokens(instance.pk)
         return instance
 
 

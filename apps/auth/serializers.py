@@ -11,6 +11,7 @@ from rest_framework import serializers
 from rest_framework.exceptions import AuthenticationFailed
 from rest_framework_simplejwt.serializers import TokenObtainPairSerializer
 
+from apps.auth.sessions import issue_tokens
 from common.client_ip import get_client_ip
 from common.permissions import get_email_verification_denial_message
 
@@ -130,6 +131,10 @@ class RegisterSerializer(serializers.ModelSerializer):
 
 class EmailTokenObtainPairSerializer(TokenObtainPairSerializer):
     username_field = get_user_model().USERNAME_FIELD
+
+    @classmethod
+    def get_token(cls, user):
+        return issue_tokens(user)
 
     def validate(self, attrs):
         data = super().validate(attrs)
