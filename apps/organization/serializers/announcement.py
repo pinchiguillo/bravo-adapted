@@ -49,10 +49,7 @@ def load_announcement_image_upload_token(token, *, max_age):
 def build_pending_announcement_image_name(announcement, filename):
     ext = os.path.splitext(filename)[1].lower()
     now = timezone.now()
-    return (
-        f"organization-announcements-pending/"
-        f"{announcement.uuid}/{now:%Y/%m/%d}/{uuid.uuid4().hex}{ext}"
-    )
+    return f"organization-announcements-pending/{announcement.uuid}/{now:%Y/%m/%d}/{uuid.uuid4().hex}{ext}"
 
 
 def build_final_announcement_image_name(image_instance, filename):
@@ -72,9 +69,7 @@ class AnnouncementImageSerializer(serializers.ModelSerializer):
         read_only_fields = ("uuid", "image_url", "base64_url", "filename", "created_at")
 
     def validate_image(self, image):
-        allowed_content_types = set(
-            getattr(settings, "ORGANIZATION_ANNOUNCEMENT_IMAGE_ALLOWED_CONTENT_TYPES", [])
-        )
+        allowed_content_types = set(getattr(settings, "ORGANIZATION_ANNOUNCEMENT_IMAGE_ALLOWED_CONTENT_TYPES", []))
         content_type = getattr(image, "content_type", "")
         detected_content_type = self._detect_content_type(image)
 
@@ -85,9 +80,7 @@ class AnnouncementImageSerializer(serializers.ModelSerializer):
 
         max_bytes = getattr(settings, "ORGANIZATION_ANNOUNCEMENT_IMAGE_MAX_BYTES", 5 * 1024 * 1024)
         if image.size > max_bytes:
-            raise serializers.ValidationError(
-                f"File exceeds the maximum allowed size of {max_bytes} bytes."
-            )
+            raise serializers.ValidationError(f"File exceeds the maximum allowed size of {max_bytes} bytes.")
         return image
 
     @extend_schema_field(serializers.URLField(allow_null=True))
@@ -174,9 +167,7 @@ class AnnouncementImageUploadRequestSerializer(serializers.Serializer):
 
     def validate_content_type(self, value):
         content_type = str(value).strip().lower()
-        allowed_content_types = set(
-            getattr(settings, "ORGANIZATION_ANNOUNCEMENT_IMAGE_ALLOWED_CONTENT_TYPES", [])
-        )
+        allowed_content_types = set(getattr(settings, "ORGANIZATION_ANNOUNCEMENT_IMAGE_ALLOWED_CONTENT_TYPES", []))
         if allowed_content_types and content_type not in allowed_content_types:
             raise serializers.ValidationError("Unsupported file type.")
         return content_type
@@ -184,9 +175,7 @@ class AnnouncementImageUploadRequestSerializer(serializers.Serializer):
     def validate_size_bytes(self, value):
         max_bytes = getattr(settings, "ORGANIZATION_ANNOUNCEMENT_IMAGE_MAX_BYTES", 5 * 1024 * 1024)
         if value > max_bytes:
-            raise serializers.ValidationError(
-                f"File exceeds the maximum allowed size of {max_bytes} bytes."
-            )
+            raise serializers.ValidationError(f"File exceeds the maximum allowed size of {max_bytes} bytes.")
         return value
 
     def validate(self, attrs):
@@ -195,9 +184,7 @@ class AnnouncementImageUploadRequestSerializer(serializers.Serializer):
         content_type = attrs["content_type"]
         detected_content_type, _ = mimetypes.guess_type(filename)
         if detected_content_type and detected_content_type != content_type:
-            raise serializers.ValidationError(
-                {"content_type": "File content type does not match filename extension."}
-            )
+            raise serializers.ValidationError({"content_type": "File content type does not match filename extension."})
         return attrs
 
     def create(self, validated_data):
@@ -309,9 +296,8 @@ class AnnouncementImageUploadCompleteSerializer(serializers.Serializer):
             raise serializers.ValidationError("Invalid upload token.") from exc
 
         announcement = self.context["announcement"]
-        if (
-            payload.get("announcement_uuid") != str(announcement.uuid)
-            or payload.get("organization_uuid") != str(announcement.organization.uuid)
+        if payload.get("announcement_uuid") != str(announcement.uuid) or payload.get("organization_uuid") != str(
+            announcement.organization.uuid
         ):
             raise serializers.ValidationError("Upload token does not belong to this announcement.")
 
@@ -432,17 +418,13 @@ class AnnouncementSerializer(serializers.ModelSerializer):
         for subservice in subservices:
             identifier = (subservice["service_catalog"].pk, subservice["name"].strip().lower())
             if identifier in seen_subservices:
-                raise serializers.ValidationError(
-                    "Subservices must be unique by service catalog and name."
-                )
+                raise serializers.ValidationError("Subservices must be unique by service catalog and name.")
             seen_subservices.add(identifier)
         return subservices
 
     def validate_image_uuids(self, images):
         if self.instance is None:
-            raise serializers.ValidationError(
-                "image_uuids can only be used when updating an existing announcement."
-            )
+            raise serializers.ValidationError("image_uuids can only be used when updating an existing announcement.")
 
         seen_image_ids = set()
         invalid_images = []
@@ -454,9 +436,7 @@ class AnnouncementSerializer(serializers.ModelSerializer):
                 invalid_images.append(str(image.uuid))
 
         if invalid_images:
-            raise serializers.ValidationError(
-                f"Images do not belong to this announcement: {', '.join(invalid_images)}"
-            )
+            raise serializers.ValidationError(f"Images do not belong to this announcement: {', '.join(invalid_images)}")
         return images
 
     def _create_subservices(self, announcement, subservices):
@@ -553,22 +533,22 @@ class AnnouncementStatusChangeSerializer(serializers.ModelSerializer):
     class Meta:
         model = AnnouncementStatusChange
         fields = [
-            'uuid',
-            'announcement',
-            'from_status',
-            'to_status',
-            'reason',
-            'reason_text',
-            'changed_by',
-            'created_at',
+            "uuid",
+            "announcement",
+            "from_status",
+            "to_status",
+            "reason",
+            "reason_text",
+            "changed_by",
+            "created_at",
         ]
-        read_only_fields = ['uuid', 'created_at']
+        read_only_fields = ["uuid", "created_at"]
 
 
 class AnnouncementFavoriteSerializer(serializers.ModelSerializer):
-    announcement_uuid = serializers.UUIDField(source='announcement.uuid', read_only=True)
+    announcement_uuid = serializers.UUIDField(source="announcement.uuid", read_only=True)
 
     class Meta:
         model = AnnouncementFavorite
-        fields = ('announcement_uuid', 'created_at')
-        read_only_fields = ('announcement_uuid', 'created_at')
+        fields = ("announcement_uuid", "created_at")
+        read_only_fields = ("announcement_uuid", "created_at")

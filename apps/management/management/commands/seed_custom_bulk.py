@@ -35,8 +35,16 @@ SERVICES = [
 ]
 
 CITIES = [
-    "Madrid", "Barcelona", "Valencia", "Sevilla", "Bilbao",
-    "Alicante", "Murcia", "Córdoba", "Valladolid", "Zaragoza",
+    "Madrid",
+    "Barcelona",
+    "Valencia",
+    "Sevilla",
+    "Bilbao",
+    "Alicante",
+    "Murcia",
+    "Córdoba",
+    "Valladolid",
+    "Zaragoza",
 ]
 
 
@@ -147,7 +155,7 @@ class Command(BaseCommand):
                 counters["organizations"] += 1
 
             selected_service_catalogs = []
-            for service_data in SERVICES[:randint(2, 4)]:
+            for service_data in SERVICES[: randint(2, 4)]:
                 category = categories_by_name[choice(list(categories_by_name.keys()))]
                 service_catalog, _ = ServiceCatalog.objects.update_or_create(
                     name=service_data["name"],
@@ -204,9 +212,7 @@ class Command(BaseCommand):
             if not subservices:
                 continue
 
-            category = categories_by_name.get(
-                choice(list(categories_by_name.keys()))
-            )
+            category = categories_by_name.get(choice(list(categories_by_name.keys())))
             announcement_name = f"Announcement {i:04d} - {organization.name}"
             announcement, created = Announcement.objects.get_or_create(
                 organization=organization,

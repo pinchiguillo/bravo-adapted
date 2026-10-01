@@ -67,9 +67,7 @@ class Command(BaseCommand):
 
         if not organizations.exists():
             counters["organizations_skipped"] += 1
-            self.stdout.write(
-                self.style.WARNING("No active organizations found. No announcements were created.")
-            )
+            self.stdout.write(self.style.WARNING("No active organizations found. No announcements were created."))
 
         self.stdout.write(
             self.style.SUCCESS(

@@ -198,6 +198,8 @@ announcement_categories_parameter = OpenApiParameter(
     style="form",
     description="Optional list of category UUIDs used to filter announcements.",
 )
+
+
 class OrganizationVisibilityMixin:
     def get_url_organization(self):
         organization_uuid = self.kwargs.get("organization_uuid")
@@ -212,11 +214,7 @@ class OrganizationVisibilityMixin:
         user = getattr(self.request, "user", None)
         return bool(
             organization.is_validated
-            or (
-                user is not None
-                and user.is_authenticated
-                and (user.is_staff or organization.user_id == user.id)
-            )
+            or (user is not None and user.is_authenticated and (user.is_staff or organization.user_id == user.id))
         )
 
     def require_visible_organization(self):

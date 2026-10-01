@@ -153,10 +153,14 @@ class ManagementSendNotificationSerializer(serializers.Serializer):
         target_type = attrs["target_type"]
         target_uuid = attrs.get("target_uuid")
 
-        if target_type in {
-            Notification.TargetType.USER,
-            Notification.TargetType.ORGANIZATION,
-        } and target_uuid is None:
+        if (
+            target_type
+            in {
+                Notification.TargetType.USER,
+                Notification.TargetType.ORGANIZATION,
+            }
+            and target_uuid is None
+        ):
             raise serializers.ValidationError({"target_uuid": "This field is required for the selected target_type."})
 
         if target_type == Notification.TargetType.BROADCAST and target_uuid is not None:
@@ -194,4 +198,3 @@ class NotificationUnreadCountSerializer(serializers.Serializer):
 
 class NotificationRecipientReadSerializer(serializers.Serializer):
     uuid = serializers.UUIDField(read_only=True)
-

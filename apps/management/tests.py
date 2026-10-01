@@ -208,10 +208,12 @@ class ManagementApiTests(APITestCase):
         self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
         self.assertIn("is_staff", response.data)
         self.assertFalse(
-            get_user_model().objects.filter(
+            get_user_model()
+            .objects.filter(
                 email="new-admin-user@example.com",
                 is_staff=True,
-            ).exists()
+            )
+            .exists()
         )
 
     def test_admin_cannot_create_user_without_password(self):
@@ -232,9 +234,7 @@ class ManagementApiTests(APITestCase):
     def test_admin_can_suspend_user(self):
         self.client.force_authenticate(user=self.admin_user)
 
-        response = self.client.post(
-            reverse("management-users-suspend", kwargs={"uuid": self.staff_candidate.uuid})
-        )
+        response = self.client.post(reverse("management-users-suspend", kwargs={"uuid": self.staff_candidate.uuid}))
 
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.staff_candidate.refresh_from_db()
@@ -349,9 +349,7 @@ class ManagementApiTests(APITestCase):
         self.assertTrue(self.superuser.is_active)
 
     def test_echoing_unchanged_role_fields_is_allowed(self):
-        response = self._patch_user(
-            self.admin_user, self.staff_candidate, {"is_staff": False, "first_name": "Renamed"}
-        )
+        response = self._patch_user(self.admin_user, self.staff_candidate, {"is_staff": False, "first_name": "Renamed"})
 
         self.assertEqual(response.status_code, status.HTTP_200_OK)
 
@@ -760,9 +758,7 @@ class ManagementJobApiTests(APITestCase):
     def test_admin_can_suspend_management_job(self):
         self.client.force_authenticate(user=self.admin_user)
 
-        response = self.client.post(
-            reverse("management-jobs-suspend", kwargs={"uuid": self.job.uuid})
-        )
+        response = self.client.post(reverse("management-jobs-suspend", kwargs={"uuid": self.job.uuid}))
 
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.job.refresh_from_db()
@@ -870,9 +866,7 @@ class ManagementChatApiTests(APITestCase):
     def test_admin_can_retrieve_management_chat_detail(self):
         self.client.force_authenticate(user=self.admin_user)
 
-        response = self.client.get(
-            reverse("management-chats-detail", kwargs={"job_uuid": self.job.uuid})
-        )
+        response = self.client.get(reverse("management-chats-detail", kwargs={"job_uuid": self.job.uuid}))
 
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertEqual(response.data["uuid"], str(self.chat.uuid))
@@ -1185,9 +1179,7 @@ class ManagementCategoryApiTests(APITestCase):
         self.assertEqual(create_response.status_code, status.HTTP_201_CREATED)
         created_uuid = create_response.data["uuid"]
 
-        retrieve_response = self.client.get(
-            reverse("management-categories-detail", kwargs={"uuid": created_uuid})
-        )
+        retrieve_response = self.client.get(reverse("management-categories-detail", kwargs={"uuid": created_uuid}))
         self.assertEqual(retrieve_response.status_code, status.HTTP_200_OK)
         self.assertEqual(retrieve_response.data["name"], "Mantenimiento")
 
@@ -1199,9 +1191,7 @@ class ManagementCategoryApiTests(APITestCase):
         self.assertEqual(update_response.status_code, status.HTTP_200_OK)
         self.assertEqual(update_response.data["description"], "Servicios recurrentes")
 
-        delete_response = self.client.delete(
-            reverse("management-categories-detail", kwargs={"uuid": created_uuid})
-        )
+        delete_response = self.client.delete(reverse("management-categories-detail", kwargs={"uuid": created_uuid}))
         self.assertEqual(delete_response.status_code, status.HTTP_204_NO_CONTENT)
         self.assertFalse(Category.objects.filter(uuid=created_uuid).exists())
 
@@ -1251,9 +1241,7 @@ class ManagementAllowedCityApiTests(APITestCase):
         self.assertEqual(create_response.status_code, status.HTTP_201_CREATED)
         created_uuid = create_response.data["uuid"]
 
-        retrieve_response = self.client.get(
-            reverse("management-allowed-cities-detail", kwargs={"uuid": created_uuid})
-        )
+        retrieve_response = self.client.get(reverse("management-allowed-cities-detail", kwargs={"uuid": created_uuid}))
         self.assertEqual(retrieve_response.status_code, status.HTTP_200_OK)
         self.assertEqual(retrieve_response.data["name"], "Barcelona")
 
@@ -1313,9 +1301,7 @@ class ManagementPlanTierApiTests(APITestCase):
         self.assertEqual(create_response.status_code, status.HTTP_201_CREATED)
         created_uuid = create_response.data["uuid"]
 
-        retrieve_response = self.client.get(
-            reverse("management-plan-tiers-detail", kwargs={"uuid": created_uuid})
-        )
+        retrieve_response = self.client.get(reverse("management-plan-tiers-detail", kwargs={"uuid": created_uuid}))
         self.assertEqual(retrieve_response.status_code, status.HTTP_200_OK)
         self.assertEqual(retrieve_response.data["key"], "vip")
 
@@ -1327,9 +1313,7 @@ class ManagementPlanTierApiTests(APITestCase):
         self.assertEqual(update_response.status_code, status.HTTP_200_OK)
         self.assertEqual(update_response.data["description"], "Tier con prioridad maxima")
 
-        delete_response = self.client.delete(
-            reverse("management-plan-tiers-detail", kwargs={"uuid": created_uuid})
-        )
+        delete_response = self.client.delete(reverse("management-plan-tiers-detail", kwargs={"uuid": created_uuid}))
         self.assertEqual(delete_response.status_code, status.HTTP_204_NO_CONTENT)
         self.assertFalse(PlanTierCatalog.objects.filter(uuid=created_uuid).exists())
 
@@ -1404,6 +1388,7 @@ class ManagementServiceCatalogApiTests(APITestCase):
         )
 
         self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
+
 
 class FeatureFlagHelperTests(APITestCase):
     def test_returns_default_when_flag_does_not_exist(self):
@@ -1521,19 +1506,11 @@ class SeedFixedTablesCommandTests(APITestCase):
 
         allowed_city_names = set(AllowedCity.objects.values_list("name", flat=True))
         seeded_category_names = set(
-            Category.objects.filter(name__in={"Reformas", "Mantenimiento"}).values_list(
-                "name", flat=True
-            )
+            Category.objects.filter(name__in={"Reformas", "Mantenimiento"}).values_list("name", flat=True)
         )
-        service_catalog_names = set(
-            ServiceCatalog.objects.values_list("name", flat=True)
-        )
-        plan_tier_keys = list(
-            PlanTierCatalog.objects.order_by("sort_order").values_list("key", flat=True)
-        )
-        feature_flags = {
-            flag.key: flag.is_active for flag in FeatureFlag.objects.order_by("key")
-        }
+        service_catalog_names = set(ServiceCatalog.objects.values_list("name", flat=True))
+        plan_tier_keys = list(PlanTierCatalog.objects.order_by("sort_order").values_list("key", flat=True))
+        feature_flags = {flag.key: flag.is_active for flag in FeatureFlag.objects.order_by("key")}
 
         self.assertEqual(len(allowed_city_names), 50)
         self.assertIn("Madrid", allowed_city_names)
@@ -1552,7 +1529,6 @@ class SeedFixedTablesCommandTests(APITestCase):
         self.assertIn("plan_tiers_created=", out.getvalue())
         self.assertIn("service_catalogs_created=4", out.getvalue())
         self.assertIn("feature_flags_created=0", out.getvalue())
-
 
     def test_seed_fixed_tables_does_not_create_subservices(self):
         out = StringIO()

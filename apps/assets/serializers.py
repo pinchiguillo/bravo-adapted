@@ -30,11 +30,11 @@ class AssetInitiateUploadSerializer(serializers.Serializer):
       2. POST to *complete_url* to confirm and move the file to its final location.
     """
 
-    kind         = serializers.ChoiceField(choices=Asset.Kind.choices)
-    filename     = serializers.CharField(max_length=255)
+    kind = serializers.ChoiceField(choices=Asset.Kind.choices)
+    filename = serializers.CharField(max_length=255)
     content_type = serializers.CharField(max_length=120)
-    size_bytes   = serializers.IntegerField(min_value=1)
-    draft_token  = serializers.CharField(max_length=64, required=False, allow_blank=True, default="")
+    size_bytes = serializers.IntegerField(min_value=1)
+    draft_token = serializers.CharField(max_length=64, required=False, allow_blank=True, default="")
 
     def validate_kind(self, value):
         request = self.context.get("request")
@@ -51,7 +51,7 @@ class AssetInitiateUploadSerializer(serializers.Serializer):
 
     def validate(self, attrs):
         attrs = super().validate(attrs)
-        kind  = attrs["kind"]
+        kind = attrs["kind"]
         rules = get_kind_rules(kind)
 
         content_type = str(attrs["content_type"]).strip().lower()
@@ -68,23 +68,21 @@ class AssetInitiateUploadSerializer(serializers.Serializer):
 
         detected, _ = mimetypes.guess_type(attrs["filename"])
         if detected and detected != content_type:
-            raise serializers.ValidationError(
-                {"content_type": "File content type does not match filename extension."}
-            )
+            raise serializers.ValidationError({"content_type": "File content type does not match filename extension."})
 
         return attrs
 
     def create(self, validated_data):
-        request    = self.context.get("request")
-        kind       = validated_data["kind"]
-        rules      = get_kind_rules(kind)
-        ttl        = rules["ttl_seconds"]
+        request = self.context.get("request")
+        kind = validated_data["kind"]
+        rules = get_kind_rules(kind)
+        ttl = rules["ttl_seconds"]
 
         # Pre-compute keys using a pre-generated UUID so we avoid a two-step
         # create+update and the unique constraint on key="" for concurrent uploads.
-        asset_id    = uuid_module.uuid4()
+        asset_id = uuid_module.uuid4()
         pending_key = build_pending_asset_key(kind, str(asset_id), validated_data["filename"])
-        final_key   = build_asset_key(kind, str(asset_id), validated_data["filename"])
+        final_key = build_asset_key(kind, str(asset_id), validated_data["filename"])
 
         asset = Asset.objects.create(
             id=asset_id,
@@ -117,9 +115,7 @@ class AssetInitiateUploadSerializer(serializers.Serializer):
         )
 
         if request:
-            complete_url = request.build_absolute_uri(
-                reverse("asset-complete-upload", kwargs={"asset_id": asset.id})
-            )
+            complete_url = request.build_absolute_uri(reverse("asset-complete-upload", kwargs={"asset_id": asset.id}))
         else:
             complete_url = reverse("asset-complete-upload", kwargs={"asset_id": asset.id})
 
@@ -136,12 +132,12 @@ class AssetInitiateUploadSerializer(serializers.Serializer):
 class AssetUploadTargetSerializer(serializers.Serializer):
     """Read-only serializer for the initiate-upload response."""
 
-    asset_id       = serializers.UUIDField(read_only=True)
-    upload_url     = serializers.URLField(read_only=True)
-    upload_method  = serializers.CharField(read_only=True)
+    asset_id = serializers.UUIDField(read_only=True)
+    upload_url = serializers.URLField(read_only=True)
+    upload_method = serializers.CharField(read_only=True)
     upload_headers = serializers.DictField(child=serializers.CharField(), read_only=True)
-    expires_in     = serializers.IntegerField(read_only=True)
-    complete_url   = serializers.URLField(read_only=True)
+    expires_in = serializers.IntegerField(read_only=True)
+    complete_url = serializers.URLField(read_only=True)
 
     def to_representation(self, instance):
         return instance  # instance is already a dict
@@ -179,7 +175,7 @@ class AssetCompleteUploadSerializer(serializers.Serializer):
 
     def validate(self, attrs):
         request = self.context.get("request")
-        asset   = self.context.get("asset")
+        asset = self.context.get("asset")
 
         if asset is None:
             raise serializers.ValidationError("Asset not found.")

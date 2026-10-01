@@ -113,6 +113,7 @@ class SubserviceSerializer(serializers.ModelSerializer):
         )
         read_only_fields = ("uuid", "created_at", "updated_at")
 
+
 class ServiceSerializer(serializers.ModelSerializer):
     category = CategorySerializer(read_only=True)
     subservices = serializers.SerializerMethodField()

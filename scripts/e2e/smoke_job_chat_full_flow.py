@@ -88,9 +88,7 @@ class SimpleWebSocketClient:
         if " 101 " not in status_line:
             raise RuntimeError(f"WebSocket handshake failed: {status_line}")
 
-        expected_accept = base64.b64encode(
-            hashlib.sha1(f"{key}{self.GUID}".encode("ascii")).digest()
-        ).decode("ascii")
+        expected_accept = base64.b64encode(hashlib.sha1(f"{key}{self.GUID}".encode("ascii")).digest()).decode("ascii")
         if f"Sec-WebSocket-Accept: {expected_accept}" not in response:
             raise RuntimeError("WebSocket handshake missing valid Sec-WebSocket-Accept header")
 
@@ -189,9 +187,9 @@ def build_websocket_url(base_url: str, job_uuid: str, token: str) -> str:
 
 
 def test_websocket_streaming(base_url: str, token: str, job_uuid: str):
-    print(f"\n{'─'*60}")
+    print(f"\n{'─' * 60}")
     print("  Validation: websocket streaming should deliver new chat messages")
-    print(f"{'─'*60}")
+    print(f"{'─' * 60}")
 
     ws_url = build_websocket_url(base_url, job_uuid, token)
     client = SimpleWebSocketClient(ws_url, timeout=8.0)

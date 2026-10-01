@@ -15,4 +15,3 @@ urlpatterns = [
     ),
     path("webstats/", ManagementStatisticsWebstatsView.as_view(), name="management-statistics-webstats"),
 ]
-

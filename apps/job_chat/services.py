@@ -109,9 +109,7 @@ def get_history_page(job_chat, *, before_uuid=None, limit=None):
     """
     limit = limit or settings.JOB_CHAT_HISTORY_PAGE_SIZE
     messages = (
-        job_chat.messages.select_related("user")
-        .prefetch_related("attachments__asset")
-        .order_by("-created_at", "-id")
+        job_chat.messages.select_related("user").prefetch_related("attachments__asset").order_by("-created_at", "-id")
     )
     if before_uuid:
         try:

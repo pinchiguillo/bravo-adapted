@@ -180,9 +180,7 @@ class OrganizationApiTests(APITestCase):
         )
 
     def test_organization_retrieve_is_public_by_uuid(self):
-        response = self.client.get(
-            reverse("organization-detail", kwargs={"uuid": self.organization.uuid})
-        )
+        response = self.client.get(reverse("organization-detail", kwargs={"uuid": self.organization.uuid}))
 
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertEqual(
@@ -209,9 +207,7 @@ class OrganizationApiTests(APITestCase):
         )
 
     def test_organization_public_retrieve_omits_sensitive_fields(self):
-        response = self.client.get(
-            reverse("organization-detail", kwargs={"uuid": self.organization.uuid})
-        )
+        response = self.client.get(reverse("organization-detail", kwargs={"uuid": self.organization.uuid}))
 
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertNotIn("legal_name", response.data)
@@ -249,9 +245,7 @@ class OrganizationApiTests(APITestCase):
         self.organization.is_approved = False
         self.organization.save(update_fields=["is_approved"])
 
-        response = self.client.get(
-            reverse("organization-detail", kwargs={"uuid": self.organization.uuid})
-        )
+        response = self.client.get(reverse("organization-detail", kwargs={"uuid": self.organization.uuid}))
 
         self.assertEqual(response.status_code, status.HTTP_404_NOT_FOUND)
 
@@ -260,9 +254,7 @@ class OrganizationApiTests(APITestCase):
         self.organization.save(update_fields=["is_approved"])
         self.client.force_authenticate(user=self.other_owner)
 
-        response = self.client.get(
-            reverse("organization-detail", kwargs={"uuid": self.organization.uuid})
-        )
+        response = self.client.get(reverse("organization-detail", kwargs={"uuid": self.organization.uuid}))
 
         self.assertEqual(response.status_code, status.HTTP_404_NOT_FOUND)
 
@@ -270,9 +262,7 @@ class OrganizationApiTests(APITestCase):
         self.organization.status = Organization.Status.SUSPENDED
         self.organization.save(update_fields=["status"])
 
-        response = self.client.get(
-            reverse("organization-detail", kwargs={"uuid": self.organization.uuid})
-        )
+        response = self.client.get(reverse("organization-detail", kwargs={"uuid": self.organization.uuid}))
 
         self.assertEqual(response.status_code, status.HTTP_404_NOT_FOUND)
 
@@ -281,9 +271,7 @@ class OrganizationApiTests(APITestCase):
         self.organization.save(update_fields=["is_approved"])
         self.client.force_authenticate(user=self.owner)
 
-        response = self.client.get(
-            reverse("organization-detail", kwargs={"uuid": self.organization.uuid})
-        )
+        response = self.client.get(reverse("organization-detail", kwargs={"uuid": self.organization.uuid}))
 
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertEqual(response.data["uuid"], str(self.organization.uuid))
@@ -314,9 +302,7 @@ class OrganizationApiTests(APITestCase):
             self.assertEqual(set(item.keys()), {"uuid", "name"})
         returned_uuids = {item["uuid"] for item in response.data["results"]}
         self.assertGreaterEqual(response.data["count"], 2)
-        self.assertTrue(
-            {str(self.allowed_city.uuid), str(self.other_allowed_city.uuid)}.issubset(returned_uuids)
-        )
+        self.assertTrue({str(self.allowed_city.uuid), str(self.other_allowed_city.uuid)}.issubset(returned_uuids))
 
     def test_allowed_city_detail_route_does_not_exist(self):
         with self.assertRaises(NoReverseMatch):
@@ -349,9 +335,7 @@ class OrganizationApiTests(APITestCase):
             {str(self.owner_service_catalog.uuid), str(self.other_service_catalog.uuid)},
         )
         owner_item = next(
-            item
-            for item in response.data["results"]
-            if item["uuid"] == str(self.owner_service_catalog.uuid)
+            item for item in response.data["results"] if item["uuid"] == str(self.owner_service_catalog.uuid)
         )
         self.assertEqual(
             owner_item["category"],
@@ -572,9 +556,7 @@ class OrganizationApiTests(APITestCase):
             label="Nochebuena",
         )
 
-        response = self.client.get(
-            reverse("organization-detail", kwargs={"uuid": self.organization.uuid})
-        )
+        response = self.client.get(reverse("organization-detail", kwargs={"uuid": self.organization.uuid}))
 
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertEqual(response.data["availability"]["enabled"], True)
@@ -595,9 +577,7 @@ class OrganizationApiTests(APITestCase):
             end_time="14:00:00",
         )
 
-        response = self.client.get(
-            reverse("organization-detail", kwargs={"uuid": self.organization.uuid})
-        )
+        response = self.client.get(reverse("organization-detail", kwargs={"uuid": self.organization.uuid}))
 
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertEqual(
@@ -710,9 +690,7 @@ class OrganizationApiTests(APITestCase):
     def test_delete_is_not_available_for_organization_detail(self):
         self.client.force_authenticate(user=self.owner)
 
-        response = self.client.delete(
-            reverse("organization-detail", kwargs={"uuid": self.organization.uuid})
-        )
+        response = self.client.delete(reverse("organization-detail", kwargs={"uuid": self.organization.uuid}))
 
         self.assertEqual(response.status_code, status.HTTP_405_METHOD_NOT_ALLOWED)
         self.assertTrue(Organization.objects.filter(uuid=self.organization.uuid).exists())
@@ -833,9 +811,7 @@ class OrganizationApiTests(APITestCase):
                     "announcement_uuid": self.announcement.uuid,
                 },
             ),
-            (
-                f"/api/announcements/{self.announcement.uuid}/subservices/"
-            ),
+            (f"/api/announcements/{self.announcement.uuid}/subservices/"),
         )
         self.assertEqual(
             reverse(
@@ -907,12 +883,8 @@ class OrganizationApiTests(APITestCase):
                 }
 
         with patch.object(OrganizationViewSet, "throttle_classes", [OrganizationPublicReadTestThrottle]):
-            first_response = self.client.get(
-                reverse("organization-detail", kwargs={"uuid": self.organization.uuid})
-            )
-            second_response = self.client.get(
-                reverse("organization-detail", kwargs={"uuid": self.organization.uuid})
-            )
+            first_response = self.client.get(reverse("organization-detail", kwargs={"uuid": self.organization.uuid}))
+            second_response = self.client.get(reverse("organization-detail", kwargs={"uuid": self.organization.uuid}))
 
         self.assertEqual(first_response.status_code, status.HTTP_200_OK)
         self.assertEqual(second_response.status_code, status.HTTP_429_TOO_MANY_REQUESTS)
@@ -1033,14 +1005,23 @@ class OrganizationApiTests(APITestCase):
         ServicePrice.objects.filter(subservice__announcement=self.announcement).delete()
         today = date.today()
         ServicePrice.objects.create(
-            subservice=self.owner_subservice, amount="1.00", currency="EUR",
-            effective_from=today - timedelta(days=30), effective_to=today - timedelta(days=1),
+            subservice=self.owner_subservice,
+            amount="1.00",
+            currency="EUR",
+            effective_from=today - timedelta(days=30),
+            effective_to=today - timedelta(days=1),
         )
         ServicePrice.objects.create(
-            subservice=self.owner_subservice, amount="40.00", currency="EUR", effective_from=today,
+            subservice=self.owner_subservice,
+            amount="40.00",
+            currency="EUR",
+            effective_from=today,
         )
         ServicePrice.objects.create(
-            subservice=self.owner_subservice, amount="5.00", currency="USD", effective_from=today,
+            subservice=self.owner_subservice,
+            amount="5.00",
+            currency="USD",
+            effective_from=today,
         )
 
         response = self.client.get(reverse("public-announcement-detail", kwargs={"uuid": self.announcement.uuid}))
@@ -1087,9 +1068,7 @@ class OrganizationApiTests(APITestCase):
         AnnouncementFavorite.objects.create(user=self.other_owner, announcement=self.announcement)
         self.client.force_authenticate(user=self.other_owner)
 
-        response = self.client.get(
-            reverse("public-announcement-detail", kwargs={"uuid": self.announcement.uuid})
-        )
+        response = self.client.get(reverse("public-announcement-detail", kwargs={"uuid": self.announcement.uuid}))
 
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertTrue(response.data["favorite"])
@@ -1117,9 +1096,7 @@ class OrganizationApiTests(APITestCase):
         self.organization.is_approved = False
         self.organization.save(update_fields=["is_approved"])
 
-        response = self.client.get(
-            reverse("organization-detail", kwargs={"uuid": self.organization.uuid})
-        )
+        response = self.client.get(reverse("organization-detail", kwargs={"uuid": self.organization.uuid}))
 
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertTrue(response.data["is_approved"])
@@ -1869,11 +1846,7 @@ class OrganizationApiTests(APITestCase):
             {self.owner_service_catalog.name, self.other_service_catalog.name},
         )
         self.assertEqual(
-            {
-                subservice["name"]
-                for service in response.data["services"]
-                for subservice in service["subservices"]
-            },
+            {subservice["name"] for service in response.data["services"] for subservice in service["subservices"]},
             {"Visita tecnica", "Acabado final"},
         )
 
@@ -2091,9 +2064,7 @@ class OrganizationApiTests(APITestCase):
         self.assertEqual(self.announcement.view_count, 0)
 
     def test_public_announcement_detail_increments_announcement_view_count_only_once_per_client(self):
-        first_response = self.client.get(
-            reverse("public-announcement-detail", kwargs={"uuid": self.announcement.uuid})
-        )
+        first_response = self.client.get(reverse("public-announcement-detail", kwargs={"uuid": self.announcement.uuid}))
         second_response = self.client.get(
             reverse("public-announcement-detail", kwargs={"uuid": self.announcement.uuid})
         )
@@ -2594,9 +2565,7 @@ class AnnouncementImageApiTests(APITestCase):
             image=self._make_png_upload(name="detail.png"),
         )
 
-        response = self.client.get(
-            reverse("public-announcement-detail", kwargs={"uuid": self.announcement.uuid})
-        )
+        response = self.client.get(reverse("public-announcement-detail", kwargs={"uuid": self.announcement.uuid}))
 
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertEqual(len(response.data["images"]), 1)

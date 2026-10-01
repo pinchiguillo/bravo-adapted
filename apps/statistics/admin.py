@@ -22,4 +22,3 @@ class DailyAnnouncementStatsAdmin(admin.ModelAdmin):
     list_display = ("date", "announcement", "views")
     list_select_related = ("announcement",)
     ordering = ("-date", "-views")
-

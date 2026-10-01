@@ -1,4 +1,5 @@
 """Root URL configuration: the API is versioned by app under /api/."""
+
 from django.conf import settings
 from django.contrib import admin
 from django.urls import include, path
@@ -7,7 +8,7 @@ from drf_spectacular.views import SpectacularAPIView, SpectacularSwaggerView
 from common.views import api_version, healthcheck
 
 urlpatterns = [
-    path('admin/', admin.site.urls),
+    path("admin/", admin.site.urls),
     path("health/", healthcheck, name="healthcheck"),
     path("api/version/", api_version, name="api-version"),
     path("api/auth/", include("apps.auth.urls")),

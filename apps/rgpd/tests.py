@@ -119,9 +119,7 @@ class RgpdConsentApiTests(APITestCase):
         self.assertEqual(
             RgpdPolicyAcceptance.objects.filter(
                 user=self.user,
-                policy_version=self.current_versions[
-                    RgpdPolicyDocument.DocumentType.PRIVACY_POLICY
-                ],
+                policy_version=self.current_versions[RgpdPolicyDocument.DocumentType.PRIVACY_POLICY],
             ).count(),
             1,
         )
@@ -349,9 +347,7 @@ class RgpdLegalDocumentApiTests(APITestCase):
         self.assertEqual(document.content_type, "application/pdf")
         self.assertEqual(document.size_bytes, len(b"%PDF-1.4 legal document"))
         self.assertTrue(
-            document.file.name.startswith(
-                f"{settings.LEGAL_DOCUMENTS_UPLOAD_PREFIX}/users/{self.user.uuid}/"
-            )
+            document.file.name.startswith(f"{settings.LEGAL_DOCUMENTS_UPLOAD_PREFIX}/users/{self.user.uuid}/")
         )
         save_mock.assert_called_once()
 
@@ -476,9 +472,7 @@ class RgpdAnonymousConsentBehaviorTests(APITestCase):
         self.assertTrue(consent.terms_and_conditions_accepted)
         self.assertEqual(
             consent.terms_and_conditions_version,
-            self.current_versions[
-                RgpdPolicyDocument.DocumentType.TERMS_AND_CONDITIONS
-            ].version,
+            self.current_versions[RgpdPolicyDocument.DocumentType.TERMS_AND_CONDITIONS].version,
         )
         self.assertEqual(consent.source, "checkout")
         self.assertEqual(consent.ip_address, "198.51.100.9")

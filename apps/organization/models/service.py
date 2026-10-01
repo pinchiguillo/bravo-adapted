@@ -69,8 +69,7 @@ class ServicePrice(models.Model):
                 name="unique_subservice_price_effective_from",
             ),
             models.CheckConstraint(
-                condition=models.Q(effective_to__isnull=True)
-                | models.Q(effective_to__gte=models.F("effective_from")),
+                condition=models.Q(effective_to__isnull=True) | models.Q(effective_to__gte=models.F("effective_from")),
                 name="service_price_effective_to_after_start",
             ),
             models.CheckConstraint(

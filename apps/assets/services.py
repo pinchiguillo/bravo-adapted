@@ -67,14 +67,16 @@ def build_public_media_url(file_name: str, *, request=None, signed_url: str | No
         if presigned_url_endpoint:
             parsed = urlsplit(signed_url)
             ep = urlsplit(presigned_url_endpoint)
-            signed_url = urlunparse((
-                ep.scheme or parsed.scheme,
-                ep.netloc or parsed.netloc,
-                parsed.path,
-                parsed.params,
-                parsed.query,
-                parsed.fragment,
-            ))
+            signed_url = urlunparse(
+                (
+                    ep.scheme or parsed.scheme,
+                    ep.netloc or parsed.netloc,
+                    parsed.path,
+                    parsed.params,
+                    parsed.query,
+                    parsed.fragment,
+                )
+            )
 
     if media_url:
         url = f"{media_url.rstrip('/')}/{filepath_to_uri(file_name).lstrip('/')}"

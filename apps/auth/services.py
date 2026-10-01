@@ -31,11 +31,7 @@ def send_verification_email(user):
     token = build_verify_email_token(user)
     verification_url = build_verify_email_url(token)
     subject = "Verify your email"
-    message = (
-        "Welcome to Bravo.\n\n"
-        "Verify your email by opening this link:\n"
-        f"{verification_url}\n"
-    )
+    message = f"Welcome to Bravo.\n\nVerify your email by opening this link:\n{verification_url}\n"
 
     send_mail(
         subject=subject,

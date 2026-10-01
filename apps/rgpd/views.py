@@ -112,8 +112,7 @@ class RgpdConsentViewSet(ActionScopedRateThrottleMixin, viewsets.GenericViewSet)
         tags=["RGPD"],
         summary="Register GDPR consents",
         description=(
-            "Creates or replaces the GDPR consent state of the authenticated user "
-            "and records traceability metadata."
+            "Creates or replaces the GDPR consent state of the authenticated user and records traceability metadata."
         ),
         request=RgpdConsentUpsertSerializer,
         responses=RgpdConsentSerializer,
@@ -126,8 +125,7 @@ class RgpdConsentViewSet(ActionScopedRateThrottleMixin, viewsets.GenericViewSet)
         tags=["RGPD"],
         summary="Update GDPR consents",
         description=(
-            "Partially updates the GDPR consent state of the authenticated user "
-            "and refreshes submitted metadata."
+            "Partially updates the GDPR consent state of the authenticated user and refreshes submitted metadata."
         ),
         request=RgpdConsentUpsertSerializer,
         responses=RgpdConsentSerializer,
@@ -290,8 +288,7 @@ class RgpdDataRequestViewSet(ActionScopedRateThrottleMixin, viewsets.GenericView
         tags=["RGPD"],
         summary="Upload legal document",
         description=(
-            "Uploads a legal document for the authenticated user using the dedicated "
-            "legal-documents storage bucket."
+            "Uploads a legal document for the authenticated user using the dedicated legal-documents storage bucket."
         ),
         request=RgpdLegalDocumentSerializer,
         responses={201: RgpdLegalDocumentSerializer},

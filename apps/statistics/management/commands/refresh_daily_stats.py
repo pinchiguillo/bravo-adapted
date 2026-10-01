@@ -27,4 +27,3 @@ class Command(BaseCommand):
                 f"Recent daily platform statistics refreshed for {start_date.isoformat()} to {end_date.isoformat()}."
             )
         )
-

@@ -12,10 +12,10 @@ from .models import JobChat, JobChatAttachment, JobChatMessage
 
 
 class JobChatAttachmentSerializer(serializers.ModelSerializer):
-    asset_id       = serializers.UUIDField(source="asset.id", read_only=True)
-    filename       = serializers.CharField(source="asset.original_filename", read_only=True)
-    content_type   = serializers.CharField(source="asset.content_type_client", read_only=True)
-    size           = serializers.IntegerField(source="asset.size_client", read_only=True)
+    asset_id = serializers.UUIDField(source="asset.id", read_only=True)
+    filename = serializers.CharField(source="asset.original_filename", read_only=True)
+    content_type = serializers.CharField(source="asset.content_type_client", read_only=True)
+    size = serializers.IntegerField(source="asset.size_client", read_only=True)
 
     class Meta:
         model = JobChatAttachment

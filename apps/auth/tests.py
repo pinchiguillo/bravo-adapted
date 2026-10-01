@@ -119,9 +119,7 @@ class AuthApiTests(APITestCase):
 
         self.assertEqual(response.status_code, 400)
         self.assertIn("password", response.data)
-        self.assertFalse(
-            get_user_model().objects.filter(email="new-user@example.com").exists()
-        )
+        self.assertFalse(get_user_model().objects.filter(email="new-user@example.com").exists())
 
     def test_register_requires_twelve_character_passwords(self):
         response = self.client.post(
@@ -237,9 +235,9 @@ class AuthApiTests(APITestCase):
 
     def test_replaying_a_rotated_refresh_token_ends_every_session(self):
         old_refresh = self._login_tokens()["refresh"]
-        current_refresh = self.client.post(
-            "/api/auth/token/refresh/", {"refresh": old_refresh}, format="json"
-        ).data["refresh"]
+        current_refresh = self.client.post("/api/auth/token/refresh/", {"refresh": old_refresh}, format="json").data[
+            "refresh"
+        ]
         other_device_refresh = self._login_tokens()["refresh"]
 
         replay = self.client.post("/api/auth/token/refresh/", {"refresh": old_refresh}, format="json")

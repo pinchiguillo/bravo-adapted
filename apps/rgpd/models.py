@@ -17,10 +17,7 @@ def legal_document_upload_to(instance, filename):
     user_uuid = getattr(instance.user, "uuid", None) or instance.user_id
     date_prefix = timezone.now().strftime("%Y/%m/%d")
     object_name = f"{uuid.uuid4().hex}{extension}"
-    return (
-        f"{settings.LEGAL_DOCUMENTS_UPLOAD_PREFIX}/"
-        f"users/{user_uuid}/{date_prefix}/{object_name}"
-    )
+    return f"{settings.LEGAL_DOCUMENTS_UPLOAD_PREFIX}/users/{user_uuid}/{date_prefix}/{object_name}"
 
 
 class BaseRgpdConsent(models.Model):

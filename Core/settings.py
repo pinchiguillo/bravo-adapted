@@ -85,9 +85,7 @@ IS_PRODUCTION = APP_MODE == "production"
 DEV_SECRET_KEY = "dev-only-unsafe-secret-key-change-me"  # noqa: S105 - placeholder, rejected below in production
 SECRET_KEY = os.getenv("SECRET_KEY", DEV_SECRET_KEY)
 if IS_PRODUCTION and SECRET_KEY == DEV_SECRET_KEY:
-    raise ImproperlyConfigured(
-        "SECRET_KEY must be configured via environment when APP_MODE=production."
-    )
+    raise ImproperlyConfigured("SECRET_KEY must be configured via environment when APP_MODE=production.")
 
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = disable_in_production_bool(env_bool("DEBUG", default=not IS_PRODUCTION))
@@ -135,13 +133,9 @@ secure_proxy_ssl_header_raw = os.getenv(
     "HTTP_X_FORWARDED_PROTO,https" if IS_PRODUCTION else "",
 ).strip()
 if secure_proxy_ssl_header_raw:
-    secure_proxy_ssl_header_values = [
-        value.strip() for value in secure_proxy_ssl_header_raw.split(",", 1)
-    ]
+    secure_proxy_ssl_header_values = [value.strip() for value in secure_proxy_ssl_header_raw.split(",", 1)]
     if len(secure_proxy_ssl_header_values) != 2 or not all(secure_proxy_ssl_header_values):
-        raise ImproperlyConfigured(
-            "SECURE_PROXY_SSL_HEADER must use format 'HEADER_NAME,header_value'."
-        )
+        raise ImproperlyConfigured("SECURE_PROXY_SSL_HEADER must use format 'HEADER_NAME,header_value'.")
     SECURE_PROXY_SSL_HEADER = (
         secure_proxy_ssl_header_values[0],
         secure_proxy_ssl_header_values[1],
@@ -169,10 +163,14 @@ AWS_S3_PUBLIC_URL = os.getenv("AWS_S3_PUBLIC_URL", "")
 AWS_S3_PRESIGNED_URL_ENDPOINT = os.getenv("AWS_S3_PRESIGNED_URL_ENDPOINT", "")
 # "/s3" is the nginx proxy to LocalStack in development; production serves media from S3/CDN.
 MEDIA_PUBLIC_BASE_URL = os.getenv("MEDIA_PUBLIC_BASE_URL", "" if IS_PRODUCTION else "/s3")
-LEGAL_DOCUMENTS_UPLOAD_PREFIX = os.getenv(
-    "LEGAL_DOCUMENTS_UPLOAD_PREFIX",
-    "legal-documents",
-).strip().strip("/")
+LEGAL_DOCUMENTS_UPLOAD_PREFIX = (
+    os.getenv(
+        "LEGAL_DOCUMENTS_UPLOAD_PREFIX",
+        "legal-documents",
+    )
+    .strip()
+    .strip("/")
+)
 USE_S3_STORAGE = env_bool("USE_S3_STORAGE", default=True)
 if not USE_S3_STORAGE:
     raise ImproperlyConfigured("USE_S3_STORAGE must remain enabled in this project.")
@@ -189,9 +187,7 @@ JOB_CHAT_ATTACHMENT_ALLOWED_CONTENT_TYPES = env_list(
     "JOB_CHAT_ATTACHMENT_ALLOWED_CONTENT_TYPES",
     default=["application/pdf", "image/jpeg", "image/png", "text/plain"],
 )
-ORGANIZATION_ANNOUNCEMENT_IMAGE_MAX_BYTES = env_int(
-    "ORGANIZATION_ANNOUNCEMENT_IMAGE_MAX_BYTES", 5 * 1024 * 1024
-)
+ORGANIZATION_ANNOUNCEMENT_IMAGE_MAX_BYTES = env_int("ORGANIZATION_ANNOUNCEMENT_IMAGE_MAX_BYTES", 5 * 1024 * 1024)
 ORGANIZATION_ANNOUNCEMENT_IMAGE_UPLOAD_URL_TTL_SECONDS = env_int(
     "ORGANIZATION_ANNOUNCEMENT_IMAGE_UPLOAD_URL_TTL_SECONDS", 300
 )
@@ -246,9 +242,7 @@ HIDE_API_DOCS = env_bool(
 )
 # GDPR consent capture is a legal requirement for this product, so it is not configurable.
 RGPD_MODULE_ENABLED = True
-LEGAL_DOCUMENTS_ROOT = Path(
-    os.getenv("LEGAL_DOCUMENTS_ROOT", str(BASE_DIR / "legal_documents"))
-).resolve()
+LEGAL_DOCUMENTS_ROOT = Path(os.getenv("LEGAL_DOCUMENTS_ROOT", str(BASE_DIR / "legal_documents"))).resolve()
 
 AUTH_BYPASS_EMAIL_VERIFICATION = disable_in_production_bool(AUTH_BYPASS_EMAIL_VERIFICATION)
 BYPASS_ORGANIZATION_VALIDATION = disable_in_production_bool(BYPASS_ORGANIZATION_VALIDATION)
@@ -272,63 +266,63 @@ if IS_PRODUCTION and USE_SES_EMAIL:
 # Application definition
 
 INSTALLED_APPS = [
-    'corsheaders',
-    'django.contrib.admin',
-    'django.contrib.auth',
-    'django.contrib.contenttypes',
-    'django.contrib.sessions',
-    'django.contrib.messages',
-    'django.contrib.staticfiles',
-    'rest_framework',
-    'rest_framework_simplejwt.token_blacklist',
-    'drf_spectacular',
-    'channels',
-    'apps.auth.apps.AuthConfig',
-    'apps.organization.apps.OrganizationConfig',
-    'apps.management.apps.ManagementConfig',
-    'apps.notifications.apps.NotificationsConfig',
-    'apps.jobs.apps.JobsConfig',
-    'apps.job_chat.apps.JobChatConfig',
-    'apps.assets.apps.AssetsConfig',
-    'apps.statistics.apps.StatisticsConfig',
-    'apps.rgpd.apps.RgpdConfig',
+    "corsheaders",
+    "django.contrib.admin",
+    "django.contrib.auth",
+    "django.contrib.contenttypes",
+    "django.contrib.sessions",
+    "django.contrib.messages",
+    "django.contrib.staticfiles",
+    "rest_framework",
+    "rest_framework_simplejwt.token_blacklist",
+    "drf_spectacular",
+    "channels",
+    "apps.auth.apps.AuthConfig",
+    "apps.organization.apps.OrganizationConfig",
+    "apps.management.apps.ManagementConfig",
+    "apps.notifications.apps.NotificationsConfig",
+    "apps.jobs.apps.JobsConfig",
+    "apps.job_chat.apps.JobChatConfig",
+    "apps.assets.apps.AssetsConfig",
+    "apps.statistics.apps.StatisticsConfig",
+    "apps.rgpd.apps.RgpdConfig",
 ]
 
 if USE_S3_STORAGE:
     INSTALLED_APPS.append("storages")
 
 MIDDLEWARE = [
-    'django.middleware.security.SecurityMiddleware',
-    'whitenoise.middleware.WhiteNoiseMiddleware',
-    'corsheaders.middleware.CorsMiddleware',
-    'django.contrib.sessions.middleware.SessionMiddleware',
-    'django.middleware.common.CommonMiddleware',
-    'django.middleware.csrf.CsrfViewMiddleware',
-    'django.contrib.auth.middleware.AuthenticationMiddleware',
-    'apps.organization.middleware.AnnouncementViewCountMiddleware',
-    'django.contrib.messages.middleware.MessageMiddleware',
-    'django.middleware.clickjacking.XFrameOptionsMiddleware',
+    "django.middleware.security.SecurityMiddleware",
+    "whitenoise.middleware.WhiteNoiseMiddleware",
+    "corsheaders.middleware.CorsMiddleware",
+    "django.contrib.sessions.middleware.SessionMiddleware",
+    "django.middleware.common.CommonMiddleware",
+    "django.middleware.csrf.CsrfViewMiddleware",
+    "django.contrib.auth.middleware.AuthenticationMiddleware",
+    "apps.organization.middleware.AnnouncementViewCountMiddleware",
+    "django.contrib.messages.middleware.MessageMiddleware",
+    "django.middleware.clickjacking.XFrameOptionsMiddleware",
 ]
 
-ROOT_URLCONF = 'Core.urls'
+ROOT_URLCONF = "Core.urls"
 
 TEMPLATES = [
     {
-        'BACKEND': 'django.template.backends.django.DjangoTemplates',
-        'DIRS': [],
-        'APP_DIRS': True,
-        'OPTIONS': {
-            'context_processors': [
-                'django.template.context_processors.request',
-                'django.contrib.auth.context_processors.auth',
-                'django.contrib.messages.context_processors.messages',
+        "BACKEND": "django.template.backends.django.DjangoTemplates",
+        "DIRS": [],
+        "APP_DIRS": True,
+        "OPTIONS": {
+            "context_processors": [
+                "django.template.context_processors.request",
+                "django.contrib.auth.context_processors.auth",
+                "django.contrib.messages.context_processors.messages",
             ],
         },
     },
 ]
 
-WSGI_APPLICATION = 'Core.wsgi.application'
-ASGI_APPLICATION = 'Core.asgi.application'
+WSGI_APPLICATION = "Core.wsgi.application"
+ASGI_APPLICATION = "Core.asgi.application"
 
 
 # Database
@@ -356,9 +350,9 @@ if database_url:
     }
 else:
     DATABASES = {
-        'default': {
-            'ENGINE': 'django.db.backends.sqlite3',
-            'NAME': BASE_DIR / 'db.sqlite3',
+        "default": {
+            "ENGINE": "django.db.backends.sqlite3",
+            "NAME": BASE_DIR / "db.sqlite3",
         }
     }
 
@@ -369,17 +363,17 @@ else:
 AUTH_PASSWORD_VALIDATORS = (
     [
         {
-            'NAME': 'django.contrib.auth.password_validation.UserAttributeSimilarityValidator',
+            "NAME": "django.contrib.auth.password_validation.UserAttributeSimilarityValidator",
         },
         {
-            'NAME': 'django.contrib.auth.password_validation.MinimumLengthValidator',
-            'OPTIONS': {'min_length': AUTH_PASSWORD_MIN_LENGTH},
+            "NAME": "django.contrib.auth.password_validation.MinimumLengthValidator",
+            "OPTIONS": {"min_length": AUTH_PASSWORD_MIN_LENGTH},
         },
         {
-            'NAME': 'django.contrib.auth.password_validation.CommonPasswordValidator',
+            "NAME": "django.contrib.auth.password_validation.CommonPasswordValidator",
         },
         {
-            'NAME': 'django.contrib.auth.password_validation.NumericPasswordValidator',
+            "NAME": "django.contrib.auth.password_validation.NumericPasswordValidator",
         },
     ]
     if AUTH_ENFORCE_PASSWORD_RESTRICTIONS
@@ -390,9 +384,9 @@ AUTH_PASSWORD_VALIDATORS = (
 # Internationalization
 # https://docs.djangoproject.com/en/5.2/topics/i18n/
 
-LANGUAGE_CODE = 'en-us'
+LANGUAGE_CODE = "en-us"
 
-TIME_ZONE = 'UTC'
+TIME_ZONE = "UTC"
 
 USE_I18N = True
 
@@ -402,8 +396,8 @@ USE_TZ = True
 # Static files (CSS, JavaScript, Images)
 # https://docs.djangoproject.com/en/5.2/howto/static-files/
 
-STATIC_URL = 'static/'
-STATIC_ROOT = BASE_DIR / 'staticfiles'
+STATIC_URL = "static/"
+STATIC_ROOT = BASE_DIR / "staticfiles"
 
 if USE_S3_STORAGE:
     AWS_S3_REGION_NAME = AWS_DEFAULT_REGION
@@ -423,9 +417,7 @@ if USE_S3_STORAGE:
                 "querystring_auth": True,
             },
         },
-        "staticfiles": {
-            "BACKEND": "django.contrib.staticfiles.storage.StaticFilesStorage"
-        },
+        "staticfiles": {"BACKEND": "django.contrib.staticfiles.storage.StaticFilesStorage"},
     }
     if MEDIA_PUBLIC_BASE_URL:
         MEDIA_URL = f"{MEDIA_PUBLIC_BASE_URL.rstrip('/')}/{AWS_STORAGE_BUCKET_NAME}/"
@@ -441,23 +433,19 @@ else:
 # Default primary key field type
 # https://docs.djangoproject.com/en/5.2/ref/settings/#default-auto-field
 
-DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
+DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 
-AUTH_USER_MODEL = 'custom_auth.CustomUser'
+AUTH_USER_MODEL = "custom_auth.CustomUser"
 
 REST_FRAMEWORK = {
     "DEFAULT_SCHEMA_CLASS": "drf_spectacular.openapi.AutoSchema",
     # Deny by default: a view is public only if it opts in with AllowAny.
     "DEFAULT_PERMISSION_CLASSES": ("common.permissions.IsActiveAccount",),
     "EXCEPTION_HANDLER": "common.exception_handler.exception_handler",
-    "DEFAULT_AUTHENTICATION_CLASSES": (
-        "rest_framework_simplejwt.authentication.JWTAuthentication",
-    ),
+    "DEFAULT_AUTHENTICATION_CLASSES": ("rest_framework_simplejwt.authentication.JWTAuthentication",),
     "DEFAULT_PAGINATION_CLASS": "common.pagination.DefaultPageNumberPagination",
     "PAGE_SIZE": 20,
-    "DEFAULT_THROTTLE_CLASSES": (
-        "common.throttling.ClientIPScopedRateThrottle",
-    ),
+    "DEFAULT_THROTTLE_CLASSES": ("common.throttling.ClientIPScopedRateThrottle",),
     "DEFAULT_THROTTLE_RATES": {
         "auth_default": os.getenv("AUTH_DEFAULT_THROTTLE_RATE", "60/minute"),
         "auth_login": os.getenv("AUTH_LOGIN_THROTTLE_RATE", "5/minute"),
@@ -578,9 +566,7 @@ else:
     }
 
 default_email_backend = (
-    "common.email_backends.SesEmailBackend"
-    if USE_SES_EMAIL
-    else "django.core.mail.backends.smtp.EmailBackend"
+    "common.email_backends.SesEmailBackend" if USE_SES_EMAIL else "django.core.mail.backends.smtp.EmailBackend"
 )
 EMAIL_BACKEND = os.getenv("EMAIL_BACKEND", default_email_backend).strip() or default_email_backend
 EMAIL_HOST = os.getenv("EMAIL_HOST", "localhost")

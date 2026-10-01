@@ -61,9 +61,7 @@ class JobChatAttachment(models.Model):
 
     id = models.AutoField(primary_key=True)
     uuid = models.UUIDField(unique=True, default=uuid.uuid4)
-    message = models.ForeignKey(
-        JobChatMessage, on_delete=models.CASCADE, related_name="attachments"
-    )
+    message = models.ForeignKey(JobChatMessage, on_delete=models.CASCADE, related_name="attachments")
     asset = models.ForeignKey(
         "assets.Asset",
         on_delete=models.PROTECT,

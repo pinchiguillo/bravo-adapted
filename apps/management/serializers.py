@@ -104,9 +104,7 @@ class ManagementUserSerializer(serializers.ModelSerializer):
         if self.instance is None and not attrs.get("password"):
             errors["password"] = "This field is required."  # noqa: S105 - error message, not a password
 
-        if self.instance is None and (
-            "is_staff" in self.initial_data or "is_superuser" in self.initial_data
-        ):
+        if self.instance is None and ("is_staff" in self.initial_data or "is_superuser" in self.initial_data):
             errors["is_staff"] = "is_staff cannot be changed in this endpoint."
             if "is_superuser" in self.initial_data:
                 errors["is_superuser"] = "is_superuser cannot be changed in this endpoint."
@@ -274,31 +272,31 @@ class ManagementAnnouncementStatusChangeSerializer(AnnouncementStatusChangeSeria
     class Meta(AnnouncementStatusChangeSerializer.Meta):
         read_only_fields = [
             *AnnouncementStatusChangeSerializer.Meta.read_only_fields,
-            'from_status',
-            'to_status',
-            'changed_by',
-            'announcement',
+            "from_status",
+            "to_status",
+            "changed_by",
+            "announcement",
         ]
 
 
 class ManagementAssetSerializer(serializers.ModelSerializer):
-    owner_email = serializers.CharField(source='owner.email', read_only=True)
+    owner_email = serializers.CharField(source="owner.email", read_only=True)
 
     class Meta:
         model = Asset
         fields = (
-            'id',
-            'kind',
-            'visibility',
-            'status',
-            'original_filename',
-            'content_type_client',
-            'size_client',
-            'size_actual',
-            'is_temporary',
-            'owner_email',
-            'created_at',
-            'confirmed_at',
+            "id",
+            "kind",
+            "visibility",
+            "status",
+            "original_filename",
+            "content_type_client",
+            "size_client",
+            "size_actual",
+            "is_temporary",
+            "owner_email",
+            "created_at",
+            "confirmed_at",
         )
         read_only_fields = fields
 

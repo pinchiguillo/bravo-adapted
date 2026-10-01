@@ -64,9 +64,7 @@ class NotificationApiTests(APITestCase):
     def test_user_can_mark_notification_as_read(self):
         self.client.force_authenticate(user=self.user)
 
-        response = self.client.post(
-            reverse("notifications-read", kwargs={"uuid": self.recipient.uuid})
-        )
+        response = self.client.post(reverse("notifications-read", kwargs={"uuid": self.recipient.uuid}))
 
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.recipient.refresh_from_db()
@@ -154,7 +152,6 @@ class NotificationApiTests(APITestCase):
         self.assertTrue(recipient.in_app_enabled)
         self.assertFalse(recipient.email_enabled)
 
-
     def test_email_failures_are_recorded_and_logged_not_raised(self):
         with (
             patch("apps.notifications.services.send_mail", side_effect=OSError("SMTP unreachable")),
@@ -166,6 +163,7 @@ class NotificationApiTests(APITestCase):
         self.assertEqual(self.recipient.email_status, NotificationRecipient.DeliveryStatus.FAILED)
         dispatch = self.recipient.dispatches.get()
         self.assertIn("SMTP unreachable", dispatch.error_message)
+
 
 class NotificationProducerTests(APITestCase):
     def setUp(self):
@@ -209,9 +207,7 @@ class NotificationProducerTests(APITestCase):
     def test_management_user_deactivate_creates_notification(self):
         self.client.force_authenticate(user=self.admin_user)
 
-        response = self.client.post(
-            reverse("management-users-deactivate", kwargs={"uuid": self.customer.uuid})
-        )
+        response = self.client.post(reverse("management-users-deactivate", kwargs={"uuid": self.customer.uuid}))
 
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertTrue(

@@ -79,8 +79,7 @@ class AuthViewSet(viewsets.GenericViewSet):
         tags=["Auth"],
         summary="Register user",
         description=(
-            "Creates a new user account. When email verification is bypassed, "
-            "the response also includes JWT tokens."
+            "Creates a new user account. When email verification is bypassed, the response also includes JWT tokens."
         ),
         auth=[],
     )
@@ -92,9 +91,7 @@ class AuthViewSet(viewsets.GenericViewSet):
         if user.is_email_verified:
             response_data = self._build_authenticated_user_response_data(user)
         else:
-            response_data = UserSerializer(
-                user, context=self.get_serializer_context()
-            ).data
+            response_data = UserSerializer(user, context=self.get_serializer_context()).data
         return Response(response_data, status=status.HTTP_201_CREATED)
 
     @extend_schema(

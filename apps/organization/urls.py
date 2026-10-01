@@ -31,9 +31,7 @@ router.register("organizations", OrganizationViewSet, basename="organization")
 public_announcement_list = PublicAnnouncementViewSet.as_view({"get": "list"})
 public_announcement_detail = PublicAnnouncementDetailViewSet.as_view({"get": "retrieve"})
 announcement_list = AnnouncementViewSet.as_view({"get": "list", "post": "create"})
-announcement_detail = AnnouncementViewSet.as_view(
-    {"put": "update", "patch": "partial_update", "delete": "destroy"}
-)
+announcement_detail = AnnouncementViewSet.as_view({"put": "update", "patch": "partial_update", "delete": "destroy"})
 announcement_image_list = AnnouncementImageViewSet.as_view({"get": "list", "post": "create"})
 announcement_image_complete = AnnouncementImageViewSet.as_view({"post": "complete_upload"})
 announcement_image_detail = AnnouncementImageViewSet.as_view({"delete": "destroy"})
@@ -65,23 +63,17 @@ urlpatterns = [
         name="organization-subservice-list",
     ),
     path(
-        (
-            "announcements/<uuid:announcement_uuid>/subservices/<uuid:subservice_uuid>/"
-        ),
+        ("announcements/<uuid:announcement_uuid>/subservices/<uuid:subservice_uuid>/"),
         subservice_detail,
         name="organization-subservice-detail",
     ),
     path(
-        (
-            "announcements/<uuid:announcement_uuid>/subservices/<uuid:subservice_uuid>/prices/"
-        ),
+        ("announcements/<uuid:announcement_uuid>/subservices/<uuid:subservice_uuid>/prices/"),
         service_price_list,
         name="organization-service-price-list",
     ),
     path(
-        (
-            "announcements/<uuid:announcement_uuid>/subservices/<uuid:subservice_uuid>/prices/<uuid:price_uuid>/"
-        ),
+        ("announcements/<uuid:announcement_uuid>/subservices/<uuid:subservice_uuid>/prices/<uuid:price_uuid>/"),
         service_price_detail,
         name="organization-service-price-detail",
     ),

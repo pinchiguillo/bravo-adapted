@@ -73,14 +73,11 @@ class JobChatTestCase(APITestCase):
         )
 
 
-
 class JobChatApiTests(JobChatTestCase):
     def test_provider_can_get_job_chat_messages(self):
         self.client.force_authenticate(user=self.provider_user)
 
-        response = self.client.get(
-            reverse("job-chat-messages", kwargs={"job_uuid": self.job.uuid})
-        )
+        response = self.client.get(reverse("job-chat-messages", kwargs={"job_uuid": self.job.uuid}))
 
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertEqual(response.data["uuid"], str(self.chat.uuid))
@@ -110,9 +107,7 @@ class JobChatApiTests(JobChatTestCase):
     def test_outsider_cannot_get_job_chat_messages(self):
         self.client.force_authenticate(user=self.outsider)
 
-        response = self.client.get(
-            reverse("job-chat-messages", kwargs={"job_uuid": self.job.uuid})
-        )
+        response = self.client.get(reverse("job-chat-messages", kwargs={"job_uuid": self.job.uuid}))
 
         self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
 
@@ -311,7 +306,6 @@ class JobChatAttachmentTests(JobChatTestCase):
         self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
         self.assertEqual(asset.job_chat_attachments.count(), 1)
 
-
     def test_attaching_an_asset_that_was_attached_meanwhile_is_rejected(self):
         from rest_framework.exceptions import ValidationError
         from rest_framework.test import APIRequestFactory
@@ -333,6 +327,7 @@ class JobChatAttachmentTests(JobChatTestCase):
         with self.assertRaises(ValidationError):
             serializer.save()
         self.assertEqual(asset.job_chat_attachments.count(), 0)
+
 
 @override_settings(JOB_CHAT_HISTORY_PAGE_SIZE=2)
 class JobChatHistoryPaginationTests(JobChatTestCase):

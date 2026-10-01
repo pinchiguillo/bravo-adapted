@@ -99,9 +99,7 @@ class SecuritySettingsTests(SimpleTestCase):
     )
     def test_deploy_check_has_no_security_warnings_with_production_settings(self):
         security_warnings = [
-            message.id
-            for message in run_checks(include_deployment_checks=True)
-            if message.id.startswith("security.W")
+            message.id for message in run_checks(include_deployment_checks=True) if message.id.startswith("security.W")
         ]
 
         self.assertEqual(security_warnings, [])

@@ -9,7 +9,7 @@ https://docs.djangoproject.com/en/5.2/howto/deployment/asgi/
 
 import os
 
-os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'Core.settings')
+os.environ.setdefault("DJANGO_SETTINGS_MODULE", "Core.settings")
 
 from channels.routing import ProtocolTypeRouter, URLRouter
 from django.apps import apps

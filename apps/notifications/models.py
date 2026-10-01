@@ -244,4 +244,3 @@ class NotificationDispatch(models.Model):
 
     def __str__(self):
         return f"{self.channel}:{self.status}:{self.recipient_id}"
-

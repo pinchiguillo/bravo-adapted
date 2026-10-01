@@ -53,17 +53,13 @@ def increment_announcement_view_stats(announcement_id: int, target_date=None) ->
 
 
 def _increment_daily_platform_counter(target_date, field_name: str, delta: int) -> None:
-    updated = DailyPlatformStats.objects.filter(date=target_date).update(
-        **{field_name: F(field_name) + delta}
-    )
+    updated = DailyPlatformStats.objects.filter(date=target_date).update(**{field_name: F(field_name) + delta})
     if updated:
         return
     try:
         DailyPlatformStats.objects.create(date=target_date, **{field_name: delta})
     except IntegrityError:
-        DailyPlatformStats.objects.filter(date=target_date).update(
-            **{field_name: F(field_name) + delta}
-        )
+        DailyPlatformStats.objects.filter(date=target_date).update(**{field_name: F(field_name) + delta})
 
 
 def _increment_daily_announcement_views(announcement_id: int, target_date, delta: int) -> None:
@@ -106,9 +102,7 @@ def refresh_daily_platform_stats(start_date, end_date) -> None:
 
     for current_date in daterange(start_date, end_date):
         existing_views = (
-            DailyPlatformStats.objects.filter(date=current_date)
-            .values_list("announcement_views", flat=True)
-            .first()
+            DailyPlatformStats.objects.filter(date=current_date).values_list("announcement_views", flat=True).first()
             or 0
         )
         DailyPlatformStats.objects.update_or_create(
@@ -143,8 +137,7 @@ def _aggregate_daily_counts(queryset, datetime_field: str, start_date, end_date)
 
 def get_daily_platform_series(start_date, end_date):
     rows = {
-        row.date: row
-        for row in DailyPlatformStats.objects.filter(date__range=(start_date, end_date)).order_by("date")
+        row.date: row for row in DailyPlatformStats.objects.filter(date__range=(start_date, end_date)).order_by("date")
     }
     return [
         {
@@ -176,8 +169,7 @@ def get_dashboard_payload(days: int = 30):
         },
         "series": {
             "announcement_views": [
-                {"date": row["date"], "label": row["label"], "value": row["announcement_views"]}
-                for row in series
+                {"date": row["date"], "label": row["label"], "value": row["announcement_views"]} for row in series
             ],
         },
         "recent_activity": {
@@ -204,9 +196,7 @@ def get_analytics_overview_payload(days: int = 30):
             ),
             "active_users": _metric_with_delta(
                 User.objects.filter(last_login__date__gte=window.start).count(),
-                User.objects.filter(
-                    last_login__date__range=(window.previous_start, window.previous_end)
-                ).count(),
+                User.objects.filter(last_login__date__range=(window.previous_start, window.previous_end)).count(),
             ),
             "new_announcements": _metric_with_delta(
                 current_totals["new_announcements"],
@@ -252,9 +242,7 @@ def get_webstats_payload(days: int = 30):
             ),
             "active_users": _metric_with_delta(
                 User.objects.filter(last_login__date__gte=window.start).count(),
-                User.objects.filter(
-                    last_login__date__range=(window.previous_start, window.previous_end)
-                ).count(),
+                User.objects.filter(last_login__date__range=(window.previous_start, window.previous_end)).count(),
             ),
             "announcement_views": _metric_with_delta(
                 current_totals["announcement_views"],
@@ -278,17 +266,15 @@ def get_webstats_payload(days: int = 30):
 
 
 def get_platform_window_totals(start_date, end_date):
-    totals = (
-        DailyPlatformStats.objects.filter(date__range=(start_date, end_date)).aggregate(
-            new_users=Sum("new_users"),
-            active_users=Sum("active_users"),
-            new_announcements=Sum("new_announcements"),
-            announcement_favorites=Sum("announcement_favorites"),
-            new_jobs=Sum("new_jobs"),
-            new_job_chats=Sum("new_job_chats"),
-            new_job_chat_messages=Sum("new_job_chat_messages"),
-            announcement_views=Sum("announcement_views"),
-        )
+    totals = DailyPlatformStats.objects.filter(date__range=(start_date, end_date)).aggregate(
+        new_users=Sum("new_users"),
+        active_users=Sum("active_users"),
+        new_announcements=Sum("new_announcements"),
+        announcement_favorites=Sum("announcement_favorites"),
+        new_jobs=Sum("new_jobs"),
+        new_job_chats=Sum("new_job_chats"),
+        new_job_chat_messages=Sum("new_job_chat_messages"),
+        announcement_views=Sum("announcement_views"),
     )
     return {key: value or 0 for key, value in totals.items()}
 
@@ -302,9 +288,7 @@ def get_top_announcements(start_date, end_date, limit: int = 5):
     }
     favorites_by_announcement = {
         row["announcement_id"]: row["total_favorites"]
-        for row in AnnouncementFavorite.objects.filter(
-            created_at__date__range=(start_date, end_date)
-        )
+        for row in AnnouncementFavorite.objects.filter(created_at__date__range=(start_date, end_date))
         .values("announcement_id")
         .annotate(total_favorites=Count("pk"))
     }
@@ -353,11 +337,7 @@ def get_top_announcements(start_date, end_date, limit: int = 5):
 
 def get_top_categories(start_date, end_date, limit: int = 5):
     rows_by_name = {}
-    for row in (
-        Announcement.objects.values("category__name")
-        .annotate(announcement_count=Count("id"))
-        .order_by()
-    ):
+    for row in Announcement.objects.values("category__name").annotate(announcement_count=Count("id")).order_by():
         rows_by_name[row["category__name"]] = {
             "name": row["category__name"],
             "announcement_count": row["announcement_count"],

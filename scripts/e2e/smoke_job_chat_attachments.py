@@ -40,10 +40,7 @@ import requests
 # ---------------------------------------------------------------------------
 # Minimal 1x1 red pixel PNG (valid magic bytes + PIL-verifiable)
 # ---------------------------------------------------------------------------
-_PNG_1X1_B64 = (
-    "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAIAAACQd1PeAAAADElEQVR4nGP4z8AAAA"
-    "MBAQDJ/pLvAAAAAElFTkSuQmCC"
-)
+_PNG_1X1_B64 = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAIAAACQd1PeAAAADElEQVR4nGP4z8AAAAMBAQDJ/pLvAAAAAElFTkSuQmCC"
 SAMPLE_PNG = base64.b64decode(_PNG_1X1_B64)
 
 # ---------------------------------------------------------------------------
@@ -77,6 +74,7 @@ def fail(msg):
 # ---------------------------------------------------------------------------
 # Setup helpers
 # ---------------------------------------------------------------------------
+
 
 def register_user(base_url: str) -> str:
     username = f"chat_test_{uuid_lib.uuid4().hex[:8]}"
@@ -141,8 +139,17 @@ def create_organization(base_url: str, token: str) -> str:
 def approve_organization_via_docker(org_uuid: str):
     """Approve an org using docker compose exec (local-only)."""
     cmd = [
-        "docker", "compose", "-f", "compose.yml", "exec", "-T", "app",
-        "python", "manage.py", "shell", "-c",
+        "docker",
+        "compose",
+        "-f",
+        "compose.yml",
+        "exec",
+        "-T",
+        "app",
+        "python",
+        "manage.py",
+        "shell",
+        "-c",
         f"from apps.organization.models import Organization; "
         f"o = Organization.objects.get(uuid='{org_uuid}'); "
         f"o.is_validated = True; o.save(update_fields=['is_validated']); "
@@ -212,6 +219,7 @@ def send_message(base_url: str, token: str, job_uuid: str) -> str:
 # Attachment upload flow
 # ---------------------------------------------------------------------------
 
+
 def upload_asset(base_url: str, token: str, file_bytes: bytes, filename: str, content_type: str) -> str:
     """Run the 3-step asset upload and return the confirmed asset_id."""
     headers_auth = {"Authorization": f"Bearer {token}"}
@@ -232,10 +240,10 @@ def upload_asset(base_url: str, token: str, file_bytes: bytes, filename: str, co
         fail(f"Initiate upload failed {r.status_code}: {r.text[:300]}")
 
     data = r.json()
-    asset_id       = data["asset_id"]
-    upload_url     = data["upload_url"]
+    asset_id = data["asset_id"]
+    upload_url = data["upload_url"]
     upload_headers = data.get("upload_headers", {})
-    complete_url   = data["complete_url"]
+    complete_url = data["complete_url"]
     log(f"Asset initiated: {asset_id}")
 
     # Step 2: PUT to S3
@@ -302,11 +310,12 @@ def verify_attachment_in_messages(base_url: str, token: str, job_uuid: str, mess
 # Validation error tests
 # ---------------------------------------------------------------------------
 
+
 def test_attach_unconfirmed_asset(base_url: str, token: str, job_uuid: str, message_uuid: str):
     """Verify that attaching a non-existent asset returns 400."""
-    print(f"\n{'─'*60}")
+    print(f"\n{'─' * 60}")
     print("  Validation: attaching unknown asset_id should return 400")
-    print(f"{'─'*60}")
+    print(f"{'─' * 60}")
     fake_id = str(uuid_lib.uuid4())
     r = requests.post(
         f"{base_url}/api/jobs/{job_uuid}/messages/{message_uuid}/attachments/",
@@ -320,9 +329,9 @@ def test_attach_unconfirmed_asset(base_url: str, token: str, job_uuid: str, mess
 
 def test_attach_wrong_kind_asset(base_url: str, token: str, job_uuid: str, message_uuid: str):
     """Verify that a confirmed asset with wrong kind is rejected."""
-    print(f"\n{'─'*60}")
+    print(f"\n{'─' * 60}")
     print("  Validation: attaching wrong-kind asset should return 400")
-    print(f"{'─'*60}")
+    print(f"{'─' * 60}")
     # Initiate a generic_upload asset (wrong kind for job_chat)
     r = requests.post(
         f"{base_url}/api/assets/initiate-upload/",
@@ -340,7 +349,7 @@ def test_attach_wrong_kind_asset(base_url: str, token: str, job_uuid: str, messa
         return
 
     data = r.json()
-    asset_id   = data["asset_id"]
+    asset_id = data["asset_id"]
     upload_url = data["upload_url"]
     upload_headers = data.get("upload_headers", {})
     complete_url = data["complete_url"]
@@ -361,9 +370,9 @@ def test_attach_wrong_kind_asset(base_url: str, token: str, job_uuid: str, messa
 
 def test_unauthenticated_attach(base_url: str, job_uuid: str, message_uuid: str):
     """Verify that unauthenticated attach requests are rejected."""
-    print(f"\n{'─'*60}")
+    print(f"\n{'─' * 60}")
     print("  Validation: unauthenticated attach should return 401/403")
-    print(f"{'─'*60}")
+    print(f"{'─' * 60}")
     r = requests.post(
         f"{base_url}/api/jobs/{job_uuid}/messages/{message_uuid}/attachments/",
         json={"asset_id": str(uuid_lib.uuid4())},
@@ -376,6 +385,7 @@ def test_unauthenticated_attach(base_url: str, job_uuid: str, message_uuid: str)
 # ---------------------------------------------------------------------------
 # Full happy-path scenario
 # ---------------------------------------------------------------------------
+
 
 def setup_announcement(base_url: str, token: str, announcement_uuid: str | None) -> str:
     """
@@ -402,10 +412,10 @@ def run_full_scenario(
     content_type: str,
     announcement_uuid: str,
 ):
-    print(f"\n{'═'*60}")
+    print(f"\n{'═' * 60}")
     print(f"  Scenario: {label}")
     print(f"  file={filename}  size={len(file_bytes)}b  ct={content_type}")
-    print(f"{'═'*60}")
+    print(f"{'═' * 60}")
 
     job_uuid = create_job(base_url, token, announcement_uuid)
     message_uuid = send_message(base_url, token, job_uuid)
@@ -426,6 +436,7 @@ def run_full_scenario(
 # ---------------------------------------------------------------------------
 # Entry point
 # ---------------------------------------------------------------------------
+
 
 def main():
     parser = argparse.ArgumentParser(description="External test for Job Chat attachment flow")

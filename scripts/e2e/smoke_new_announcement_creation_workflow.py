@@ -166,20 +166,13 @@ def assert_nested_response_shape(announcement: dict):
     services = announcement.get("services", [])
     assert len(services) == 2, services
 
-    subservices = [
-        subservice
-        for service in services
-        for subservice in service.get("subservices", [])
-    ]
+    subservices = [subservice for service in services for subservice in service.get("subservices", [])]
     assert len(subservices) == 2, subservices
 
     names = {subservice["name"] for subservice in subservices}
     assert names == {"Visita tecnica inicial", "Ejecucion principal"}, names
 
-    prices_by_subservice = {
-        subservice["name"]: subservice.get("service_prices", [])
-        for subservice in subservices
-    }
+    prices_by_subservice = {subservice["name"]: subservice.get("service_prices", []) for subservice in subservices}
     assert len(prices_by_subservice["Visita tecnica inicial"]) == 1, prices_by_subservice
     assert len(prices_by_subservice["Ejecucion principal"]) == 2, prices_by_subservice
 
@@ -203,9 +196,7 @@ def verify_public_detail(base_url: str, announcement_uuid: str):
 
 
 def main():
-    parser = argparse.ArgumentParser(
-        description="External test for nested announcement creation workflow"
-    )
+    parser = argparse.ArgumentParser(description="External test for nested announcement creation workflow")
     parser.add_argument("--url", default="http://localhost:24356", help="Base URL of the API gateway")
     parser.add_argument("--token", default=None, help="Existing JWT access token (skips registration)")
     args = parser.parse_args()

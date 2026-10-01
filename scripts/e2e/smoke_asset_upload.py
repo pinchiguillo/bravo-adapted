@@ -29,10 +29,7 @@ import requests
 # ---------------------------------------------------------------------------
 # Minimal 1x1 red pixel PNG (valid magic bytes + PIL-verifiable)
 # ---------------------------------------------------------------------------
-_PNG_1X1_B64 = (
-    "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAIAAACQd1PeAAAADElEQVR4nGP4z8AAAA"
-    "MBAQDJ/pLvAAAAAElFTkSuQmCC"
-)
+_PNG_1X1_B64 = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAIAAACQd1PeAAAADElEQVR4nGP4z8AAAAMBAQDJ/pLvAAAAAElFTkSuQmCC"
 SAMPLE_PNG = base64.b64decode(_PNG_1X1_B64)
 
 # ---------------------------------------------------------------------------
@@ -83,9 +80,9 @@ def register_user(base_url: str) -> str:
 
 def test_asset_upload(base_url: str, token: str, kind: str, file_bytes: bytes, filename: str, content_type: str):
     headers_auth = {"Authorization": f"Bearer {token}"}
-    print(f"\n{'─'*60}")
+    print(f"\n{'─' * 60}")
     print(f"  kind={kind}  file={filename}  size={len(file_bytes)}b")
-    print(f"{'─'*60}")
+    print(f"{'─' * 60}")
 
     # Step 1: Initiate upload
     print("  [1/3] Initiating upload...")
@@ -99,12 +96,12 @@ def test_asset_upload(base_url: str, token: str, kind: str, file_bytes: bytes, f
         fail(f"Initiate upload failed {r.status_code}: {r.text[:300]}")
 
     data = r.json()
-    asset_id    = data["asset_id"]
-    upload_url  = data["upload_url"]
+    asset_id = data["asset_id"]
+    upload_url = data["upload_url"]
     upload_method = data.get("upload_method", "PUT")
     upload_headers = data.get("upload_headers", {})
     complete_url = data["complete_url"]
-    expires_in   = data["expires_in"]
+    expires_in = data["expires_in"]
     log(f"Asset created: {asset_id}  (expires_in={expires_in}s)")
 
     assert upload_method == "PUT", f"Expected PUT, got {upload_method}"
@@ -136,9 +133,9 @@ def test_asset_upload(base_url: str, token: str, kind: str, file_bytes: bytes, f
 
 def test_invalid_kind(base_url: str, token: str):
     """Verify that invalid kind is rejected."""
-    print(f"\n{'─'*60}")
+    print(f"\n{'─' * 60}")
     print("  Validation: invalid kind should return 400")
-    print(f"{'─'*60}")
+    print(f"{'─' * 60}")
     r = requests.post(
         f"{base_url}/api/assets/initiate-upload/",
         headers={"Authorization": f"Bearer {token}"},
@@ -151,9 +148,9 @@ def test_invalid_kind(base_url: str, token: str):
 
 def test_oversized_file(base_url: str, token: str):
     """Verify that oversized size_bytes is rejected."""
-    print(f"\n{'─'*60}")
+    print(f"\n{'─' * 60}")
     print("  Validation: oversized file should return 400")
-    print(f"{'─'*60}")
+    print(f"{'─' * 60}")
     r = requests.post(
         f"{base_url}/api/assets/initiate-upload/",
         headers={"Authorization": f"Bearer {token}"},
@@ -171,9 +168,9 @@ def test_oversized_file(base_url: str, token: str):
 
 def test_unauthenticated(base_url: str):
     """Verify that unauthenticated requests are rejected."""
-    print(f"\n{'─'*60}")
+    print(f"\n{'─' * 60}")
     print("  Validation: unauthenticated request should return 401")
-    print(f"{'─'*60}")
+    print(f"{'─' * 60}")
     r = requests.post(
         f"{base_url}/api/assets/initiate-upload/",
         json={"kind": "generic_upload", "filename": "x.png", "content_type": "image/png", "size_bytes": 100},

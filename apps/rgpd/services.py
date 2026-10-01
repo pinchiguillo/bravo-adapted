@@ -44,15 +44,8 @@ def is_rgpd_installed():
 
 
 def get_current_policy_versions():
-    versions = (
-        RgpdPolicyVersion.objects.select_related("document")
-        .filter(is_published=True, is_current=True)
-        .all()
-    )
-    return {
-        version.document.document_type: version
-        for version in versions
-    }
+    versions = RgpdPolicyVersion.objects.select_related("document").filter(is_published=True, is_current=True).all()
+    return {version.document.document_type: version for version in versions}
 
 
 def get_current_policy_version(document_type):
@@ -61,11 +54,7 @@ def get_current_policy_version(document_type):
 
 def get_missing_required_policy_types():
     active_versions = get_current_policy_versions()
-    return [
-        document_type
-        for document_type in REQUIRED_POLICY_TYPES
-        if document_type not in active_versions
-    ]
+    return [document_type for document_type in REQUIRED_POLICY_TYPES if document_type not in active_versions]
 
 
 def get_policy_acceptances_for_subject(*, user=None, anonymous_consent=None):
@@ -102,9 +91,7 @@ def build_policy_acceptance_snapshot(*, user=None, anonymous_consent=None):
                 and acceptance.policy_version_id == current_version.id
             ),
             "accepted_at": (
-                acceptance.accepted_at.isoformat().replace("+00:00", "Z")
-                if acceptance is not None
-                else None
+                acceptance.accepted_at.isoformat().replace("+00:00", "Z") if acceptance is not None else None
             ),
             "version": current_version.version if current_version is not None else "",
             "title": current_version.title if current_version is not None else "",
@@ -131,9 +118,7 @@ def build_policy_acceptance_snapshot(*, user=None, anonymous_consent=None):
             }
         )
 
-    requires_reacceptance = any(
-        not snapshot[document_type]["accepted"] for document_type in REQUIRED_POLICY_TYPES
-    )
+    requires_reacceptance = any(not snapshot[document_type]["accepted"] for document_type in REQUIRED_POLICY_TYPES)
 
     return {
         "accepted_documents": snapshot,
@@ -233,9 +218,9 @@ def create_user_rgpd_consent(*, user, consent_data, ip_address=None, user_agent=
 
 def publish_policy_version(policy_version):
     with transaction.atomic():
-        RgpdPolicyVersion.objects.filter(document=policy_version.document).exclude(
-            pk=policy_version.pk
-        ).update(is_current=False)
+        RgpdPolicyVersion.objects.filter(document=policy_version.document).exclude(pk=policy_version.pk).update(
+            is_current=False
+        )
         policy_version.is_published = True
         policy_version.is_current = True
         policy_version.published_at = timezone.now()

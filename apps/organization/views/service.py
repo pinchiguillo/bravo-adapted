@@ -31,10 +31,7 @@ from .common import (
     retrieve=extend_schema(
         tags=["Services"],
         summary="Get public subservice",
-        description=(
-            "Returns the details of a public subservice identified by "
-            "announcement UUID and subservice UUID."
-        ),
+        description=("Returns the details of a public subservice identified by announcement UUID and subservice UUID."),
         parameters=[announcement_nested_uuid_parameter, subservice_uuid_parameter],
         auth=[],
     ),
@@ -63,9 +60,9 @@ class PublicSubserviceViewSet(
     }
 
     def _get_visible_announcement(self):
-        announcement = Announcement.objects.select_related("organization").filter(
-            uuid=self.kwargs["announcement_uuid"]
-        ).first()
+        announcement = (
+            Announcement.objects.select_related("organization").filter(uuid=self.kwargs["announcement_uuid"]).first()
+        )
         if announcement is None:
             raise NotFound("Announcement not found.")
         if not self.can_access_unapproved_organization(announcement.organization):
@@ -176,9 +173,7 @@ class SubserviceViewSet(
     def perform_create(self, serializer):
         announcement = self._get_announcement_from_url()
         if announcement.organization.user_id != self.request.user.id:
-            raise PermissionDenied(
-                "Announcement does not belong to the authenticated user organization."
-            )
+            raise PermissionDenied("Announcement does not belong to the authenticated user organization.")
         self.ensure_organization_is_approved_for_write(announcement.organization)
         self.ensure_announcement_is_editable_for_write(announcement)
         payload_announcement = serializer.validated_data.get("announcement", announcement)
@@ -189,9 +184,7 @@ class SubserviceViewSet(
     def perform_update(self, serializer):
         announcement = self._get_announcement_from_url()
         if announcement.organization.user_id != self.request.user.id:
-            raise PermissionDenied(
-                "Announcement does not belong to the authenticated user organization."
-            )
+            raise PermissionDenied("Announcement does not belong to the authenticated user organization.")
         self.ensure_organization_is_approved_for_write(announcement.organization)
         self.ensure_announcement_is_editable_for_write(announcement)
         payload_announcement = serializer.validated_data.get(
@@ -301,9 +294,9 @@ class ServicePriceViewSet(
         return queryset
 
     def _get_announcement_from_url(self):
-        announcement = Announcement.objects.select_related("organization").filter(
-            uuid=self.kwargs["announcement_uuid"]
-        ).first()
+        announcement = (
+            Announcement.objects.select_related("organization").filter(uuid=self.kwargs["announcement_uuid"]).first()
+        )
         if announcement is None:
             raise NotFound("Announcement not found.")
         return announcement
@@ -358,20 +351,14 @@ class ServicePriceViewSet(
     list=extend_schema(
         tags=["Services"],
         summary="List public service prices",
-        description=(
-            "Lists the public prices of a subservice identified by "
-            "announcement UUID and subservice UUID."
-        ),
+        description=("Lists the public prices of a subservice identified by announcement UUID and subservice UUID."),
         parameters=[announcement_nested_uuid_parameter, subservice_uuid_parameter],
         auth=[],
     ),
     retrieve=extend_schema(
         tags=["Services"],
         summary="Get public service price",
-        description=(
-            "Returns a public service price identified by announcement UUID, "
-            "subservice UUID and price UUID."
-        ),
+        description=("Returns a public service price identified by announcement UUID, subservice UUID and price UUID."),
         parameters=[announcement_nested_uuid_parameter, subservice_uuid_parameter, service_price_uuid_parameter],
         auth=[],
     ),
@@ -400,9 +387,9 @@ class PublicServicePriceViewSet(
     }
 
     def get_queryset(self):
-        announcement = Announcement.objects.select_related("organization").filter(
-            uuid=self.kwargs["announcement_uuid"]
-        ).first()
+        announcement = (
+            Announcement.objects.select_related("organization").filter(uuid=self.kwargs["announcement_uuid"]).first()
+        )
         if announcement is None:
             raise NotFound("Announcement not found.")
         if not self.can_access_unapproved_organization(announcement.organization):

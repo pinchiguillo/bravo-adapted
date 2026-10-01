@@ -32,4 +32,3 @@ class Command(BaseCommand):
             return date.fromisoformat(raw_value)
         except ValueError as exc:
             raise CommandError(f"Invalid date: {raw_value}. Use YYYY-MM-DD.") from exc
-

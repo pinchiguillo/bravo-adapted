@@ -46,10 +46,7 @@ import requests
 # ---------------------------------------------------------------------------
 # Minimal valid 1x1 PNG (PIL-verifiable, correct CRC)
 # ---------------------------------------------------------------------------
-_PNG_B64 = (
-    "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAIAAACQd1PeAAAADElEQVR4nGP4z8AAAA"
-    "MBAQDJ/pLvAAAAAElFTkSuQmCC"
-)
+_PNG_B64 = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAIAAACQd1PeAAAADElEQVR4nGP4z8AAAAMBAQDJ/pLvAAAAAElFTkSuQmCC"
 SAMPLE_PNG = base64.b64decode(_PNG_B64)
 
 # ---------------------------------------------------------------------------
@@ -95,6 +92,7 @@ def fail(msg):
 # ---------------------------------------------------------------------------
 # Auth & setup helpers
 # ---------------------------------------------------------------------------
+
 
 def register_user(base_url: str) -> str:
     username = f"ann_test_{uuid_lib.uuid4().hex[:8]}"
@@ -181,6 +179,7 @@ def create_announcement(base_url: str, token: str, org_uuid: str, category_uuid:
 # Announcement image upload (presigned URL flow)
 # ---------------------------------------------------------------------------
 
+
 def upload_announcement_image(
     base_url: str,
     token: str,
@@ -208,10 +207,10 @@ def upload_announcement_image(
         fail(f"Initiate image upload failed {r.status_code}: {r.text[:300]}")
 
     data = r.json()
-    upload_url     = data["upload_url"]
+    upload_url = data["upload_url"]
     upload_headers = data.get("upload_headers", {})
-    upload_token   = data["upload_token"]
-    complete_url   = data["complete_url"]
+    upload_token = data["upload_token"]
+    complete_url = data["complete_url"]
     log(f"Image upload initiated: {filename}  expires_in={data.get('expires_in')}s")
 
     # Step 2: PUT to S3
@@ -263,10 +262,11 @@ def verify_images_on_announcement(
 # Validation tests (image-only restrictions)
 # ---------------------------------------------------------------------------
 
+
 def test_pdf_rejected(base_url: str, token: str, org_uuid: str, announcement_uuid: str):
-    print(f"\n{'─'*60}")
+    print(f"\n{'─' * 60}")
     print("  Validation: PDF must be rejected (not an image)")
-    print(f"{'─'*60}")
+    print(f"{'─' * 60}")
     r = requests.post(
         f"{base_url}/api/organizations/{org_uuid}/announcements/{announcement_uuid}/images/",
         headers={"Authorization": f"Bearer {token}"},
@@ -278,9 +278,9 @@ def test_pdf_rejected(base_url: str, token: str, org_uuid: str, announcement_uui
 
 
 def test_content_type_mismatch(base_url: str, token: str, org_uuid: str, announcement_uuid: str):
-    print(f"\n{'─'*60}")
+    print(f"\n{'─' * 60}")
     print("  Validation: content_type mismatch with filename must be rejected")
-    print(f"{'─'*60}")
+    print(f"{'─' * 60}")
     # filename says .pdf but content_type says image/png
     r = requests.post(
         f"{base_url}/api/organizations/{org_uuid}/announcements/{announcement_uuid}/images/",
@@ -293,9 +293,9 @@ def test_content_type_mismatch(base_url: str, token: str, org_uuid: str, announc
 
 
 def test_oversized_image(base_url: str, token: str, org_uuid: str, announcement_uuid: str):
-    print(f"\n{'─'*60}")
+    print(f"\n{'─' * 60}")
     print("  Validation: oversized image must be rejected")
-    print(f"{'─'*60}")
+    print(f"{'─' * 60}")
     r = requests.post(
         f"{base_url}/api/organizations/{org_uuid}/announcements/{announcement_uuid}/images/",
         headers={"Authorization": f"Bearer {token}"},
@@ -307,9 +307,9 @@ def test_oversized_image(base_url: str, token: str, org_uuid: str, announcement_
 
 
 def test_unauthenticated_upload(base_url: str, org_uuid: str, announcement_uuid: str):
-    print(f"\n{'─'*60}")
+    print(f"\n{'─' * 60}")
     print("  Validation: unauthenticated image upload must be rejected")
-    print(f"{'─'*60}")
+    print(f"{'─' * 60}")
     r = requests.post(
         f"{base_url}/api/organizations/{org_uuid}/announcements/{announcement_uuid}/images/",
         json={"filename": "photo.png", "content_type": "image/png", "size_bytes": len(SAMPLE_PNG)},
@@ -323,21 +323,32 @@ def test_unauthenticated_upload(base_url: str, org_uuid: str, announcement_uuid:
 # Full workflow
 # ---------------------------------------------------------------------------
 
+
 def run_workflow(base_url: str, token: str, org_uuid: str, announcement_uuid: str):
-    print(f"\n{'═'*60}")
+    print(f"\n{'═' * 60}")
     print("  Workflow: upload PNG + JPEG images to announcement")
-    print(f"{'═'*60}")
+    print(f"{'═' * 60}")
 
     # Upload PNG
     upload_announcement_image(
-        base_url, token, org_uuid, announcement_uuid,
-        SAMPLE_PNG, "banner.png", "image/png",
+        base_url,
+        token,
+        org_uuid,
+        announcement_uuid,
+        SAMPLE_PNG,
+        "banner.png",
+        "image/png",
     )
 
     # Upload JPEG
     upload_announcement_image(
-        base_url, token, org_uuid, announcement_uuid,
-        SAMPLE_JPEG, "cover.jpg", "image/jpeg",
+        base_url,
+        token,
+        org_uuid,
+        announcement_uuid,
+        SAMPLE_JPEG,
+        "cover.jpg",
+        "image/jpeg",
     )
 
     # Verify both images are attached
@@ -355,6 +366,7 @@ def run_workflow(base_url: str, token: str, org_uuid: str, announcement_uuid: st
 # ---------------------------------------------------------------------------
 # Entry point
 # ---------------------------------------------------------------------------
+
 
 def main():
     parser = argparse.ArgumentParser(description="External test for announcement image workflow")
@@ -386,16 +398,14 @@ def main():
     token = args.token or register_user(base_url)
 
     if args.announcement_uuid and args.org_uuid:
-        org_uuid          = args.org_uuid
+        org_uuid = args.org_uuid
         announcement_uuid = args.announcement_uuid
         log(f"Using provided org: {org_uuid}")
         log(f"Using provided announcement: {announcement_uuid}")
     else:
-        category_uuid     = get_category(base_url, token)
-        org_uuid          = args.org_uuid or create_organization(base_url, token)
-        announcement_uuid = args.announcement_uuid or create_announcement(
-            base_url, token, org_uuid, category_uuid
-        )
+        category_uuid = get_category(base_url, token)
+        org_uuid = args.org_uuid or create_organization(base_url, token)
+        announcement_uuid = args.announcement_uuid or create_announcement(base_url, token, org_uuid, category_uuid)
 
     run_workflow(base_url, token, org_uuid, announcement_uuid)
 

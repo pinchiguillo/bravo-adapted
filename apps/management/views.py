@@ -53,20 +53,21 @@ class ManagementStatusActionsMixin:
         old_status = instance.status
         instance.status = status_value
         instance.save(update_fields=["status"])
-        
+
         # Log the status change if it's an Announcement
-        if hasattr(instance, 'status_changes'):
+        if hasattr(instance, "status_changes"):
             from apps.organization.models import AnnouncementStatusChange
-            reason_text = request.data.get('reason_text', '') if request.data else ''
-            reason = request.data.get('reason', 'admin_decision') if request.data else 'admin_decision'
-            
+
+            reason_text = request.data.get("reason_text", "") if request.data else ""
+            reason = request.data.get("reason", "admin_decision") if request.data else "admin_decision"
+
             AnnouncementStatusChange.objects.create(
                 announcement=instance,
                 from_status=old_status,
                 to_status=status_value,
                 reason=reason,
                 reason_text=reason_text,
-                changed_by='admin',
+                changed_by="admin",
             )
 
         emit_status_change_notification(
@@ -76,7 +77,7 @@ class ManagementStatusActionsMixin:
             actor=request.user if getattr(request.user, "is_authenticated", False) else None,
             reason_text=request.data.get("reason_text", "") if request.data else "",
         )
-        
+
         serializer = self.get_serializer(instance)
         return Response(serializer.data, status=status.HTTP_200_OK)
 
@@ -221,9 +222,7 @@ class ManagementUserViewSet(
             return True
         if normalized_value in {"false", "0"}:
             return False
-        raise ValidationError(
-            {"email_verified": "Use a boolean value: true or false."}
-        )
+        raise ValidationError({"email_verified": "Use a boolean value: true or false."})
 
     def _parse_uuid(self, raw_value):
         try:
@@ -464,16 +463,13 @@ class ManagementJobViewSet(
 ):
     permission_classes = [IsActiveAccount, permissions.IsAdminUser]
     serializer_class = ManagementJobSerializer
-    queryset = (
-        Job.objects.select_related(
-            "user",
-            "announcement",
-            "announcement__organization",
-            "plan_price",
-            "chat",
-        )
-        .order_by("-created_at", "-id")
-    )
+    queryset = Job.objects.select_related(
+        "user",
+        "announcement",
+        "announcement__organization",
+        "plan_price",
+        "chat",
+    ).order_by("-created_at", "-id")
     lookup_field = "uuid"
     status_serializer_class = Job.Status
     throttle_scope_prefix = "management"
@@ -564,9 +560,13 @@ class ManagementChatViewSet(
                 search_filter |= Q(uuid=search_uuid) | Q(job__uuid=search_uuid)
             queryset = queryset.filter(search_filter)
 
-        return queryset.annotate(message_count=Count("messages", distinct=True)).distinct().order_by(
-            "-updated_at",
-            "-id",
+        return (
+            queryset.annotate(message_count=Count("messages", distinct=True))
+            .distinct()
+            .order_by(
+                "-updated_at",
+                "-id",
+            )
         )
 
     def get_serializer_class(self):
@@ -588,9 +588,13 @@ class ManagementChatViewSet(
 
     def retrieve(self, request, *args, **kwargs):
         chat = self.get_object()
-        messages_queryset = chat.messages.select_related("user").prefetch_related("attachments__asset").order_by(
-            "created_at",
-            "id",
+        messages_queryset = (
+            chat.messages.select_related("user")
+            .prefetch_related("attachments__asset")
+            .order_by(
+                "created_at",
+                "id",
+            )
         )
         page = self.paginator.paginate_queryset(messages_queryset, request, view=self)
         if page is None:
@@ -603,9 +607,7 @@ class ManagementChatViewSet(
             messages = messages_queryset
         else:
             messages = page
-            page_payload = self.paginator.get_paginated_response(
-                []
-            ).data
+            page_payload = self.paginator.get_paginated_response([]).data
 
         serializer = self.get_serializer(chat)
         data = serializer.data
@@ -657,9 +659,7 @@ class ManagementOrganizationViewSet(
     permission_classes = [IsActiveAccount, permissions.IsAdminUser]
     serializer_class = ManagementOrganizationSerializer
     queryset = (
-        Organization.objects.select_related("user", "pricing", "pricing__plan_tier")
-        .with_rating()
-        .order_by("name")
+        Organization.objects.select_related("user", "pricing", "pricing__plan_tier").with_rating().order_by("name")
     )
     lookup_field = "uuid"
     status_serializer_class = Organization.Status
@@ -713,44 +713,46 @@ class ManagementStatsView(APIView):
     def get(self, request):
         User = get_user_model()
 
-        return Response({
-            "users": {
-                "total": User.objects.count(),
-                "active": User.objects.filter(status="active").count(),
-                "inactive": User.objects.filter(status="inactive").count(),
-                "suspended": User.objects.filter(status="suspended").count(),
-                "email_verified": User.objects.filter(email_verified=True).count(),
-                "staff": User.objects.filter(is_staff=True).count(),
-            },
-            "organizations": {
-                "total": Organization.objects.count(),
-                "active": Organization.objects.filter(status="active").count(),
-                "inactive": Organization.objects.filter(status="inactive").count(),
-                "suspended": Organization.objects.filter(status="suspended").count(),
-            },
-            "announcements": {
-                "total": Announcement.objects.count(),
-                "active": Announcement.objects.filter(status="active").count(),
-                "draft": Announcement.objects.filter(status="draft").count(),
-                "paused": Announcement.objects.filter(status="paused").count(),
-                "closed": Announcement.objects.filter(status="closed").count(),
-                "published": Announcement.objects.filter(status="published").count(),
-            },
-            "jobs": {
-                "total": Job.objects.count(),
-                "pending": Job.objects.filter(status="pending").count(),
-                "active": Job.objects.filter(status="active").count(),
-                "completed": Job.objects.filter(status="completed").count(),
-                "rejected": Job.objects.filter(status="rejected").count(),
-                "suspended": Job.objects.filter(status="suspended").count(),
-                "inactive": Job.objects.filter(status="inactive").count(),
-            },
-            "catalogs": {
-                "categories": Category.objects.count(),
-                "services": ServiceCatalog.objects.count(),
-                "allowed_cities": AllowedCity.objects.count(),
-            },
-        })
+        return Response(
+            {
+                "users": {
+                    "total": User.objects.count(),
+                    "active": User.objects.filter(status="active").count(),
+                    "inactive": User.objects.filter(status="inactive").count(),
+                    "suspended": User.objects.filter(status="suspended").count(),
+                    "email_verified": User.objects.filter(email_verified=True).count(),
+                    "staff": User.objects.filter(is_staff=True).count(),
+                },
+                "organizations": {
+                    "total": Organization.objects.count(),
+                    "active": Organization.objects.filter(status="active").count(),
+                    "inactive": Organization.objects.filter(status="inactive").count(),
+                    "suspended": Organization.objects.filter(status="suspended").count(),
+                },
+                "announcements": {
+                    "total": Announcement.objects.count(),
+                    "active": Announcement.objects.filter(status="active").count(),
+                    "draft": Announcement.objects.filter(status="draft").count(),
+                    "paused": Announcement.objects.filter(status="paused").count(),
+                    "closed": Announcement.objects.filter(status="closed").count(),
+                    "published": Announcement.objects.filter(status="published").count(),
+                },
+                "jobs": {
+                    "total": Job.objects.count(),
+                    "pending": Job.objects.filter(status="pending").count(),
+                    "active": Job.objects.filter(status="active").count(),
+                    "completed": Job.objects.filter(status="completed").count(),
+                    "rejected": Job.objects.filter(status="rejected").count(),
+                    "suspended": Job.objects.filter(status="suspended").count(),
+                    "inactive": Job.objects.filter(status="inactive").count(),
+                },
+                "catalogs": {
+                    "categories": Category.objects.count(),
+                    "services": ServiceCatalog.objects.count(),
+                    "allowed_cities": AllowedCity.objects.count(),
+                },
+            }
+        )
 
 
 @extend_schema(tags=["Management / Assets"])
@@ -810,24 +812,16 @@ class ManagementAssetStatsView(APIView):
         total_size = base_queryset.aggregate(total=Sum("size_actual"))["total"] or 0
 
         # By kind
-        by_kind = dict(
-            base_queryset
-            .values("kind")
-            .annotate(count=Count("id"))
-            .values_list("kind", "count")
-        )
+        by_kind = dict(base_queryset.values("kind").annotate(count=Count("id")).values_list("kind", "count"))
 
         # By status
-        by_status = dict(
-            base_queryset
-            .values("status")
-            .annotate(count=Count("id"))
-            .values_list("status", "count")
-        )
+        by_status = dict(base_queryset.values("status").annotate(count=Count("id")).values_list("status", "count"))
 
-        return Response({
-            "total": total_count,
-            "total_size_bytes": total_size,
-            "by_kind": by_kind,
-            "by_status": by_status,
-        })
+        return Response(
+            {
+                "total": total_count,
+                "total_size_bytes": total_size,
+                "by_kind": by_kind,
+                "by_status": by_status,
+            }
+        )

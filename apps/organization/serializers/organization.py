@@ -242,17 +242,11 @@ class OrganizationSerializer(OrganizationRatingMixin, serializers.ModelSerialize
         if weekly_schedule is not serializers.empty:
             settings_instance.weekly_schedule.all().delete()
             OrganizationWeeklyAvailability.objects.bulk_create(
-                [
-                    OrganizationWeeklyAvailability(settings=settings_instance, **item)
-                    for item in weekly_schedule
-                ]
+                [OrganizationWeeklyAvailability(settings=settings_instance, **item) for item in weekly_schedule]
             )
 
         if exceptions is not serializers.empty:
             settings_instance.exceptions.all().delete()
             OrganizationAvailabilityException.objects.bulk_create(
-                [
-                    OrganizationAvailabilityException(settings=settings_instance, **item)
-                    for item in exceptions
-                ]
+                [OrganizationAvailabilityException(settings=settings_instance, **item) for item in exceptions]
             )

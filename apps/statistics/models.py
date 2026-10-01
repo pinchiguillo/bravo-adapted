@@ -44,4 +44,3 @@ class DailyAnnouncementStats(models.Model):
 
     def __str__(self):
         return f"DailyAnnouncementStats({self.announcement_id}, {self.date})"
-

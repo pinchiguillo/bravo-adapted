@@ -41,8 +41,7 @@ class OrganizationPricing(models.Model):
         ordering = ["organization_id"]
         constraints = [
             models.CheckConstraint(
-                condition=models.Q(commission_rate__gte=0)
-                & models.Q(commission_rate__lte=100),
+                condition=models.Q(commission_rate__gte=0) & models.Q(commission_rate__lte=100),
                 name="organization_pricing_commission_rate_between_0_and_100",
             ),
             models.CheckConstraint(

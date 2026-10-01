@@ -20,9 +20,7 @@ from ..serializers import OrganizationPublicSerializer, OrganizationSerializer
         request=OrganizationSerializer,
         responses={
             status.HTTP_201_CREATED: OrganizationSerializer,
-            status.HTTP_400_BAD_REQUEST: OpenApiResponse(
-                description="Authenticated user already has an organization."
-            ),
+            status.HTTP_400_BAD_REQUEST: OpenApiResponse(description="Authenticated user already has an organization."),
         },
     ),
     retrieve=extend_schema(
@@ -85,9 +83,7 @@ class OrganizationViewSet(
         user = getattr(self.request, "user", None)
         if organization.is_validated:
             return organization
-        if user is not None and user.is_authenticated and (
-            user.is_staff or organization.user_id == user.id
-        ):
+        if user is not None and user.is_authenticated and (user.is_staff or organization.user_id == user.id):
             return organization
         raise NotFound("Organization not found.")
 

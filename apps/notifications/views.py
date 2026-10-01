@@ -73,8 +73,12 @@ class NotificationViewSet(
     @extend_schema(summary="Mark all notifications as read")
     @action(detail=False, methods=["post"], url_path="mark-all-read")
     def mark_all_read(self, request, *args, **kwargs):
-        updated_count = self.get_queryset().filter(read_at__isnull=True).update(
-            read_at=timezone.now(),
+        updated_count = (
+            self.get_queryset()
+            .filter(read_at__isnull=True)
+            .update(
+                read_at=timezone.now(),
+            )
         )
         return Response({"updated_count": updated_count}, status=status.HTTP_200_OK)
 
@@ -138,8 +142,7 @@ class ManagementNotificationViewSet(
 
         if delivery_status:
             queryset = queryset.filter(
-                Q(recipients__email_status=delivery_status)
-                | Q(recipients__push_status=delivery_status)
+                Q(recipients__email_status=delivery_status) | Q(recipients__push_status=delivery_status)
             )
 
         if search:

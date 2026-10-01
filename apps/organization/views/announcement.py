@@ -466,10 +466,7 @@ class AnnouncementImageBase64ResponseMixin:
     retrieve=extend_schema(
         tags=["Announcements"],
         summary="Get public announcement image as base64",
-        description=(
-            "Reads an image from the active public announcement and returns its content "
-            "encoded as base64."
-        ),
+        description=("Reads an image from the active public announcement and returns its content encoded as base64."),
         parameters=[announcement_uuid_parameter],
         auth=[],
     ),
@@ -492,9 +489,7 @@ class PublicAnnouncementImageBase64ViewSet(
 
     def get_object(self):
         image = (
-            self.get_queryset()
-            .filter(announcement__uuid=self.kwargs["uuid"], uuid=self.kwargs["image_uuid"])
-            .first()
+            self.get_queryset().filter(announcement__uuid=self.kwargs["uuid"], uuid=self.kwargs["image_uuid"]).first()
         )
         if image is None:
             raise NotFound("Announcement image not found.")
@@ -539,20 +534,18 @@ class OrganizationAnnouncementImageBase64ViewSet(
         if not (getattr(user, "is_staff", False) or organization.user_id == user.id):
             raise NotFound("Organization not found.")
 
-        image = (
-            self.queryset.filter(
-                announcement__organization=organization,
-                announcement__uuid=self.kwargs["uuid"],
-                uuid=self.kwargs["image_uuid"],
-            )
-            .first()
-        )
+        image = self.queryset.filter(
+            announcement__organization=organization,
+            announcement__uuid=self.kwargs["uuid"],
+            uuid=self.kwargs["image_uuid"],
+        ).first()
         if image is None:
             raise NotFound("Announcement image not found.")
         return image
 
     def retrieve(self, request, *args, **kwargs):
         return self._build_base64_response(self.get_object())
+
 
 @extend_schema(tags=["Announcements"])
 @api_view(["POST", "DELETE"])

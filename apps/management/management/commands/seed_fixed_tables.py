@@ -85,8 +85,7 @@ ALLOWED_CITIES = [
     "Zaragoza",
 ]
 
-FEATURE_FLAGS = [
-]
+FEATURE_FLAGS = []
 
 PLAN_TIERS = [
     {

@@ -41,9 +41,7 @@ from ..serializers import JobListSerializer, JobSerializer, JobUpdateSerializer
         request=JobUpdateSerializer,
         responses={
             status.HTTP_200_OK: JobSerializer,
-            status.HTTP_403_FORBIDDEN: OpenApiResponse(
-                description="You don't have permission to update this job."
-            ),
+            status.HTTP_403_FORBIDDEN: OpenApiResponse(description="You don't have permission to update this job."),
             status.HTTP_404_NOT_FOUND: OpenApiResponse(description="Job not found."),
         },
     ),
@@ -53,9 +51,7 @@ from ..serializers import JobListSerializer, JobSerializer, JobUpdateSerializer
         request=JobUpdateSerializer,
         responses={
             status.HTTP_200_OK: JobSerializer,
-            status.HTTP_403_FORBIDDEN: OpenApiResponse(
-                description="You don't have permission to update this job."
-            ),
+            status.HTTP_403_FORBIDDEN: OpenApiResponse(description="You don't have permission to update this job."),
             status.HTTP_404_NOT_FOUND: OpenApiResponse(description="Job not found."),
         },
     ),
@@ -64,9 +60,7 @@ from ..serializers import JobListSerializer, JobSerializer, JobUpdateSerializer
         description="Deletes a job.",
         responses={
             status.HTTP_204_NO_CONTENT: OpenApiResponse(description="Job deleted successfully."),
-            status.HTTP_403_FORBIDDEN: OpenApiResponse(
-                description="You don't have permission to delete this job."
-            ),
+            status.HTTP_403_FORBIDDEN: OpenApiResponse(description="You don't have permission to delete this job."),
             status.HTTP_404_NOT_FOUND: OpenApiResponse(description="Job not found."),
         },
     ),

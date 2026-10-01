@@ -130,7 +130,7 @@ class JobChatWebSocketTests(SimpleTestCase):
             "user_id": 1,
             "username": "ws-owner",
             "type": "widget",
-            "content": "{\"widget_type\":\"proposal\",\"data\":{\"status\":\"accepted\"}}",
+            "content": '{"widget_type":"proposal","data":{"status":"accepted"}}',
             "attachments": [],
             "created_at": "2026-04-29T10:00:00Z",
             "updated_at": "2026-04-29T10:01:00Z",
@@ -178,7 +178,6 @@ class JobChatWebSocketTests(SimpleTestCase):
 
             await communicator.disconnect()
 
-
     @async_to_sync
     async def test_invalid_messages_are_rejected_without_saving(self):
         application = build_websocket_application()
@@ -203,7 +202,7 @@ class JobChatWebSocketTests(SimpleTestCase):
 
             for payload in (
                 {"type": "message", "content": "hi", "msg_type": "system"},
-                {"type": "message", "content": "{\"widget_type\": \"proposal\", \"data\": {}}", "msg_type": "widget"},
+                {"type": "message", "content": '{"widget_type": "proposal", "data": {}}', "msg_type": "widget"},
                 {"type": "message", "content": "   "},
             ):
                 await communicator.send_json_to(payload)
@@ -345,9 +344,7 @@ class JobChatWebSocketHardeningTests(SimpleTestCase):
 
     @async_to_sync
     async def test_sockets_are_closed_once_their_token_expires(self):
-        expired = patch(
-            "apps.job_chat.ws_auth.JWTAuthentication.get_validated_token", return_value={"exp": 1}
-        )
+        expired = patch("apps.job_chat.ws_auth.JWTAuthentication.get_validated_token", return_value={"exp": 1})
         _, user, permission = authenticated()
         with expired, user, permission:
             communicator, connected, _ = await self._connect()
@@ -389,6 +386,7 @@ class JobChatWebSocketHardeningTests(SimpleTestCase):
             self.assertEqual(first["type"], "typing")
             self.assertTrue(await communicator.receive_nothing(timeout=0.2))
             await communicator.disconnect()
+
 
 class WebSocketJWTMiddlewareTests(TestCase):
     def setUp(self):

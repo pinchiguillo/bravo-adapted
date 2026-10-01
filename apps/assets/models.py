@@ -8,26 +8,26 @@ from django.db import models
 
 class Asset(models.Model):
     class Visibility(models.TextChoices):
-        PUBLIC    = "public",    "Public"
+        PUBLIC = "public", "Public"
         PROTECTED = "protected", "Protected"
-        PRIVATE   = "private",   "Private"
+        PRIVATE = "private", "Private"
 
     class Kind(models.TextChoices):
-        ANNOUNCEMENT_IMAGE  = "announcement_image",  "Announcement image"
+        ANNOUNCEMENT_IMAGE = "announcement_image", "Announcement image"
         JOB_CHAT_ATTACHMENT = "job_chat_attachment", "Job chat attachment"
-        LEGAL_DOCUMENT      = "legal_document",      "Legal document"
-        GENERIC_UPLOAD      = "generic_upload",      "Generic upload"
+        LEGAL_DOCUMENT = "legal_document", "Legal document"
+        GENERIC_UPLOAD = "generic_upload", "Generic upload"
 
     class Status(models.TextChoices):
         INITIATED = "initiated", "Initiated"
-        UPLOADED  = "uploaded",  "Uploaded"
+        UPLOADED = "uploaded", "Uploaded"
         CONFIRMED = "confirmed", "Confirmed"
-        ATTACHED  = "attached",  "Attached"
-        ORPHAN    = "orphan",    "Orphan"
-        REJECTED  = "rejected",  "Rejected"
-        DELETED   = "deleted",   "Deleted"
+        ATTACHED = "attached", "Attached"
+        ORPHAN = "orphan", "Orphan"
+        REJECTED = "rejected", "Rejected"
+        DELETED = "deleted", "Deleted"
 
-    id    = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     owner = models.ForeignKey(
         settings.AUTH_USER_MODEL,
         on_delete=models.CASCADE,
@@ -35,23 +35,23 @@ class Asset(models.Model):
     )
 
     visibility = models.CharField(max_length=20, choices=Visibility.choices)
-    kind       = models.CharField(max_length=40, choices=Kind.choices)
-    status     = models.CharField(max_length=20, choices=Status.choices, default=Status.INITIATED)
+    kind = models.CharField(max_length=40, choices=Kind.choices)
+    status = models.CharField(max_length=20, choices=Status.choices, default=Status.INITIATED)
 
     # pending_key: temp S3 location during upload; cleared after confirmation
     pending_key = models.CharField(max_length=1024, blank=True)
     # key: final S3 location; set at initiation, file only moves there at confirmation
-    key         = models.CharField(max_length=1024, unique=True)
+    key = models.CharField(max_length=1024, unique=True)
 
-    original_filename     = models.CharField(max_length=255)
-    content_type_client   = models.CharField(max_length=120, blank=True)
-    size_client           = models.BigIntegerField(null=True, blank=True)
+    original_filename = models.CharField(max_length=255)
+    content_type_client = models.CharField(max_length=120, blank=True)
+    size_client = models.BigIntegerField(null=True, blank=True)
     content_type_detected = models.CharField(max_length=120, blank=True)
-    size_actual           = models.BigIntegerField(null=True, blank=True)
+    size_actual = models.BigIntegerField(null=True, blank=True)
 
     is_temporary = models.BooleanField(default=True)
-    draft_token  = models.CharField(max_length=64, blank=True, db_index=True)
-    expires_at   = models.DateTimeField(null=True, blank=True)
+    draft_token = models.CharField(max_length=64, blank=True, db_index=True)
+    expires_at = models.DateTimeField(null=True, blank=True)
 
     # Optional generic binding to a business entity (set after attachment)
     content_type_ref = models.ForeignKey(
@@ -61,11 +61,11 @@ class Asset(models.Model):
         on_delete=models.SET_NULL,
         related_name="+",
     )
-    object_id      = models.CharField(max_length=64, blank=True)
+    object_id = models.CharField(max_length=64, blank=True)
     content_object = GenericForeignKey("content_type_ref", "object_id")
 
-    created_at   = models.DateTimeField(auto_now_add=True)
-    uploaded_at  = models.DateTimeField(null=True, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    uploaded_at = models.DateTimeField(null=True, blank=True)
     confirmed_at = models.DateTimeField(null=True, blank=True)
 
     class Meta:

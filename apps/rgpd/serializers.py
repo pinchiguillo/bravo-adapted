@@ -165,9 +165,7 @@ class RgpdAnonymousConsentUpsertSerializer(serializers.Serializer):
         identifier = attrs.get("identifier")
         write_token = attrs.get("write_token")
         if bool(identifier) != bool(write_token):
-            raise serializers.ValidationError(
-                "identifier and write_token must be provided together."
-            )
+            raise serializers.ValidationError("identifier and write_token must be provided together.")
         return attrs
 
 
@@ -278,20 +276,12 @@ class RegisterRgpdSerializer(serializers.Serializer):
     def validate(self, attrs):
         missing_types = get_missing_required_policy_types()
         if missing_types:
-            raise serializers.ValidationError(
-                {
-                    "non_field_errors": [
-                        "Required RGPD policies are not published yet."
-                    ]
-                }
-            )
+            raise serializers.ValidationError({"non_field_errors": ["Required RGPD policies are not published yet."]})
 
         for document_type in REQUIRED_POLICY_TYPES:
             field_name = f"{document_type}_accepted"
             if attrs.get(field_name) is not True:
-                raise serializers.ValidationError(
-                    {field_name: ["This policy must be accepted."]}
-                )
+                raise serializers.ValidationError({field_name: ["This policy must be accepted."]})
         return attrs
 
 
@@ -318,9 +308,7 @@ class ManagementRgpdPolicyDocumentSerializer(serializers.ModelSerializer):
             "version": version.version,
             "title": version.title,
             "published_at": (
-                version.published_at.isoformat().replace("+00:00", "Z")
-                if version.published_at is not None
-                else None
+                version.published_at.isoformat().replace("+00:00", "Z") if version.published_at is not None else None
             ),
         }
 

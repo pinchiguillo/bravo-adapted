@@ -68,9 +68,7 @@ class Organization(models.Model):
 
     @property
     def is_validated(self):
-        return self.validation_bypassed() or (
-            self.is_approved and self.status == self.Status.ACTIVE
-        )
+        return self.validation_bypassed() or (self.is_approved and self.status == self.Status.ACTIVE)
 
     def get_rating(self):
         return None

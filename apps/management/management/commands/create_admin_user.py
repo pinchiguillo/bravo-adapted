@@ -17,16 +17,12 @@ class Command(BaseCommand):
     @transaction.atomic
     def handle(self, *args, **options):
         if settings.IS_PRODUCTION:
-            raise CommandError(
-                "create_admin_user is a development helper; use 'createsuperuser' in production."
-            )
+            raise CommandError("create_admin_user is a development helper; use 'createsuperuser' in production.")
 
         email = os.getenv("DJANGO_SUPERUSER_EMAIL", "").strip()
         password = os.getenv("DJANGO_SUPERUSER_PASSWORD", "")
         if not email or not password:
-            raise CommandError(
-                "Set DJANGO_SUPERUSER_EMAIL and DJANGO_SUPERUSER_PASSWORD before running this command."
-            )
+            raise CommandError("Set DJANGO_SUPERUSER_EMAIL and DJANGO_SUPERUSER_PASSWORD before running this command.")
 
         user_model = get_user_model()
         user, created = user_model.objects.get_or_create(
@@ -44,8 +40,4 @@ class Command(BaseCommand):
         user.save()
 
         status_message = "created" if created else "updated"
-        self.stdout.write(
-            self.style.SUCCESS(
-                f"Admin user {status_message}: {email}"
-            )
-        )
+        self.stdout.write(self.style.SUCCESS(f"Admin user {status_message}: {email}"))
