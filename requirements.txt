@@ -1,8 +1,8 @@
-Django==5.2.17
+Django==6.1.1
 djangorestframework==3.18.1
 djangorestframework-simplejwt==5.5.1
-drf-spectacular==0.28.0
-django-cors-headers==4.7.0
+drf-spectacular==0.30.0
+django-cors-headers==4.9.0
 channels==4.2.0
 channels-redis==4.2.1
 daphne==4.2.3
