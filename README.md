@@ -2,9 +2,9 @@
 
 [![CI](https://github.com/pinchiguillo/bravo-adapted/actions/workflows/ci.yml/badge.svg)](https://github.com/pinchiguillo/bravo-adapted/actions/workflows/ci.yml)
 
-Backend for **Bravo**, a services marketplace. Companies publish announcements with
-price tables, customers open job requests, and both sides agree on a price in a
-real-time chat before the job starts.
+Backend for **Bravo** ([bravo-services.com](https://bravo-services.com)), a services
+marketplace. Companies publish announcements with price tables, customers open job requests,
+and both sides agree on a price in a real-time chat before the job starts.
 
 Django 5.2 · Django REST Framework · Channels (WebSockets) · PostgreSQL 16 · Redis · S3 ·
 Docker · GitHub Actions
