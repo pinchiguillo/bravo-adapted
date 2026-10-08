@@ -10,4 +10,4 @@ psycopg[binary]==3.2.10
 Pillow==12.3.0
 boto3==1.40.16
 django-storages==1.14.6
-whitenoise==6.9.0
+whitenoise==6.12.0
