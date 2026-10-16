@@ -1,5 +1,5 @@
 -r requirements.txt
-django-stubs==6.1.1
+django-stubs==6.1.2
 djangorestframework-stubs==3.18.1
 moto[s3,ses]==5.2.3
 mypy==2.3.1
