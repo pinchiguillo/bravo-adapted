@@ -8,6 +8,6 @@ channels-redis==4.2.1
 daphne==4.2.3
 psycopg[binary]==3.2.10
 Pillow==12.3.0
-boto3==1.40.16
+boto3==1.43.104
 django-storages==1.14.6
 whitenoise==6.9.0
